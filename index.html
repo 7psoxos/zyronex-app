@@ -28312,6 +28312,9 @@ function _productNeedsNicPicker(p){
   if(!p) return false;
   var name = (p.name||'').toLowerCase();
   var cat  = (p.category||'').toLowerCase();
+  // Non-liquid categories never need Quick-Mix regardless of any other field
+  var nonLiquidCats = ['συσκευ', 'αντιστάσ', 'αντιστας', 'μπαταρ', 'αξεσουαρ', 'αξεσουάρ', 'coil', 'device', 'battery'];
+  if(nonLiquidCats.some(function(k){ return cat.includes(k); })) return false;
   var ingKeywords = ['nicshot','nic shot','nic-shot','booster','νικοτιν','νικσοτ',
                      'glycerin','γλυκερ','propylene','προπυλεν',' vg ',' pg ','βαση','base'];
   if(p.baseType === 'vg' || p.baseType === 'pg') return false;
