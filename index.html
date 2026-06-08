@@ -25699,6 +25699,7 @@ function renderDashboard(){
   });
 
   // EFK (Ειδικός Φόρος Κατανάλωσης) τρέχοντος μήνα
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
   const efkInfo = getTotalEFKForPeriod(monthStart.toISOString(), new Date().toISOString());
 
   // ── DAILY SNAPSHOT ────────────────────────────────────────
