@@ -24067,15 +24067,17 @@ function _updateBackBtn() {
   var currentPage = hist[hist.length - 1] || 'dashboard';
   var onDashboard = (currentPage === 'dashboard');
 
-  // Tab bar back button: hide on dashboard always
+  // Tab bar back button: show when not already at the section home page
   if (btn) {
     if (onDashboard) {
       btn.style.display = 'none';
     } else {
-      // Show if there's somewhere to go back to
       var inKB = (currentPage === 'help');
       var hasKBHistory = inKB && window._helpDocHistory && window._helpDocHistory.length >= 1;
-      var canGoBack = hist.length >= 2 || hasKBHistory;
+      var tab3 = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? ZN_PAGE_TO_TAB[currentPage] : null;
+      var tabHome3 = (typeof ZN_TAB_HOME !== 'undefined' && tab3) ? ZN_TAB_HOME[tab3] : null;
+      var isAtSectionHome = tabHome3 && (tabHome3 === currentPage);
+      var canGoBack = hasKBHistory || (typeof _settingsSubView !== 'undefined' && _settingsSubView) || !isAtSectionHome;
       btn.style.display = canGoBack ? 'flex' : 'none';
     }
   }
@@ -24159,20 +24161,15 @@ function goBack() {
   // PREVIOUS page from the page stack (NOT dashboard). This is the fix for
   // "back from Help always goes to dashboard".
   // Falls through to PRIORITY 3 which pops _pageHistory correctly.
-  // PRIORITY 3: Normal page navigation — ALWAYS respect _pageHistory stack
-  if (!window._pageHistory || window._pageHistory.length < 2) {
-    // Only one page in stack (the start page). Nowhere to go back to in-app.
-    // Do NOT force dashboard — stay put (sentinel in browser history absorbs
-    // the popstate so the user doesn't leave the app).
-    return;
-  }
-  // Remove current page from history
-  window._pageHistory.pop();
-  // The new last entry is where we go back to
-  var prev = window._pageHistory[window._pageHistory.length - 1] || 'dashboard';
-  // Flag so showPage does NOT re-push this onto history
+  // PRIORITY 3: Parent-tab navigation — always go to the home page of the
+  // current page's section (ZN_TAB_HOME). One rule for every page.
+  var currentPg2 = window._pageHistory && window._pageHistory[window._pageHistory.length - 1];
+  if(!currentPg2 || currentPg2 === 'dashboard') return; // already at root
+  var tab2 = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? ZN_PAGE_TO_TAB[currentPg2] : null;
+  var tabHome2 = (typeof ZN_TAB_HOME !== 'undefined' && tab2) ? (ZN_TAB_HOME[tab2] || 'dashboard') : 'dashboard';
+  if(tabHome2 === currentPg2) return; // already at section home
   window._navByBack = true;
-  showPage(prev);
+  showPage(tabHome2);
 }
 
 function applyPermissionsToSidebar(){
@@ -41209,38 +41206,33 @@ function openNotifications(){showPage('alerts');}
 // Maps each page to which tab it belongs
 var ZN_PAGE_TO_TAB = {
   // POS tab
-  dashboard:'pos', pos:'pos', campaigns:'pos', reservations:'pos',
+  dashboard:'pos', pos:'pos', reservations:'pos',
   'online-orders':'pos', 'gift-cards':'pos', exchange:'pos',
   // Inventory tab
   inventory:'inventory', suppliers:'inventory', purchases:'inventory',
-  shipments:'inventory', waste:'inventory', batches:'inventory',
+  shipments:'pos', waste:'inventory', batches:'inventory',
   hardware:'inventory', 'dead-stock':'inventory', 'data-cleanup':'inventory',
+  compliance:'inventory',
   // Customers tab
   customers:'customers', 'customer-intel':'customers', mixology:'customers',
-  pulse:'customers', dypa:'customers',
+  pulse:'customers', dypa:'customers', campaigns:'customers',
   // Finance tab
   cashbook:'finance', banking:'finance', reports:'finance', vat:'finance',
   taxagent:'finance',
   balance:'finance', bi:'finance', 'expense-calendar':'finance', documents:'finance',
+  warroom:'finance', breakeven:'finance', 'compliance-calendar':'finance',
   // System tab
   shifts:'system', users:'system', settings:'system', alerts:'system',
   support:'system', helpdesk:'system', help:'system', legal:'system',
   inspector:'system', security:'system', audit:'system', vault:'system',
-  // AI/Smart — system tab
-  oracle:'system', brain:'system', compliance:'system', pricewar:'system',
-  warroom:'system', ai:'system', competitors:'system',
-  'inspector-competitors':'system',
-  // ── Previously unmapped pages (were defaulting to 'pos' → wrong badge) ──
-  // Inventory tab
-  'dosage-tracker':'inventory', 'remember-this':'inventory',
-  'supplier-scorecard':'inventory', 'shop-changelog':'inventory',
-  // Customers tab
-  'age-log':'customers',
-  // Finance tab
-  breakeven:'finance', 'compliance-calendar':'finance',
-  'seasonal-intel':'finance', 'energy-tracker':'finance',
-  // System tab
-  plugins:'system',
+  oracle:'system', brain:'system', pricewar:'system',
+  ai:'system', competitors:'system', 'inspector-competitors':'system',
+  plugins:'system', kiosk:'system', sitebuilder:'system', agents:'system',
+  subscription:'system',
+  // Smart features — system tab
+  'dosage-tracker':'system', 'remember-this':'system',
+  'supplier-scorecard':'system', 'shop-changelog':'system',
+  'age-log':'system', 'seasonal-intel':'system', 'energy-tracker':'system',
 };
 
 // Hub definitions — pages shown in hub panel per tab
@@ -41442,9 +41434,22 @@ function znHubNavigate(page){
 // read the real current page (window.CURRENT_PAGE_ID). `forceTab` is honored
 // ONLY when explicitly passed AND non-empty (used for pages that intentionally
 // live under a different hub, e.g. warroom shown from the Finance hub).
+// Home page for each bottom tab — used by goBack() parent-tab logic
+var ZN_TAB_HOME = {
+  pos:       'dashboard',
+  inventory: 'inventory',
+  customers: 'customers',
+  finance:   'reports',
+  system:    'settings',
+};
+
 function znSyncTabBar(page, forceTab){
   var pg = page || window.CURRENT_PAGE_ID || (window._pageHistory && window._pageHistory[window._pageHistory.length-1]) || 'dashboard';
-  var tabId = forceTab || ZN_PAGE_TO_TAB[pg] || 'pos';
+  var mapped = ZN_PAGE_TO_TAB[pg];
+  if(!mapped && !forceTab && pg !== 'dashboard'){
+    console.warn('[ZyroNex] znSyncTabBar: page "' + pg + '" is not in ZN_PAGE_TO_TAB — add it to fix tab highlight.');
+  }
+  var tabId = forceTab || mapped || 'pos';
   _znActiveTab = tabId;
   document.querySelectorAll('.zn-tab').forEach(function(btn){
     btn.classList.toggle('active', btn.dataset.tab === tabId);
