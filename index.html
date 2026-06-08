@@ -18181,6 +18181,26 @@ async function znShopLogin(email, password){
    ============================================================ */
 var SHOP_ID = 'c162329a-ecd9-44d3-b3fc-f107fe101590'; // Updated on login
 
+// ── Hardware Compatibility Matrix ──
+// Map: device_product_id → Set of compatible consumable_product_ids
+// Loaded once at startup from Supabase hardware_compat table.
+var HARDWARE_COMPAT = {};
+
+async function loadHardwareCompat(){
+  try{
+    const {data, error} = await sb.from('hardware_compat')
+      .select('device_id, consumable_id')
+      .eq('shop_id', SHOP_ID);
+    if(error){ console.warn('hardware_compat load error:', error); return; }
+    HARDWARE_COMPAT = {};
+    (data||[]).forEach(function(r){
+      if(!HARDWARE_COMPAT[r.device_id]) HARDWARE_COMPAT[r.device_id] = new Set();
+      HARDWARE_COMPAT[r.device_id].add(r.consumable_id);
+    });
+    console.log('✓ HARDWARE_COMPAT loaded:', Object.keys(HARDWARE_COMPAT).length, 'devices');
+  }catch(e){ console.warn('loadHardwareCompat:', e); }
+}
+
 // ════════════════════════════════════════════════════════════════════
 // 🥷 DEVELOPER FLAG — Top-level synchronous initialization
 // Εκτελείται αμέσως όταν φορτώνει το script (πριν από οτιδήποτε render).
@@ -20083,7 +20103,9 @@ async function loadAllData(){
     console.log('Querying app_users...');
     const usersRes = await sb.from('app_users').select('*').eq('active',true);
     console.log('✓ app_users loaded:', usersRes.data?.length || 0, 'users');
-    
+
+    await loadHardwareCompat();
+
     const supRes = await sb.from('suppliers').select('*').order('name');
     
     console.log('Querying products...');
@@ -27375,9 +27397,21 @@ function renderPOSTabs(){
     ? `<div class="tab tab-with-icon ${POS_CATEGORY==='👤 Για σένα'?'active':''}" onclick="setPOSCat('👤 Για σένα')" style="${POS_CATEGORY!=='👤 Για σένα'?'color:#9b59ff;border-color:rgba(155,89,255,0.3)':''}"><span class="tab-icon-emoji" style="background:rgba(155,89,255,0.25)">👤</span><span>${customer.name.split(' ')[0]}</span></div>` 
     : '';
 
+  // Show "🔗 Συμβατά" tab only when a device with known mappings is in the cart
+  const compatTab = (function(){
+    if(typeof CART==='undefined'||!CART||!CART.length) return '';
+    var hasMapping = CART.some(function(i){
+      var pr = PRODUCTS.find(function(p){return p.id===i.productId;});
+      return pr && (pr.category||'').toLowerCase().includes('συσκευ') && HARDWARE_COMPAT[pr.id] && HARDWARE_COMPAT[pr.id].size>0;
+    });
+    if(!hasMapping) return '';
+    return `<div class="tab tab-with-icon ${POS_CATEGORY==='🔗 Συμβατά'?'active':''}" onclick="setPOSCat('🔗 Συμβατά')" style="${POS_CATEGORY!=='🔗 Συμβατά'?'color:#f59e0b;border-color:rgba(245,158,11,0.3)':''}"><span class="tab-icon-emoji" style="background:rgba(245,158,11,0.18)">🔗</span><span>Συμβατά</span></div>`;
+  })();
+
   tabsEl.innerHTML = `
     <div class="tab tab-with-icon ${POS_CATEGORY==='✨ Top'?'active':''}" onclick="setPOSCat('✨ Top')" style="${POS_CATEGORY!=='✨ Top'?'color:var(--accent);border-color:rgba(0,212,168,0.3)':''}"><span class="tab-icon-emoji" style="background:rgba(0,212,168,0.18)">🔥</span><span>Top</span></div>
     ${personalTab}
+    ${compatTab}
     <div class="tab tab-with-icon ${POS_CATEGORY==='Όλα'?'active':''}" onclick="setPOSCat('Όλα')"><span class="tab-icon-emoji">📦</span><span>Όλα</span></div>
     ${CATEGORIES.filter(c=>c!=='Όλα').map(c=>`<div class="tab tab-with-icon ${POS_CATEGORY===c?'active':''}" onclick="setPOSCat('${c.replace(/'/g,'&apos;')}')">${tabIcon(c)}<span>${c}</span></div>`).join('')}
   `;
@@ -27399,6 +27433,14 @@ function renderPOSGrid(){
   } else if(POS_CATEGORY==='👤 Για σένα'){
     list = _getPOSPersonalized(customerId, 16);
     if(list.length === 0) list = _getPOSTopProducts(16);
+  } else if(POS_CATEGORY==='🔗 Συμβατά'){
+    var compatIds = new Set(
+      (CART||[])
+        .filter(function(i){ var pr=PRODUCTS.find(function(p){return p.id===i.productId;}); return pr&&(pr.category||'').toLowerCase().includes('συσκευ'); })
+        .flatMap(function(i){ return Array.from(HARDWARE_COMPAT[i.productId]||[]); })
+    );
+    list = PRODUCTS.filter(function(p){ return compatIds.has(p.id); })
+      .sort(function(a,b){ return (b.sales30d||0)-(a.sales30d||0); });
   } else if(POS_CATEGORY==='Όλα'){
     // Sort by sales30d within Όλα
     list = [...PRODUCTS].sort((a,b)=>(b.sales30d||0)-(a.sales30d||0));
@@ -28779,6 +28821,8 @@ function renderCart(){
     ${gcRow}
     ${gcInputRow}`;
   lucide.createIcons();
+  // Refresh POS tabs so the 🔗 Συμβατά tab appears/disappears based on cart devices
+  if(typeof renderPOSTabs === 'function') renderPOSTabs();
 }
 function changeQty(idx,d){
   const it=CART[idx];const p=PRODUCTS.find(x=>x.id===it.productId);
@@ -33395,6 +33439,26 @@ function openProductModal(id){
     </div>`;
     })()}
 
+    ${(()=>{
+      const isDevice = id && (p.category||'').toLowerCase().includes('συσκευ');
+      if(!isDevice) return '';
+      const consumables = PRODUCTS.filter(x => x.id !== id && !(x.category||'').toLowerCase().includes('συσκευ'));
+      const currentSet = HARDWARE_COMPAT[id] || new Set();
+      const rows = consumables.map(x=>{
+        const checked = currentSet.has(x.id) ? 'checked' : '';
+        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
+          <input type="checkbox" id="hc_${x.id}" value="${x.id}" ${checked} style="width:15px;height:15px;accent-color:var(--accent)">
+          <span style="flex:1;font-size:13px">${x.name}</span>
+          <span style="font-size:11px;color:var(--muted);background:var(--bg-2);padding:2px 7px;border-radius:20px">${x.category}</span>
+        </label>`;
+      }).join('');
+      return `<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">🔗 Συμβατά αναλώσιμα</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Επίλεξε ποια pods / αντιστάσεις / αξεσουάρ ταιριάζουν με αυτή τη συσκευή. Εμφανίζονται στο POS tab "🔗 Συμβατά" όταν η συσκευή είναι στο καλάθι.</div>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">${rows||'<div style="color:var(--muted);font-size:13px;padding:8px">Δεν υπάρχουν άλλα προϊόντα.</div>'}</div>
+      </div>`;
+    })()}
+
     <div class="flex gap-2 mt-4" style="flex-wrap:wrap">
       <button class="btn btn-primary btn-lg" onclick="saveProduct('${id||''}')"><i data-lucide="save" size="16"></i> Αποθήκευση</button>
       <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
@@ -33591,6 +33655,31 @@ async function saveProduct(id){
       logShopChange('catalog', data.name, 'Νέο προϊόν', '', 'τιμή '+data.price+'€ / κόστος '+data.cost+'€');
       toast('Προστέθηκε','success');
     }
+    // ── Hardware compatibility save (only for devices) ──
+    if(id && (data.category||'').toLowerCase().includes('συσκευ')){
+      const checkboxes = document.querySelectorAll('[id^="hc_"]');
+      if(checkboxes.length > 0){
+        const newIds = Array.from(checkboxes).filter(cb=>cb.checked).map(cb=>cb.value);
+        const oldIds = Array.from(HARDWARE_COMPAT[id]||new Set());
+        const toAdd = newIds.filter(x=>!oldIds.includes(x));
+        const toDel = oldIds.filter(x=>!newIds.includes(x));
+        if(toAdd.length){
+          await sb.from('hardware_compat').insert(
+            toAdd.map(cid=>({shop_id:SHOP_ID, device_id:id, consumable_id:cid}))
+          );
+        }
+        if(toDel.length){
+          await sb.from('hardware_compat')
+            .delete()
+            .eq('shop_id', SHOP_ID)
+            .eq('device_id', id)
+            .in('consumable_id', toDel);
+        }
+        // Sync in-memory map
+        HARDWARE_COMPAT[id] = new Set(newIds);
+      }
+    }
+
     await reloadProducts();
     closeModal();renderInventory();
   }catch(err){
