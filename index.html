@@ -20228,12 +20228,22 @@ async function loadAllData(){
     // Μετατροπή sales σε flat list για συμβατότητα με το υπάρχον UI
     const saleMap = {};
     (salesRes.data||[]).forEach(s=>{saleMap[s.id]=s});
+    // Pre-compute raw item sum per sale for proportional discount distribution
+    const saleItemRawSums = {};
+    (itemsRes.data||[]).forEach(function(i){
+      saleItemRawSums[i.sale_id] = (saleItemRawSums[i.sale_id]||0) + parseFloat(i.unit_price)*(i.quantity||1);
+    });
     SALES = (itemsRes.data||[]).map(i=>{
       const s = saleMap[i.sale_id];
+      const itemRaw = parseFloat(i.unit_price)*(i.quantity||1);
+      // Use sales.total (discounted) distributed proportionally across items
+      const saleTotal = parseFloat(s?s.total:0)||0;
+      const saleRaw = saleItemRawSums[i.sale_id]||itemRaw||1;
+      const itemTotal = saleRaw>0 ? itemRaw*(saleTotal/saleRaw) : itemRaw;
       return {
         id:i.id, date:s?(s.sale_date||addDays(0)):addDays(0),
         productId:i.product_id, qty:i.quantity,
-        price:parseFloat(i.unit_price), total:parseFloat(i.total),
+        price:parseFloat(i.unit_price), total:itemTotal,
         customerId:s?s.customer_id:null, nicotine:i.nicotine_mg
       };
     });
