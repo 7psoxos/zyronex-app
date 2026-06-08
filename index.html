@@ -18551,6 +18551,7 @@ var SUPPLIERS = [];
 var PRODUCTS = [];
 var CUSTOMERS = [];
 var SALES = [];
+var SALES_MONTHLY_TOTALS = {}; // { 'YYYY-MM': { total, count } } — all-time, loaded at startup
 var CART = [];
 var CURRENT_USER = null;
 var _appReady = false; // set to true after successful login
@@ -20091,7 +20092,7 @@ window.renderCategoriesManager = renderCategoriesManager;
 
 var NICOTINE_LEVELS = [0,3,6,9,12,18,20];
 var today = new Date();
-var addDays = (d) => { const n=new Date(today); n.setDate(n.getDate()+d); return n.toISOString().slice(0,10); };
+var addDays = (d) => { const n=new Date(today); n.setDate(n.getDate()+d); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); };
 
 /* ============================================================
    DATA LOADING από Supabase
@@ -20121,16 +20122,21 @@ async function loadAllData(){
       .order('name')
       .limit(2000);
     
-    console.log('Querying sales...');
+    console.log('Querying sales (90-day window)...');
     const salesRes = await sb.from('sales')
-      .select('id,created_at,total,payment_method,customer_id,user_id,notes', { count: 'exact' })
-      .order('created_at',{ascending:false})
-      .limit(500);
-    
-    console.log('Querying sale_items...');
+      .select('id,sale_date,total,payment_method,customer_id,user_id,notes', { count: 'exact' })
+      .gte('sale_date', addDays(-90))
+      .order('sale_date',{ascending:false});
+
+    console.log('Querying all-time monthly totals...');
+    const monthlyRes = await sb.from('sales')
+      .select('sale_date,total')
+      .not('sale_date','is',null);
+
+    console.log('Querying sale_items (90-day window)...');
     const itemsRes = await sb.from('sale_items')
       .select('id,sale_id,product_id,quantity,unit_price')
-      .limit(5000);
+      .in('sale_id', (salesRes.data||[]).map(s=>s.id));
     console.log('✓ sale_items loaded:', itemsRes.data?.length || 0, 'items');
 
     // ── Resilience: ανίχνευση αν τα δεδομένα είναι περιορισμένα στη μνήμη ──
@@ -20225,12 +20231,23 @@ async function loadAllData(){
     SALES = (itemsRes.data||[]).map(i=>{
       const s = saleMap[i.sale_id];
       return {
-        id:i.id, date:s?s.created_at.slice(0,10):addDays(0),
+        id:i.id, date:s?(s.sale_date||addDays(0)):addDays(0),
         productId:i.product_id, qty:i.quantity,
         price:parseFloat(i.unit_price), total:parseFloat(i.total),
         customerId:s?s.customer_id:null, nicotine:i.nicotine_mg
       };
     });
+
+    // Build all-time monthly totals from aggregate query
+    SALES_MONTHLY_TOTALS = {};
+    (monthlyRes.data||[]).forEach(function(s){
+      if(!s.sale_date) return;
+      var m = s.sale_date.slice(0,7);
+      if(!SALES_MONTHLY_TOTALS[m]) SALES_MONTHLY_TOTALS[m]={total:0,count:0};
+      SALES_MONTHLY_TOTALS[m].total += parseFloat(s.total)||0;
+      SALES_MONTHLY_TOTALS[m].count++;
+    });
+    console.log('✓ SALES_MONTHLY_TOTALS:', Object.keys(SALES_MONTHLY_TOTALS).length, 'months');
 
     // Υπολογισμός sales30d για κάθε προϊόν
     const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()-30);
@@ -23143,9 +23160,44 @@ function predictDaysLeft(p){
 function todaySales(){
   const t=addDays(0);return SALES.filter(s=>s.date===t);
 }
+
+// Ανανεώνει live counters dashboard/cashbook χωρίς full re-render.
+// Καλείται μετά από κάθε επιτυχημένο checkout.
+function _refreshLiveStats(){
+  try {
+    // Update DAILY_SALES_TOTAL in memory
+    window.DAILY_SALES_TOTAL = todaySales().reduce(function(a,b){return a+b.total;},0);
+    // Also update SALES_MONTHLY_TOTALS for today's month in-memory
+    var todayMonth = addDays(0).slice(0,7);
+    if(!SALES_MONTHLY_TOTALS[todayMonth]) SALES_MONTHLY_TOTALS[todayMonth]={total:0,count:0};
+    // Recalculate current month from SALES array (source of truth for recent data)
+    var monthTotal=SALES.filter(function(s){return s.date.slice(0,7)===todayMonth;}).reduce(function(a,b){return a+b.total;},0);
+    var monthCount=SALES.filter(function(s){return s.date.slice(0,7)===todayMonth;}).length;
+    SALES_MONTHLY_TOTALS[todayMonth]={total:monthTotal,count:monthCount};
+    // If currently on dashboard or cashbook, re-render
+    var curPage = window._pageHistory&&window._pageHistory[window._pageHistory.length-1];
+    if(curPage==='dashboard'&&typeof renderDashboard==='function') renderDashboard();
+    else if(curPage==='cashbook'&&typeof renderCashbook==='function') renderCashbook();
+  } catch(e){ console.warn('_refreshLiveStats:', e); }
+}
 function salesRangeSum(days){
-  const cutoff=new Date(today);cutoff.setDate(cutoff.getDate()-days);
-  return SALES.filter(s=>new Date(s.date)>=cutoff).reduce((a,b)=>a+b.total,0);
+  const cutoffDate=new Date(today);cutoffDate.setDate(cutoffDate.getDate()-days);
+  const cutoffStr=cutoffDate.getFullYear()+'-'+String(cutoffDate.getMonth()+1).padStart(2,'0')+'-'+String(cutoffDate.getDate()).padStart(2,'0');
+  if(days<=90){
+    return SALES.filter(s=>s.date>=cutoffStr).reduce((a,b)=>a+b.total,0);
+  }
+  // For ranges > 90 days use monthly totals (avoids 500-record limit)
+  var sum=0;
+  var cutoffMonth=cutoffDate.getFullYear()+'-'+String(cutoffDate.getMonth()+1).padStart(2,'0');
+  Object.entries(SALES_MONTHLY_TOTALS||{}).forEach(function([m,v]){
+    if(m>cutoffMonth) sum+=v.total; // full months after cutoff
+    else if(m===cutoffMonth){
+      // Partial month: use SALES array for exact day cutoff if available, else full month
+      var monthFromSales=SALES.filter(function(s){return s.date>=cutoffStr&&s.date.slice(0,7)===m;}).reduce(function(a,b){return a+b.total;},0);
+      sum+=(monthFromSales>0||SALES.some(function(s){return s.date.slice(0,7)===m;}))?monthFromSales:v.total;
+    }
+  });
+  return sum;
 }
 
 // ── Server-side sales summary (ακριβές σε οποιονδήποτε όγκο) ──
@@ -25633,21 +25685,17 @@ function renderDashboard(){
   const expCount = expiringList(30).length;
   const invValue = totalInventoryValue();
 
-  // Υπολογισμός ΦΠΑ τρέχοντος μήνα (από τα local SALES)
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0,0,0,0);
+  // Υπολογισμός ΦΠΑ τρέχοντος μήνα (από τα local SALES — πάντα εντός 90 ημερών)
+  const curMonth = addDays(0).slice(0,7); // 'YYYY-MM'
   let monthVAT = 0, monthNet = 0;
   SALES.forEach(s=>{
-    const d = new Date(s.date);
-    if(d >= monthStart){
-      const prod = PRODUCTS.find(p=>p.id===s.productId);
-      const rate = prod?.vatRate ?? 24;
-      const gross = s.total;
-      const net = gross / (1 + rate/100);
-      monthVAT += (gross - net);
-      monthNet += net;
-    }
+    if((s.date||'').slice(0,7) !== curMonth) return;
+    const prod = PRODUCTS.find(p=>p.id===s.productId);
+    const rate = prod?.vatRate ?? 24;
+    const gross = s.total;
+    const net = gross / (1 + rate/100);
+    monthVAT += (gross - net);
+    monthNet += net;
   });
 
   // EFK (Ειδικός Φόρος Κατανάλωσης) τρέχοντος μήνα
@@ -28943,7 +28991,8 @@ async function _doCheckout(){
       points_used: pointsUsed,
       store_credit_used: creditUsed,
       gift_card_code: giftCardData ? giftCardData.code : null,
-      gift_card_used: giftCardData ? giftCardData.amount_used : 0
+      gift_card_used: giftCardData ? giftCardData.amount_used : 0,
+      sale_date: addDays(0)
     }).select().single();
     if(saleErr) throw saleErr;
     if(giftCardData && typeof gcConsumeOnCheckout==='function'){
@@ -29214,6 +29263,7 @@ async function _doCheckout(){
     const custBtn = document.getElementById('cartCustomer');
     if(custBtn) custBtn.textContent='Χωρίς πελάτη';
     renderCart();renderPOSGrid();
+    _refreshLiveStats();
 
     // Ερώτηση αν θέλει απόδειξη
     const saleId = saleData.id;
