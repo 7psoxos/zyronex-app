@@ -402,6 +402,12 @@ if(window.navigator && window.navigator.share){
   }
   .mono{font-family:'JetBrains Mono',monospace}
   .app{display:grid;grid-template-columns:1fr;min-height:100dvh}
+  @media(min-width:901px){
+    .app{grid-template-columns:240px 1fr}
+    #sidebar,.sidebar{display:flex;position:sticky;left:auto;top:0;transform:none;height:100vh;flex-direction:column}
+    .sidebar-backdrop{display:none !important}
+    #znTabBar{display:none !important}
+  }
   .sidebar{background:linear-gradient(180deg,#0d1220 0%,#0a0f1c 100%);border-right:1px solid var(--border);padding:16px 0;position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden}
   .sidebar::after{content:'';position:absolute;top:0;right:0;width:1px;height:100%;background:linear-gradient(180deg,transparent,rgba(99,130,220,0.15) 30%,rgba(0,212,168,0.1) 70%,transparent)}
   .logo{padding:0 16px 20px;border-bottom:1px solid var(--border);margin-bottom:8px}
@@ -1586,9 +1592,11 @@ if(window.navigator && window.navigator.share){
     .login-box{padding:20px 16px}
     .pin-btn{padding:18px 8px;font-size:22px}
   }
-  /* ── TAB NAV: sidebar hidden, hamburger hidden ── */
-  #sidebar, .sidebar, .sidebar-backdrop, .hamburger { display:none !important; }
-  body.sidebar-open { overflow:auto !important; position:static !important; }
+  /* ── TAB NAV: sidebar hidden, hamburger hidden (mobile only) ── */
+  @media(max-width:900px){
+    #sidebar, .sidebar, .sidebar-backdrop, .hamburger { display:none !important; }
+    body.sidebar-open { overflow:auto !important; position:static !important; }
+  }
 
 
   .chart-wrap{position:relative;width:100%;height:280px;overflow:hidden;padding:8px 0}
