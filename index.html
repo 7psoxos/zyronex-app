@@ -37901,6 +37901,11 @@ function renderReports(){
   // TEMPORARY DIAGNOSTIC LOGGING
   console.log('SALES sample:', SALES.slice(0,5).map(s => ({date: s.date, total: s.total, paymentMethod: s.paymentMethod})));
   console.log('rangeSales count:', rangeSales.length);
+  // Toast for iPhone visibility
+  if(typeof toast === 'function'){
+    var _dbg = 'PM| range:'+rangeSales.length+' card:'+paymentStats.card.count+'/'+paymentStats.card.total.toFixed(0)+' cash:'+paymentStats.cash.count+'/'+paymentStats.cash.total.toFixed(0)+' other:'+paymentStats.other.count+' | S[0].pm='+( SALES[0]?SALES[0].paymentMethod:'EMPTY');
+    toast(_dbg, 'info', 15000);
+  }
 
   let totalAmount = 0;
   rangeSales.forEach(s => {
