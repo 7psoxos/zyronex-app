@@ -270,3 +270,42 @@ function showConfirm(msg, onOk, onCancel){
   document.getElementById(`${id}_cancel`).onclick = ()=>{ cleanup(); if(onCancel) onCancel(); };
   lucide.createIcons();
 }
+
+// Phase 4b: session + logo
+var SESSION_KEY = 'vapestation_session';
+var SESSION_DAYS = 30;
+
+function saveSession(userId){
+  try{
+    const expiresAt = Date.now() + SESSION_DAYS*24*60*60*1000;
+    localStorage.setItem(SESSION_KEY, JSON.stringify({userId, expiresAt}));
+  }catch(_){}
+}
+function clearSession(){
+  try{ localStorage.removeItem(SESSION_KEY); }catch(_){}
+}
+function getSavedSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(!s || !s.userId || !s.expiresAt) return null;
+    if(Date.now() > s.expiresAt){ clearSession(); return null; }
+    return s;
+  }catch(_){ return null; }
+}
+
+var LOGO_KEY = 'vs_shop_logo_v2';  // v2 key — αποφεύγει stale data
+var _CACHED_LOGO_URL = (()=>{ try{ return localStorage.getItem(LOGO_KEY)||null; }catch(e){ return null; } })();  // Άμεση φόρτωση από localStorage, Supabase override async
+
+function getCustomLogo(){
+  return _CACHED_LOGO_URL;
+}
+
+function setCustomLogo(url){
+  _CACHED_LOGO_URL = url;
+  try{
+    if(url) localStorage.setItem(LOGO_KEY, url);
+    else localStorage.removeItem(LOGO_KEY);
+  }catch(e){}
+}
