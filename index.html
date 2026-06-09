@@ -29255,11 +29255,15 @@ async function _doCheckout(){
     }
 
     // 6. Προσθήκη στις τοπικές SALES για άμεση εμφάνιση
+    // Distribute discounted subtotal proportionally (same pattern as loadAllData)
+    const _cartRaw = CART.reduce((a,b)=>a+b.price*b.qty, 0);
     CART.forEach(it=>{
+      const _itemRaw = it.price*it.qty;
+      const _itemTotal = _cartRaw>0 ? _itemRaw*(subtotal/_cartRaw) : _itemRaw;
       SALES.unshift({
         id:saleData.id+'_'+it.productId, date:addDays(0),
         productId:it.productId, qty:it.qty, price:it.price,
-        total:it.price*it.qty, customerId:customerId, nicotine:it.nicotine
+        total:_itemTotal, customerId:customerId, nicotine:it.nicotine
       });
     });
 
