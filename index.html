@@ -37898,6 +37898,10 @@ function renderReports(){
     other: {count: 0, total: 0, pct: 0}
   };
 
+  // TEMPORARY DIAGNOSTIC LOGGING
+  console.log('SALES sample:', SALES.slice(0,5).map(s => ({date: s.date, total: s.total, paymentMethod: s.paymentMethod})));
+  console.log('rangeSales count:', rangeSales.length);
+
   let totalAmount = 0;
   rangeSales.forEach(s => {
     const method = s.paymentMethod || 'other';
@@ -37906,12 +37910,13 @@ function renderReports(){
     paymentStats[method].total += s.total;
     totalAmount += s.total;
   });
-  
+
   // Calculate percentages
   Object.values(paymentStats).forEach(stat => {
     stat.pct = totalAmount > 0 ? ((stat.total / totalAmount) * 100).toFixed(1) : 0;
   });
-  
+  console.log('paymentStats result:', JSON.parse(JSON.stringify(paymentStats)));
+
   // ════════════════════════════════════════════════════════════════
   // 2. SALES BY HOUR Heatmap (all time for range)
   // ════════════════════════════════════════════════════════════════
@@ -38007,6 +38012,16 @@ function renderReports(){
     <button class="btn btn-sm ${window.STATS_DATE_RANGE==='today'?'btn-primary':'btn-ghost'}" onclick="_statsSetRange('today')">Σήμερα</button>
     <button class="btn btn-sm ${window.STATS_DATE_RANGE==='week'?'btn-primary':'btn-ghost'}" onclick="_statsSetRange('week')">Εβδομάδα</button>
     <button class="btn btn-sm ${window.STATS_DATE_RANGE==='month'?'btn-primary':'btn-ghost'}" onclick="_statsSetRange('month')">Μήνας</button>
+  </div>
+
+  <!-- 🔴 TEMPORARY DEBUG BOX — REMOVE AFTER DIAGNOSIS -->
+  <div style="background:#c0392b;color:#fff;padding:14px;border-radius:10px;margin-bottom:16px;font-family:monospace;font-size:12px;line-height:1.7;word-break:break-all">
+    <div style="font-size:14px;font-weight:900;margin-bottom:8px">🔴 DEBUG: Payment Method Diagnosis</div>
+    <div><b>rangeSales.length:</b> ${rangeSales.length}</div>
+    <div style="margin-top:6px"><b>SALES[0..4].paymentMethod:</b></div>
+    ${SALES.slice(0,5).map((s,i)=>`<div>&nbsp;[${i}] paymentMethod=<b>${s.paymentMethod===undefined?'UNDEFINED':JSON.stringify(s.paymentMethod)}</b> | date=${s.date} | total=${(s.total||0).toFixed(2)}</div>`).join('')}
+    <div style="margin-top:6px"><b>paymentStats (count / total):</b></div>
+    ${Object.entries(paymentStats).map(([k,v])=>`<div>&nbsp;${k}: count=<b>${v.count}</b> total=<b>${v.total.toFixed(2)}</b> pct=<b>${v.pct}%</b></div>`).join('')}
   </div>
 
   <!-- 💳 PAYMENT METHODS -->
