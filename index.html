@@ -18585,17 +18585,6 @@ INSPECTOR.init();
 /* ============================================================
    STATE (γεμίζει από DB)
    ============================================================ */
-var USERS = [];
-var SUPPLIERS = [];
-var PRODUCTS = [];
-var CUSTOMERS = [];
-var SALES = [];
-var SALES_MONTHLY_TOTALS = {}; // { 'YYYY-MM': { total, count } } — all-time, loaded at startup
-var CART = [];
-var CURRENT_USER = null;
-var _appReady = false; // set to true after successful login
-var PIN_BUFFER = '';
-var SELECTED_USER_ID = null;
 
 // Role icons (base64 PNGs) — used in login user cards + topbar avatar
 var ROLE_ICONS = {

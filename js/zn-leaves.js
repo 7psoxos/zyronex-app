@@ -65,3 +65,16 @@ var WASTE_REASONS = {
 var SUPABASE_URL = 'https://wopyucsdaeamywscxfzs.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHl1Y3NkYWVhbXl3c2N4ZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MzI3MjMsImV4cCI6MjA5MjIwODcyM30.ZCCf-fZ1IQRKMLOR2eR_eZzEg_klSH7W38m1eA2VAoE';
 var AI_ENDPOINT = `${SUPABASE_URL}/functions/v1/claude-proxy`;
+
+// Phase 3: core mutable state
+var USERS = [];
+var SUPPLIERS = [];
+var PRODUCTS = [];
+var CUSTOMERS = [];
+var SALES = [];
+var SALES_MONTHLY_TOTALS = {}; // { 'YYYY-MM': { total, count } } — all-time, loaded at startup
+var CART = [];
+var CURRENT_USER = null;
+var _appReady = false; // set to true after successful login
+var PIN_BUFFER = '';
+var SELECTED_USER_ID = null;
