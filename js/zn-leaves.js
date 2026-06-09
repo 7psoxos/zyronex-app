@@ -7896,3 +7896,1520 @@ function computeTheoreticalRemaining(ingredientProductId, sinceDate){
     sinceDate: since.toISOString()
   };
 }
+
+// Phase brain: brainOpenSpotCheck/_brainPerformSpotCheck/brainOpenRecipeEditor
+// + recipe helpers, BRAIN_* vars, renderBrain, brainStartPolling,
+// brainGenerateMorningBriefing + all _brain* helpers
+// ── SPOT CHECK MODAL ─────────────────────────────────────
+function brainOpenSpotCheck(){
+  if(typeof PRODUCTS === 'undefined'){
+    if(typeof toast === 'function') toast('Δεν φορτώθηκαν προϊόντα ακόμα', 'warning');
+    return;
+  }
+
+  // Show only products that have recipes OR are common ingredients (base, nicshot, coil)
+  const recipes = getRecipes();
+  const allIngredientIds = new Set();
+  Object.values(recipes).forEach(r => {
+    (r.ingredients || []).forEach(i => allIngredientIds.add(String(i.ingredientId)));
+  });
+
+  // Auto-detect potential ingredients by name
+  const ingredientKeywords = ['base','βάση','nicshot','nic shot','νικοτίν','booster','αντίστασ','coil','αρωμα','aroma','flavor'];
+  const potentialIngredients = PRODUCTS.filter(p => {
+    if(allIngredientIds.has(String(p.id))) return true;
+    const name = (p.name||'').toLowerCase();
+    return ingredientKeywords.some(k => name.includes(k));
+  });
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">⚗️ Spot Check — Έλεγχος Διαρροών</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm muted" style="margin:0 0 12px">
+        Διάλεξε ingredient (βάση, nicshot, αντίσταση κλπ.), ζύγισέ το ή μέτρα τμχ, και βάλε την πραγματική ποσότητα.
+        Ο Brain θα συγκρίνει με το θεωρητικό υπόλοιπο και θα βγάλει warning αν λείπουν.
+      </p>
+      <div class="form-row">
+        <label>Ingredient / Συστατικό</label>
+        <select id="spotCheckProduct">
+          <option value="">— Επίλεξε —</option>
+          ${potentialIngredients.map(p => `
+            <option value="${p.id}">${p.name} (stock τώρα: ${p.stock||0})</option>
+          `).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Πραγματική ποσότητα τώρα</label>
+        <input type="number" id="spotCheckActual" step="0.1" placeholder="π.χ. 850 (για ml) ή 15 (για τμχ)" />
+      </div>
+      <div class="form-row">
+        <label>Μονάδα</label>
+        <select id="spotCheckUnit">
+          <option value="ml">ml (υγρά)</option>
+          <option value="τμχ">τμχ (τεμάχια)</option>
+          <option value="γρ">γρ (γραμμάρια)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Περίοδος ελέγχου (ημέρες)</label>
+        <select id="spotCheckPeriod">
+          <option value="7">Τελευταίες 7 ημέρες</option>
+          <option value="14">Τελευταίες 14 ημέρες</option>
+          <option value="30">Τελευταίες 30 ημέρες</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+        <button class="btn btn-primary" onclick="_brainPerformSpotCheck()">🔍 Έλεγχος</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+function _brainPerformSpotCheck(){
+  const productId = document.getElementById('spotCheckProduct')?.value;
+  const actualStr = document.getElementById('spotCheckActual')?.value;
+  const unit = document.getElementById('spotCheckUnit')?.value || 'ml';
+  const periodDays = parseInt(document.getElementById('spotCheckPeriod')?.value) || 7;
+
+  if(!productId || !actualStr){
+    if(typeof toast === 'function') toast('Συμπλήρωσε όλα τα πεδία', 'warning');
+    return;
+  }
+
+  const actual = parseFloat(actualStr);
+  const since = new Date(Date.now() - periodDays * 86400000).toISOString();
+
+  const computed = computeTheoreticalRemaining(productId, since);
+  if(!computed){
+    if(typeof toast === 'function') toast('Σφάλμα στον υπολογισμό', 'danger');
+    return;
+  }
+
+  // Simple deviation: actual vs current expected stock
+  const expected = computed.expectedRemaining;
+  const deviation = expected > 0 ? ((actual - expected) / expected) * 100 : 0;
+  const deviationAbs = actual - expected;
+
+  let suggestion = '';
+  if(deviationAbs < 0){
+    const lossPct = Math.abs(deviation).toFixed(1);
+    suggestion = `Λείπουν ${Math.abs(deviationAbs).toFixed(1)}${unit}. Αυτό είναι απώλεια ${lossPct}%. `;
+    if(Math.abs(deviation) >= 10){
+      suggestion += `<strong>Ψηλή απώλεια!</strong> Έλεγξε: 1) Συνταγές προϊόντων μήπως είναι λάθος, 2) Πωλήσεις που δεν καταγράφηκαν, 3) Σπατάλη στη βάρδια.`;
+    } else if(Math.abs(deviation) >= 5){
+      suggestion += `Μικρή απόκλιση. Πιθανώς σπατάλη ή λάθος συνταγή.`;
+    } else {
+      suggestion += `Μικρή φυσική απόκλιση — εντός νορμάλ ορίων.`;
+    }
+  } else if(deviationAbs > 0){
+    suggestion = `Έχεις ${deviationAbs.toFixed(1)}${unit} παραπάνω από το αναμενόμενο. Πιθανώς ξέχασες να καταγράψεις παραλαβή.`;
+  } else {
+    suggestion = `Όλα ταιριάζουν τέλεια! 🎯`;
+  }
+
+  const check = addSpotCheck({
+    productId,
+    productName: computed.ingredient.name,
+    unit,
+    periodDays,
+    expected,
+    actual,
+    actualMissing: deviationAbs,
+    deviation,
+    consumedFromSales: computed.consumedFromSales,
+    salesInPeriod: computed.salesInPeriodCount,
+    suggestion
+  });
+
+  if(typeof closeModal === 'function') closeModal();
+
+  // Show result modal
+  const resultHtml = `
+    <div class="modal-head">
+      <div class="modal-title">${deviation < -5 ? '🚨' : (deviation < 0 ? '⚠️' : '✅')} Αποτέλεσμα Spot Check</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="padding:14px;background:var(--bg-2);border-radius:10px;margin-bottom:12px">
+        <div class="fw-700 mb-2">${computed.ingredient.name}</div>
+        <div class="text-sm" style="line-height:1.8">
+          <div>Αναμενόμενο stock: <strong>${expected}${unit}</strong></div>
+          <div>Πραγματικό stock: <strong>${actual}${unit}</strong></div>
+          <div>Απόκλιση: <strong style="color:${deviation < -5 ? '#e74c3c' : (deviation < 0 ? '#f39c12' : '#2ecc71')}">${deviationAbs > 0 ? '+' : ''}${deviationAbs.toFixed(1)}${unit} (${deviation > 0 ? '+' : ''}${deviation.toFixed(1)}%)</strong></div>
+        </div>
+      </div>
+      <div style="padding:14px;background:rgba(${deviation < -5 ? '231,76,60' : (deviation < 0 ? '243,156,18' : '46,204,113')},0.08);border-left:3px solid ${deviation < -5 ? '#e74c3c' : (deviation < 0 ? '#f39c12' : '#2ecc71')};border-radius:8px">
+        <div class="text-sm">${suggestion}</div>
+      </div>
+      <div class="text-xs muted" style="margin-top:10px">
+        Στατιστικά περιόδου: ${computed.salesInPeriodCount} πωλήσεις • Καταναλώθηκε από συνταγές: ${computed.consumedFromSales}${unit}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Κλείσιμο</button>
+        <button class="btn btn-primary" onclick="closeModal();showPage('brain')">🧠 Δες στο Brain</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(resultHtml);
+}
+
+// ── RECIPE EDITOR MODAL ──────────────────────────────────
+function brainOpenRecipeEditor(productId){
+  if(typeof PRODUCTS === 'undefined') return;
+
+  const product = PRODUCTS.find(p => p.id == productId);
+  if(!product){
+    // Show product picker first
+    _brainOpenProductPickerForRecipe();
+    return;
+  }
+
+  const existing = getRecipeFor(productId);
+  const ingredients = existing ? existing.ingredients : [];
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">⚗️ Συνταγή: ${product.name}</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm muted" style="margin:0 0 12px">
+        Όρισε τι ingredients καταναλώνει η κατασκευή <strong>1 τμχ</strong> από αυτό το προϊόν.
+      </p>
+      <div id="recipeIngredients">
+        ${ingredients.map((ing, i) => _renderIngredientRow(ing, i)).join('')}
+      </div>
+      <button class="oracle-btn" onclick="_brainAddIngredientRow()" style="margin-top:8px">
+        <i data-lucide="plus" style="width:14px;height:14px"></i> Προσθήκη ingredient
+      </button>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+        ${existing ? `<button class="btn btn-ghost" style="color:#e74c3c" onclick="_brainDeleteRecipe('${productId}')">Διαγραφή</button>` : ''}
+        <button class="btn btn-primary" onclick="_brainSaveRecipe('${productId}','${product.name.replace(/'/g,"\\'")}')">Αποθήκευση</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+function _renderIngredientRow(ing, idx){
+  const products = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []);
+  return `
+    <div class="form-row" data-ing-row="${idx}" style="display:grid;grid-template-columns:1fr 80px 80px 30px;gap:6px;align-items:end">
+      <select class="ing-product">
+        <option value="">— Διάλεξε ingredient —</option>
+        ${products.map(p=>`<option value="${p.id}" ${ing && ing.ingredientId==p.id?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+      <input type="number" class="ing-qty" step="0.1" placeholder="Ποσότητα" value="${ing?.qty||''}" />
+      <select class="ing-unit">
+        <option value="ml" ${ing?.unit==='ml'?'selected':''}>ml</option>
+        <option value="τμχ" ${ing?.unit==='τμχ'?'selected':''}>τμχ</option>
+        <option value="γρ" ${ing?.unit==='γρ'?'selected':''}>γρ</option>
+      </select>
+      <button class="oracle-btn reject" onclick="this.closest('.form-row').remove()" style="padding:6px"><i data-lucide="x" style="width:12px;height:12px"></i></button>
+    </div>
+  `;
+}
+
+function _brainAddIngredientRow(){
+  const container = document.getElementById('recipeIngredients');
+  if(!container) return;
+  const idx = container.children.length;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _renderIngredientRow({}, idx);
+  container.appendChild(tmp.firstElementChild);
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function _brainSaveRecipe(productId, productName){
+  const rows = document.querySelectorAll('#recipeIngredients [data-ing-row]');
+  const ingredients = [];
+  rows.forEach(row => {
+    const ingId = row.querySelector('.ing-product')?.value;
+    const qty = parseFloat(row.querySelector('.ing-qty')?.value);
+    const unit = row.querySelector('.ing-unit')?.value || 'ml';
+    if(ingId && qty > 0){
+      const ingProduct = PRODUCTS.find(p => p.id == ingId);
+      ingredients.push({
+        ingredientId: ingId,
+        name: ingProduct?.name || 'Unknown',
+        qty, unit
+      });
+    }
+  });
+
+  if(ingredients.length === 0){
+    if(typeof toast === 'function') toast('Πρόσθεσε τουλάχιστον 1 ingredient', 'warning');
+    return;
+  }
+
+  setRecipeFor(productId, {productId, productName, ingredients});
+  if(typeof closeModal === 'function') closeModal();
+  if(typeof toast === 'function') toast('✅ Συνταγή αποθηκεύτηκε', 'success');
+}
+
+function _brainDeleteRecipe(productId){
+  if(typeof showConfirm === 'function'){
+    showConfirm('Διαγραφή συνταγής;', ()=>{
+      deleteRecipeFor(productId);
+      if(typeof closeModal === 'function') closeModal();
+      if(typeof toast === 'function') toast('Διαγράφτηκε', 'info');
+    });
+  }
+}
+
+function _brainOpenProductPickerForRecipe(){
+  // Show products that don't have recipes yet, sorted by name
+  const recipes = getRecipes();
+  const products = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []);
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">⚗️ Επίλεξε Προϊόν για Συνταγή</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm muted" style="margin:0 0 10px">Επίλεξε προϊόν που "κατασκευάζεται" από άλλα (custom mix, DIY κλπ).</p>
+      <div style="max-height:400px;overflow-y:auto">
+        ${products.map(p=>{
+          const has = recipes[p.id];
+          return `<div class="form-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--bg-2);border-radius:8px;margin-bottom:6px">
+            <div>
+              <div class="fw-700">${p.name}</div>
+              <div class="text-xs muted">${p.category||'—'} • ${has?'✅ Έχει συνταγή':'Χωρίς συνταγή'}</div>
+            </div>
+            <button class="oracle-btn" onclick="closeModal();brainOpenRecipeEditor('${p.id}')">
+              ${has ? 'Επεξεργασία' : '+ Δημιουργία'}
+            </button>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Κλείσιμο</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+
+
+/* ============================================================
+   🧠 THE BRAIN — Activity Feed & Smart Notifications
+   ============================================================
+   Συγκεντρώνει events από όλα τα subsystems σε χρονολογικό feed:
+   - Πωλήσεις με κέρδος ανά transaction
+   - Stock alerts (κρίσιμα, εξαντλημένα, λήγουν)
+   - Customer events (γενέθλια, ανενεργοί VIPs, νέοι)
+   - Trend Radar (viral προϊόντα)
+   - Weather events
+   - Bills due
+   - Shift events (clock-in/out)
+   - Pending Approvals από Oracle
+   - Missing ML alerts (Phase 2)
+   ============================================================ */
+
+var BRAIN_FILTER = 'all';
+var BRAIN_EVENTS_CACHE = null;
+var BRAIN_DISMISSED = null;
+
+function _brainLoadDismissed(){
+  try{ return JSON.parse(localStorage.getItem('brainDismissed') || '[]'); }
+  catch{ return []; }
+}
+function _brainSaveDismissed(arr){
+  localStorage.setItem('brainDismissed', JSON.stringify(arr));
+}
+
+function brainDismissEvent(eventId){
+  const dismissed = _brainLoadDismissed();
+  if(!dismissed.includes(eventId)){
+    dismissed.push(eventId);
+    _brainSaveDismissed(dismissed);
+  }
+  renderBrain();
+}
+
+// ── EVENT GENERATORS ─────────────────────────────────────
+// Κάθε generator επιστρέφει array από events
+// Event format: {id, ts, icon, title, desc, priority, category, actions}
+// priority: 'high' | 'medium' | 'low' | 'info' | 'success'
+// category: 'sale' | 'stock' | 'customer' | 'trend' | 'weather' | 'bill' | 'shift' | 'pending' | 'theft'
+
+function _brainEventsFromSales(){
+  const events = [];
+  if(typeof SALES === 'undefined') return events;
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  // Σημερινές πωλήσεις
+  const todaySales = SALES.filter(s => {
+    const d = new Date(s.date || s.createdAt);
+    return d >= startOfDay;
+  });
+
+  // Group πωλήσεις σε individual events (μαζεύουμε ανά πώληση)
+  todaySales.slice(-15).reverse().forEach(s => {
+    const profit = (s.total || 0) - ((s.cost || 0) * (s.qty || 1));
+    const ts = new Date(s.date || s.createdAt).getTime();
+    const sellerName = (s.userName || s.user || 'Υπάλληλος');
+    const productName = s.productName || s.name || 'Προϊόν';
+    events.push({
+      id: 'sale_' + (s.id || ts),
+      ts,
+      icon: '💰',
+      title: `Πώληση από ${sellerName}`,
+      desc: `<strong>${productName}</strong> ×${s.qty||1} = <strong>${typeof eur==='function'?eur(s.total||0):s.total+'€'}</strong>${profit > 0 ? ` <em>(κέρδος ${typeof eur==='function'?eur(profit):profit+'€'})</em>` : ''}`,
+      priority: 'success',
+      category: 'sale'
+    });
+  });
+
+  // Best sale of the day
+  if(todaySales.length > 0){
+    const biggest = todaySales.reduce((a,b) => (a.total||0) > (b.total||0) ? a : b);
+    if((biggest.total||0) > 50){
+      events.push({
+        id: 'biggest_today_' + biggest.id,
+        ts: new Date(biggest.date || biggest.createdAt).getTime(),
+        icon: '🏆',
+        title: `Μεγαλύτερη πώληση σήμερα`,
+        desc: `<strong>${typeof eur==='function'?eur(biggest.total):biggest.total+'€'}</strong> από <em>${biggest.userName||biggest.user||'υπάλληλο'}</em>`,
+        priority: 'success',
+        category: 'sale'
+      });
+    }
+  }
+
+  return events;
+}
+
+function _brainEventsFromStock(){
+  const events = [];
+  if(typeof PRODUCTS === 'undefined') return events;
+  const now = Date.now();
+
+  // Εξαντλημένα προϊόντα
+  const outOfStock = PRODUCTS.filter(p => p.stock === 0 && (p.minStock||0) > 0);
+  if(outOfStock.length > 0){
+    events.push({
+      id: 'stock_out_' + now,
+      ts: now - 60000, // 1 minute ago for sorting
+      icon: '🚨',
+      title: `${outOfStock.length} εξαντλημένα προϊόντα`,
+      desc: outOfStock.slice(0,3).map(p=>p.name).join(', ') + (outOfStock.length > 3 ? ` και άλλα ${outOfStock.length-3}` : ''),
+      priority: 'high',
+      category: 'stock',
+      actions: [
+        {label:'📦 Δες αποθήκη', onclick:`showPage('inventory')`}
+      ]
+    });
+  }
+
+  // Χαμηλό stock
+  const lowStock = PRODUCTS.filter(p => p.stock > 0 && p.stock < (p.minStock||0));
+  if(lowStock.length > 0){
+    events.push({
+      id: 'stock_low_' + now,
+      ts: now - 120000,
+      icon: '⚠️',
+      title: `${lowStock.length} προϊόντα σε χαμηλό απόθεμα`,
+      desc: lowStock.slice(0,3).map(p=>`${p.name} (${p.stock}/${p.minStock||0})`).join(', '),
+      priority: 'medium',
+      category: 'stock',
+      actions: [
+        {label:'📊 Πρόβλεψη', onclick:`showPage('inventory')`}
+      ]
+    });
+  }
+
+  // Λήγουν σε 7 ημέρες
+  const today = new Date(); today.setHours(0,0,0,0);
+  const expiringSoon = PRODUCTS.filter(p => {
+    if(!p.expiry) return false;
+    const exp = new Date(p.expiry);
+    const days = Math.floor((exp - today) / 86400000);
+    return days >= 0 && days <= 7 && p.stock > 0;
+  });
+  if(expiringSoon.length > 0){
+    events.push({
+      id: 'stock_expiring_' + now,
+      ts: now - 180000,
+      icon: '⏰',
+      title: `${expiringSoon.length} προϊόντα λήγουν σύντομα`,
+      desc: expiringSoon.slice(0,3).map(p=>p.name).join(', '),
+      priority: 'medium',
+      category: 'stock',
+      actions: [
+        {label:'🏷️ Προσφορά', onclick:`showPage('inventory')`}
+      ]
+    });
+  }
+
+  return events;
+}
+
+function _brainEventsFromCustomers(){
+  const events = [];
+  if(typeof CUSTOMERS === 'undefined') return events;
+  const now = Date.now();
+  const today = new Date();
+
+  // Birthdays σήμερα
+  const birthdaysToday = CUSTOMERS.filter(c => {
+    if(!c.birthday) return false;
+    const b = new Date(c.birthday);
+    return b.getDate() === today.getDate() && b.getMonth() === today.getMonth();
+  });
+  if(birthdaysToday.length > 0){
+    events.push({
+      id: 'birthdays_' + today.toISOString().slice(0,10),
+      ts: now - 300000,
+      icon: '🎂',
+      title: `${birthdaysToday.length} γενέθλια σήμερα`,
+      desc: birthdaysToday.slice(0,3).map(c=>c.name).join(', '),
+      priority: 'info',
+      category: 'customer',
+      actions: [
+        {label:'🎁 Στείλε ευχές', onclick:`showPage('dashboard')`}
+      ]
+    });
+  }
+
+  // Ανενεργοί VIP πελάτες (δεν έχουν έρθει 30+ μέρες, total spent > €100)
+  if(typeof SALES !== 'undefined'){
+    const churners = [];
+    CUSTOMERS.forEach(c => {
+      if((c.totalSpent || 0) < 100) return;
+      const customerSales = SALES.filter(s => s.customerId === c.id);
+      if(customerSales.length === 0) return;
+      const lastSale = customerSales.reduce((a,b) => {
+        const da = new Date(a.date || a.createdAt);
+        const db = new Date(b.date || b.createdAt);
+        return da > db ? a : b;
+      });
+      const daysSinceLastVisit = Math.floor((today - new Date(lastSale.date || lastSale.createdAt)) / 86400000);
+      if(daysSinceLastVisit >= 20){
+        churners.push({...c, daysSince: daysSinceLastVisit});
+      }
+    });
+    if(churners.length > 0){
+      churners.sort((a,b) => b.daysSince - a.daysSince);
+      events.push({
+        id: 'churners_' + today.toISOString().slice(0,10),
+        ts: now - 360000,
+        icon: '👋',
+        title: `${churners.length} VIP πελάτες ανενεργοί 20+ μέρες`,
+        desc: churners.slice(0,3).map(c=>`<strong>${c.name}</strong> (${c.daysSince} μέρες)`).join(', '),
+        priority: 'medium',
+        category: 'customer',
+        actions: [
+          {label:'📧 Win-back campaign', onclick:`showPage('campaigns')`},
+          {label:'👥 Δες πελάτες', onclick:`showPage('customer-intel')`}
+        ]
+      });
+    }
+  }
+
+  return events;
+}
+
+function _brainEventsFromTrends(){
+  const events = [];
+  const now = Date.now();
+  if(typeof _detectLocalTrends !== 'function') return events;
+
+  const trends = _detectLocalTrends();
+  trends.forEach(t => {
+    const id = 'trend_' + t.product.id;
+    if(t.atRisk){
+      events.push({
+        id, ts: now - 240000,
+        icon: '📈',
+        title: `"${t.product.name}" εκτοξεύτηκε +${t.growth}%`,
+        desc: `Πούλησες <strong>${t.soldNow} τμχ</strong> τελευταία 7 ημέρες (vs ${t.soldPrev}). Stock μόνο <strong>${t.stockNow}</strong> τμχ — <em>θα τελειώσει σύντομα!</em>`,
+        priority: 'high',
+        category: 'trend',
+        actions: [
+          {label:'🛒 Παράγγειλε τώρα', onclick:`showPage('inventory')`}
+        ]
+      });
+    } else if(t.growth >= 100){
+      events.push({
+        id, ts: now - 250000,
+        icon: '📈',
+        title: `"${t.product.name}" τρέχει +${t.growth}%`,
+        desc: `<strong>${t.soldNow} τμχ</strong> τις τελευταίες 7 ημέρες`,
+        priority: 'info',
+        category: 'trend'
+      });
+    }
+  });
+
+  return events;
+}
+
+function _brainEventsFromWeather(){
+  const events = [];
+  const now = Date.now();
+  if(typeof WEATHER_DATA === 'undefined' || !WEATHER_DATA || !WEATHER_DATA.days) return events;
+
+  const insights = (typeof _weatherInsights === 'function') ? _weatherInsights(WEATHER_DATA.days) : [];
+  insights.slice(0, 3).forEach((ins, i) => {
+    events.push({
+      id: 'weather_' + ins.type + '_' + new Date().toISOString().slice(0,10),
+      ts: now - 420000 - (i * 1000),
+      icon: ins.icon,
+      title: ins.title,
+      desc: ins.desc,
+      priority: ins.priority || 'info',
+      category: 'weather'
+    });
+  });
+
+  return events;
+}
+
+function _brainEventsFromBills(){
+  const events = [];
+  const now = Date.now();
+  if(typeof _oracleUpcomingBills !== 'function') return events;
+
+  const bills = _oracleUpcomingBills();
+  bills.filter(b => b.daysUntil <= 3).forEach(b => {
+    events.push({
+      id: 'bill_' + b.id,
+      ts: now - 540000,
+      icon: '💸',
+      title: b.daysUntil === 0 ? `Σήμερα λήγει: ${b.name}` : `Σε ${b.daysUntil} ημέρες: ${b.name}`,
+      desc: `<strong>${typeof eur==='function'?eur(b.amount):b.amount+'€'}</strong> • ${b.category||''}`,
+      priority: b.daysUntil === 0 ? 'high' : 'medium',
+      category: 'bill'
+    });
+  });
+
+  return events;
+}
+
+function _brainEventsFromShifts(){
+  const events = [];
+  const now = Date.now();
+  if(typeof SHIFTS === 'undefined') return events;
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0,10);
+
+  // Today shifts
+  const todayShifts = SHIFTS.filter(s => {
+    const startDate = (s.start_time || s.startTime || s.created_at || '').slice(0,10);
+    return startDate === todayStr;
+  }).slice(-5);
+
+  todayShifts.forEach(s => {
+    const isOpen = !s.end_time && !s.endTime;
+    const userName = s.user_name || s.userName || 'Υπάλληλος';
+    if(isOpen){
+      events.push({
+        id: 'shift_open_' + (s.id || s.start_time),
+        ts: new Date(s.start_time || s.startTime || s.created_at).getTime(),
+        icon: '⏰',
+        title: `${userName} σε βάρδια`,
+        desc: `Έναρξη: ${new Date(s.start_time||s.startTime||s.created_at).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}`,
+        priority: 'info',
+        category: 'shift'
+      });
+    } else {
+      events.push({
+        id: 'shift_closed_' + (s.id || s.end_time),
+        ts: new Date(s.end_time || s.endTime).getTime(),
+        icon: '🏁',
+        title: `${userName} τέλειωσε βάρδια`,
+        desc: `Τζίρος: <strong>${typeof eur==='function'?eur(s.revenue||0):s.revenue+'€'}</strong> • ${s.transactions||0} συναλλαγές`,
+        priority: 'low',
+        category: 'shift'
+      });
+    }
+  });
+
+  return events;
+}
+
+function _brainEventsFromPending(){
+  const events = [];
+  const now = Date.now();
+  if(typeof ORACLE_PENDING === 'undefined') return events;
+
+  const pending = (typeof _oraclePendingLoad === 'function' ? (_oraclePendingLoad(), ORACLE_PENDING) : []).filter(a => a.status === 'pending');
+  pending.forEach(a => {
+    events.push({
+      id: 'pending_' + a.id,
+      ts: new Date(a.created).getTime(),
+      icon: '⏳',
+      title: `Σε αναμονή έγκρισης: ${a.title}`,
+      desc: a.description || '',
+      priority: 'medium',
+      category: 'pending',
+      actions: [
+        {label:'👁️ Δες λεπτομέρειες', onclick:`showPage('oracle')`}
+      ]
+    });
+  });
+
+  return events;
+}
+
+function _brainEventsFromMissingML(){
+  // Phase 2: Spot check alerts
+  const events = [];
+  if(typeof getSpotChecks !== 'function') return events;
+
+  const checks = getSpotChecks().slice(-5).reverse();
+  checks.forEach(c => {
+    if(Math.abs(c.deviation || 0) >= 5){
+      events.push({
+        id: 'spotcheck_' + c.id,
+        ts: new Date(c.created).getTime(),
+        icon: c.deviation < 0 ? '🚨' : '✅',
+        title: c.deviation < 0
+          ? `Συναγερμός: Διαρροή στο "${c.productName}"`
+          : `Spot check OK: ${c.productName}`,
+        desc: c.deviation < 0
+          ? `Λείπουν <strong>${Math.abs(c.actualMissing)}${c.unit||''}</strong> (απόκλιση ${c.deviation.toFixed(1)}%). ${c.suggestion||''}`
+          : `Όλα κανονικά (απόκλιση ${c.deviation.toFixed(1)}%)`,
+        priority: c.deviation < -10 ? 'high' : (c.deviation < 0 ? 'medium' : 'success'),
+        category: 'theft',
+        actions: c.deviation < 0 ? [
+          {label:'🔍 Έλεγχος βάρδιας', onclick:`showPage('shifts')`}
+        ] : []
+      });
+    }
+  });
+
+  return events;
+}
+
+// ── COLLECT ALL EVENTS ───────────────────────────────────
+function _brainCollectAllEvents(){
+  const dismissed = _brainLoadDismissed();
+  let events = [];
+
+  events = events.concat(_brainEventsFromSales());
+  events = events.concat(_brainEventsFromStock());
+  events = events.concat(_brainEventsFromCustomers());
+  events = events.concat(_brainEventsFromTrends());
+  events = events.concat(_brainEventsFromWeather());
+  events = events.concat(_brainEventsFromBills());
+  events = events.concat(_brainEventsFromShifts());
+  events = events.concat(_brainEventsFromPending());
+  events = events.concat(_brainEventsFromMissingML());
+
+  // Price War savings alerts
+  if(typeof _pwBrainEvents === 'function'){
+    events = events.concat(_pwBrainEvents());
+  }
+
+  // Compliance expiry alerts
+  if(typeof _compBrainEvents === 'function' && typeof COMPLIANCE_PRODUCTS_CACHE !== 'undefined' && COMPLIANCE_PRODUCTS_CACHE){
+    events = events.concat(_compBrainEvents(COMPLIANCE_PRODUCTS_CACHE));
+  }
+
+  // Add schedule reminder if due
+  if(typeof _brainCheckSpotCheckReminder === 'function'){
+    const reminder = _brainCheckSpotCheckReminder();
+    if(reminder) events.push(reminder);
+  }
+
+  // Filter dismissed
+  events = events.filter(e => !dismissed.includes(e.id));
+
+  // Sort by timestamp DESC (newest first)
+  events.sort((a,b) => (b.ts||0) - (a.ts||0));
+
+  return events;
+}
+
+// ── HELPERS ──────────────────────────────────────────────
+function _brainTimeAgo(ts){
+  const diff = Date.now() - ts;
+  const seconds = Math.floor(diff / 1000);
+  if(seconds < 60) return 'πριν λίγα δευτερόλεπτα';
+  const minutes = Math.floor(seconds / 60);
+  if(minutes < 60) return `πριν ${minutes} λεπτ${minutes===1?'ό':'ά'}`;
+  const hours = Math.floor(minutes / 60);
+  if(hours < 24) return `πριν ${hours} ώρ${hours===1?'α':'ες'}`;
+  const days = Math.floor(hours / 24);
+  if(days < 7) return `πριν ${days} ημέρ${days===1?'α':'ες'}`;
+  return new Date(ts).toLocaleDateString('el-GR');
+}
+
+function _brainCategoryLabel(cat){
+  const labels = {
+    sale:'💰 Πωλήσεις',
+    stock:'📦 Stock',
+    customer:'👥 Πελάτες',
+    trend:'📈 Trends',
+    weather:'🌦️ Καιρός',
+    bill:'💸 Πληρωμές',
+    shift:'⏰ Βάρδιες',
+    pending:'⏳ Έγκριση',
+    theft:'🚨 Διαρροές'
+  };
+  return labels[cat] || cat;
+}
+
+function brainSwitchFilter(filter){
+  BRAIN_FILTER = filter;
+  renderBrain();
+}
+
+// ── MAIN RENDER ──────────────────────────────────────────
+function renderBrain(){
+  const content = document.getElementById('content');
+  if(!content) return;
+
+  const allEvents = _brainCollectAllEvents();
+  BRAIN_EVENTS_CACHE = allEvents;
+
+  // Filtering
+  let filtered = allEvents;
+  if(BRAIN_FILTER === 'critical'){
+    filtered = allEvents.filter(e => e.priority === 'high');
+  } else if(BRAIN_FILTER !== 'all'){
+    filtered = allEvents.filter(e => e.category === BRAIN_FILTER);
+  }
+
+  // Stats για το hero
+  const todaySales = (typeof SALES!=='undefined'?SALES:[]).filter(s=>{
+    const d = new Date(s.date||s.createdAt);
+    const t = new Date(); t.setHours(0,0,0,0);
+    return d >= t;
+  });
+  const todayRev = todaySales.reduce((s,x)=>s+(x.total||0),0);
+  const criticalCount = allEvents.filter(e => e.priority === 'high').length;
+
+  // Group events by time period
+  const now = Date.now();
+  const recentLimit = 60 * 60 * 1000; // 1 hour
+  const todayLimit = 24 * 60 * 60 * 1000;
+
+  const recent = filtered.filter(e => (now - e.ts) <= recentLimit);
+  const today = filtered.filter(e => (now - e.ts) > recentLimit && (now - e.ts) <= todayLimit);
+  const earlier = filtered.filter(e => (now - e.ts) > todayLimit);
+
+  // Filter counts
+  const counts = {
+    all: allEvents.length,
+    critical: allEvents.filter(e => e.priority === 'high').length,
+    sale: allEvents.filter(e => e.category === 'sale').length,
+    stock: allEvents.filter(e => e.category === 'stock').length,
+    customer: allEvents.filter(e => e.category === 'customer').length,
+    trend: allEvents.filter(e => e.category === 'trend').length,
+    bill: allEvents.filter(e => e.category === 'bill').length,
+    theft: allEvents.filter(e => e.category === 'theft').length
+  };
+
+  content.innerHTML = `
+  <div class="brain-hero">
+    <div class="brain-icon">🧠</div>
+    <h1 class="brain-title">The Brain</h1>
+    <p class="brain-subtitle">Σκέφτεται για σένα 24/7 — δες τι πρόσεξε</p>
+    <div class="brain-stats">
+      <div class="brain-stat">
+        <div class="brain-stat-num">${allEvents.length}</div>
+        <div class="brain-stat-label">Events</div>
+      </div>
+      <div class="brain-stat">
+        <div class="brain-stat-num" style="color:#e74c3c">${criticalCount}</div>
+        <div class="brain-stat-label">Κρίσιμα</div>
+      </div>
+      <div class="brain-stat">
+        <div class="brain-stat-num">${todaySales.length}</div>
+        <div class="brain-stat-label">Πωλήσεις σήμερα</div>
+      </div>
+      <div class="brain-stat">
+        <div class="brain-stat-num">${typeof eur==='function'?eur(todayRev):todayRev+'€'}</div>
+        <div class="brain-stat-label">Τζίρος</div>
+      </div>
+    </div>
+    <div class="brain-stats" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;flex-wrap:wrap;gap:8px">
+      <button class="oracle-btn" onclick="brainOpenSpotCheck()">
+        <i data-lucide="search" style="width:14px;height:14px"></i> Spot Check
+      </button>
+      <button class="oracle-btn" onclick="brainOpenBulkSpotCheck()">
+        <i data-lucide="layers" style="width:14px;height:14px"></i> Bulk Check
+      </button>
+      <button class="oracle-btn" onclick="brainOpenRecipeEditor()">
+        <i data-lucide="flask-conical" style="width:14px;height:14px"></i> Συνταγές
+      </button>
+      <button class="oracle-btn" onclick="brainShowMorningBriefing()">
+        <i data-lucide="sun" style="width:14px;height:14px"></i> Morning Briefing
+      </button>
+      <button class="oracle-btn" onclick="brainOpenSettings()">
+        <i data-lucide="settings" style="width:14px;height:14px"></i> Settings
+      </button>
+    </div>
+  </div>
+
+  <div class="brain-filters">
+    <button class="brain-filter-chip ${BRAIN_FILTER==='all'?'active':''}" onclick="brainSwitchFilter('all')">
+      Όλα <span class="count">${counts.all}</span>
+    </button>
+    ${counts.critical > 0 ? `
+    <button class="brain-filter-chip ${BRAIN_FILTER==='critical'?'active':''}" onclick="brainSwitchFilter('critical')" style="${BRAIN_FILTER!=='critical'?'background:rgba(231,76,60,0.1);border-color:rgba(231,76,60,0.3);color:#e74c3c':''}">
+      🚨 Κρίσιμα <span class="count">${counts.critical}</span>
+    </button>` : ''}
+    ${counts.sale > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='sale'?'active':''}" onclick="brainSwitchFilter('sale')">💰 Πωλήσεις <span class="count">${counts.sale}</span></button>` : ''}
+    ${counts.stock > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='stock'?'active':''}" onclick="brainSwitchFilter('stock')">📦 Stock <span class="count">${counts.stock}</span></button>` : ''}
+    ${counts.customer > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='customer'?'active':''}" onclick="brainSwitchFilter('customer')">👥 Πελάτες <span class="count">${counts.customer}</span></button>` : ''}
+    ${counts.trend > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='trend'?'active':''}" onclick="brainSwitchFilter('trend')">📈 Trends <span class="count">${counts.trend}</span></button>` : ''}
+    ${counts.bill > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='bill'?'active':''}" onclick="brainSwitchFilter('bill')">💸 Πληρωμές <span class="count">${counts.bill}</span></button>` : ''}
+    ${counts.theft > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='theft'?'active':''}" onclick="brainSwitchFilter('theft')">🚨 Διαρροές <span class="count">${counts.theft}</span></button>` : ''}
+    ${allEvents.filter(e=>e.category==='compliance').length > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='compliance'?'active':''}" onclick="brainSwitchFilter('compliance')" style="${BRAIN_FILTER!=='compliance'?'color:#2ecc71;border-color:rgba(46,204,113,0.3)':''}">🛡️ Compliance <span class="count">${allEvents.filter(e=>e.category==='compliance').length}</span></button>` : ''}
+    ${allEvents.filter(e=>e.category==='pricewar').length > 0 ? `<button class="brain-filter-chip ${BRAIN_FILTER==='pricewar'?'active':''}" onclick="brainSwitchFilter('pricewar')" style="${BRAIN_FILTER!=='pricewar'?'color:#d4ff3a;border-color:rgba(0,212,168,0.3)':''}">💰 Price War <span class="count">${allEvents.filter(e=>e.category==='pricewar').length}</span></button>` : ''}
+  </div>
+
+  ${filtered.length === 0 ? `
+    <div class="brain-empty">
+      <div class="brain-empty-icon">🧠</div>
+      <div class="fw-700 mb-1">Όλα ήσυχα.</div>
+      <div class="text-sm muted">Δεν υπάρχουν events για αυτό το φίλτρο.</div>
+    </div>
+  ` : `
+    <div class="brain-feed">
+      ${recent.length > 0 ? `
+        <div class="brain-section-header">⚡ Τώρα</div>
+        ${recent.map(e => _brainRenderEvent(e)).join('')}
+      ` : ''}
+
+      ${today.length > 0 ? `
+        <div class="brain-section-header">📅 Σήμερα</div>
+        ${today.map(e => _brainRenderEvent(e)).join('')}
+      ` : ''}
+
+      ${earlier.length > 0 ? `
+        <div class="brain-section-header">🕒 Παλαιότερα</div>
+        ${earlier.map(e => _brainRenderEvent(e)).join('')}
+      ` : ''}
+    </div>
+  `}
+
+  <div class="text-center" style="margin-top:20px;padding-bottom:30px">
+    <button class="oracle-btn" onclick="renderBrain()">
+      <i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Ανανέωση
+    </button>
+    ${_brainLoadDismissed().length > 0 ? `
+    <button class="oracle-btn" onclick="brainResetDismissed()">
+      <i data-lucide="rotate-ccw" style="width:14px;height:14px"></i> Επαναφορά αγνοημένων
+    </button>` : ''}
+  </div>
+  `;
+
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function _brainRenderEvent(e){
+  return `
+    <div class="brain-event priority-${e.priority||'low'}">
+      <div class="brain-event-icon">${e.icon||'📌'}</div>
+      <div class="brain-event-body">
+        <div class="brain-event-title">${e.title}</div>
+        <div class="brain-event-desc">${e.desc}</div>
+        <div class="brain-event-meta">
+          <span>${_brainTimeAgo(e.ts)}</span>
+          <span class="badge">${_brainCategoryLabel(e.category)}</span>
+        </div>
+        ${e.actions && e.actions.length ? `
+          <div class="brain-event-actions">
+            ${e.actions.map(a=>`<button onclick="${a.onclick}">${a.label}</button>`).join('')}
+            <button onclick="brainDismissEvent('${e.id}')" style="opacity:0.6">✕ Αγνόηση</button>
+          </div>
+        ` : `
+          <div class="brain-event-actions">
+            <button onclick="brainDismissEvent('${e.id}')" style="opacity:0.6">✕ Αγνόηση</button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function brainResetDismissed(){
+  localStorage.removeItem('brainDismissed');
+  if(typeof toast === 'function') toast('Όλα τα events ξαναεμφανίστηκαν', 'info');
+  renderBrain();
+}
+
+
+
+/* ============================================================
+   🧠 BRAIN PHASE 2+3 — Bulk SpotCheck, Schedule, Polling, Morning AI
+   ============================================================ */
+
+var BRAIN_POLL_TIMER = null;
+var BRAIN_LAST_POLL = null;
+var BRAIN_NOTIFICATIONS_PERMISSION = null;
+
+// ── BULK SPOT CHECK ──────────────────────────────────────
+function brainOpenBulkSpotCheck(){
+  if(typeof PRODUCTS === 'undefined' || PRODUCTS.length === 0){
+    if(typeof toast === 'function') toast('Δεν φορτώθηκαν προϊόντα', 'warning');
+    return;
+  }
+
+  // Auto-detect potential ingredients
+  const recipes = (typeof getRecipes === 'function') ? getRecipes() : {};
+  const allIngredientIds = new Set();
+  Object.values(recipes).forEach(r => {
+    (r.ingredients || []).forEach(i => allIngredientIds.add(String(i.ingredientId)));
+  });
+
+  const ingredientKeywords = ['base','βάση','nicshot','nic shot','νικοτίν','booster','αντίστασ','coil','αρωμα','aroma','flavor'];
+  const potentialIngredients = PRODUCTS.filter(p => {
+    if(allIngredientIds.has(String(p.id))) return true;
+    const name = (p.name||'').toLowerCase();
+    return ingredientKeywords.some(k => name.includes(k));
+  });
+
+  if(potentialIngredients.length === 0){
+    if(typeof toast === 'function') toast('Δεν βρέθηκαν ingredients. Φτιάξε πρώτα συνταγές.', 'warning');
+    return;
+  }
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">⚗️ Bulk Spot Check</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm muted" style="margin:0 0 12px">
+        Έλεγξε <strong>πολλά ingredients ταυτόχρονα</strong>. Άφησε κενό όσα δεν θέλεις να ελέγξεις τώρα.
+      </p>
+      <div class="form-row">
+        <label>Περίοδος ελέγχου</label>
+        <select id="bulkSCPeriod">
+          <option value="7">Τελευταίες 7 ημέρες</option>
+          <option value="14">Τελευταίες 14 ημέρες</option>
+          <option value="30">Τελευταίες 30 ημέρες</option>
+        </select>
+      </div>
+      <div style="max-height:400px;overflow-y:auto;margin-top:10px">
+        ${potentialIngredients.map(p => {
+          const guess = (p.name||'').toLowerCase().includes('αντίστασ') || (p.name||'').toLowerCase().includes('coil') || (p.name||'').toLowerCase().includes('nicshot') ? 'τμχ' : 'ml';
+          return `
+          <div style="padding:10px;background:var(--bg-2);border-radius:8px;margin-bottom:6px">
+            <div class="fw-700 text-sm mb-1">${p.name}</div>
+            <div class="text-xs muted mb-2">Stock σύστημα: <strong>${p.stock||0}</strong></div>
+            <div style="display:grid;grid-template-columns:1fr 70px;gap:6px">
+              <input type="number" class="bulk-sc-actual" data-pid="${p.id}" data-pname="${(p.name||'').replace(/"/g,'&quot;')}" step="0.1" placeholder="Πραγματικό" />
+              <select class="bulk-sc-unit" data-pid="${p.id}">
+                <option value="ml" ${guess==='ml'?'selected':''}>ml</option>
+                <option value="τμχ" ${guess==='τμχ'?'selected':''}>τμχ</option>
+                <option value="γρ">γρ</option>
+              </select>
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+        <button class="btn btn-primary" onclick="_brainPerformBulkSpotCheck()">🔍 Έλεγχος όλων</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+function _brainPerformBulkSpotCheck(){
+  const period = parseInt(document.getElementById('bulkSCPeriod')?.value) || 7;
+  const since = new Date(Date.now() - period * 86400000).toISOString();
+
+  const inputs = document.querySelectorAll('.bulk-sc-actual');
+  const results = [];
+
+  inputs.forEach(input => {
+    const actualStr = input.value;
+    if(!actualStr || actualStr.trim() === '') return; // skip empty
+
+    const productId = input.dataset.pid;
+    const productName = input.dataset.pname;
+    const unit = document.querySelector(`.bulk-sc-unit[data-pid="${productId}"]`)?.value || 'ml';
+    const actual = parseFloat(actualStr);
+
+    if(typeof computeTheoreticalRemaining !== 'function') return;
+    const computed = computeTheoreticalRemaining(productId, since);
+    if(!computed) return;
+
+    const expected = computed.expectedRemaining;
+    const deviation = expected > 0 ? ((actual - expected) / expected) * 100 : 0;
+    const deviationAbs = actual - expected;
+
+    let suggestion = '';
+    if(deviationAbs < 0){
+      suggestion = `Λείπουν ${Math.abs(deviationAbs).toFixed(1)}${unit} (${Math.abs(deviation).toFixed(1)}%). `;
+      if(Math.abs(deviation) >= 10) suggestion += 'Ψηλή απώλεια!';
+      else if(Math.abs(deviation) >= 5) suggestion += 'Ύποπτη απόκλιση.';
+      else suggestion += 'Εντός νορμάλ.';
+    } else if(deviationAbs > 0){
+      suggestion = `+${deviationAbs.toFixed(1)}${unit} παραπάνω (πιθανώς αδήλωτη παραλαβή).`;
+    } else {
+      suggestion = 'Όλα ταιριάζουν.';
+    }
+
+    const check = (typeof addSpotCheck === 'function') ? addSpotCheck({
+      productId, productName, unit, periodDays: period,
+      expected, actual, actualMissing: deviationAbs, deviation,
+      consumedFromSales: computed.consumedFromSales,
+      salesInPeriod: computed.salesInPeriodCount,
+      suggestion, bulk: true
+    }) : null;
+
+    results.push({productName, expected, actual, deviation, deviationAbs, unit, suggestion});
+  });
+
+  if(typeof closeModal === 'function') closeModal();
+
+  if(results.length === 0){
+    if(typeof toast === 'function') toast('Δεν συμπληρώθηκε καμία τιμή', 'warning');
+    return;
+  }
+
+  // Show results modal
+  const critical = results.filter(r => r.deviation < -10).length;
+  const warning = results.filter(r => r.deviation < -5 && r.deviation >= -10).length;
+  const ok = results.filter(r => r.deviation >= -5).length;
+
+  const resultHtml = `
+    <div class="modal-head">
+      <div class="modal-title">📊 Bulk Spot Check — Αποτελέσματα</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <div style="flex:1;text-align:center;padding:10px;background:rgba(46,204,113,0.1);border-radius:8px;border:1px solid rgba(46,204,113,0.3)">
+          <div class="fw-800" style="font-size:24px;color:#2ecc71">${ok}</div>
+          <div class="text-xs muted">OK</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:10px;background:rgba(243,156,18,0.1);border-radius:8px;border:1px solid rgba(243,156,18,0.3)">
+          <div class="fw-800" style="font-size:24px;color:#f39c12">${warning}</div>
+          <div class="text-xs muted">Ύποπτα</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:10px;background:rgba(231,76,60,0.1);border-radius:8px;border:1px solid rgba(231,76,60,0.3)">
+          <div class="fw-800" style="font-size:24px;color:#e74c3c">${critical}</div>
+          <div class="text-xs muted">Συναγερμοί</div>
+        </div>
+      </div>
+      <div style="max-height:350px;overflow-y:auto">
+        ${results.sort((a,b)=>a.deviation-b.deviation).map(r => {
+          const color = r.deviation < -10 ? '#e74c3c' : (r.deviation < -5 ? '#f39c12' : (r.deviation < 0 ? '#7f8c8d' : '#2ecc71'));
+          return `<div style="padding:10px;background:var(--bg-2);border-radius:8px;margin-bottom:6px;border-left:3px solid ${color}">
+            <div class="fw-700 text-sm">${r.productName}</div>
+            <div class="text-xs" style="color:${color};margin-top:2px">
+              ${r.expected}${r.unit} → ${r.actual}${r.unit} (${r.deviation > 0 ? '+' : ''}${r.deviation.toFixed(1)}%)
+            </div>
+            <div class="text-xs muted" style="margin-top:4px">${r.suggestion}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Κλείσιμο</button>
+        <button class="btn btn-primary" onclick="closeModal();showPage('brain')">🧠 Brain</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(resultHtml);
+}
+
+// ── SPOT CHECK SCHEDULE ──────────────────────────────────
+function getSpotCheckSchedule(){
+  try{ return JSON.parse(localStorage.getItem('spotCheckSchedule') || '{}'); }
+  catch{ return {}; }
+}
+
+function saveSpotCheckSchedule(schedule){
+  localStorage.setItem('spotCheckSchedule', JSON.stringify(schedule));
+}
+
+function brainOpenScheduleSettings(){
+  const schedule = getSpotCheckSchedule();
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">⏰ Spot Check Schedule</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm muted" style="margin:0 0 12px">
+        Ορίσε πόσο συχνά ο Brain θα σου θυμίζει να κάνεις Spot Check.
+      </p>
+      <div class="form-row">
+        <label>Συχνότητα</label>
+        <select id="schedFreq">
+          <option value="off" ${schedule.frequency==='off'?'selected':''}>🚫 Απενεργοποίηση</option>
+          <option value="daily" ${schedule.frequency==='daily'?'selected':''}>📅 Καθημερινά</option>
+          <option value="weekly" ${(schedule.frequency==='weekly'||!schedule.frequency)?'selected':''}>📆 Εβδομαδιαία (συνιστώμενο)</option>
+          <option value="biweekly" ${schedule.frequency==='biweekly'?'selected':''}>🗓️ Κάθε 2 εβδομάδες</option>
+          <option value="monthly" ${schedule.frequency==='monthly'?'selected':''}>📋 Μηνιαία</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Ώρα ειδοποίησης</label>
+        <input type="time" id="schedTime" value="${schedule.time||'10:00'}" />
+      </div>
+      <div class="form-row">
+        <label>Ημέρα εβδομάδας (αν εβδομαδιαία)</label>
+        <select id="schedDay">
+          <option value="1" ${schedule.dayOfWeek==='1'?'selected':''}>Δευτέρα</option>
+          <option value="2" ${schedule.dayOfWeek==='2'?'selected':''}>Τρίτη</option>
+          <option value="3" ${schedule.dayOfWeek==='3'?'selected':''}>Τετάρτη</option>
+          <option value="4" ${schedule.dayOfWeek==='4'?'selected':''}>Πέμπτη</option>
+          <option value="5" ${schedule.dayOfWeek==='5'?'selected':''}>Παρασκευή</option>
+          <option value="6" ${(schedule.dayOfWeek==='6'||!schedule.dayOfWeek)?'selected':''}>Σάββατο</option>
+          <option value="0" ${schedule.dayOfWeek==='0'?'selected':''}>Κυριακή</option>
+        </select>
+      </div>
+      <div class="hd-tip" style="margin-top:10px">💡 Ο Brain θα δημιουργεί ειδοποίηση στο feed όταν φτάσει η ώρα. Δεν στέλνει push notification (αυτό απαιτεί browser permissions).</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+        <button class="btn btn-primary" onclick="_brainSaveSchedule()">Αποθήκευση</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+function _brainSaveSchedule(){
+  const schedule = {
+    frequency: document.getElementById('schedFreq')?.value || 'weekly',
+    time: document.getElementById('schedTime')?.value || '10:00',
+    dayOfWeek: document.getElementById('schedDay')?.value || '6',
+    lastChecked: getSpotCheckSchedule().lastChecked || null
+  };
+  saveSpotCheckSchedule(schedule);
+  if(typeof closeModal === 'function') closeModal();
+  if(typeof toast === 'function') toast('✅ Schedule αποθηκεύτηκε', 'success');
+  if(typeof renderBrain === 'function') renderBrain();
+}
+
+// Έλεγχος αν χρειάζεται reminder
+function _brainCheckSpotCheckReminder(){
+  const schedule = getSpotCheckSchedule();
+  if(!schedule.frequency || schedule.frequency === 'off') return null;
+
+  const now = new Date();
+  const lastChecked = schedule.lastChecked ? new Date(schedule.lastChecked) : null;
+
+  let dueDate = null;
+  if(schedule.frequency === 'daily'){
+    if(!lastChecked || (now - lastChecked) >= 86400000){
+      dueDate = now;
+    }
+  } else if(schedule.frequency === 'weekly'){
+    const targetDay = parseInt(schedule.dayOfWeek || '6');
+    if(now.getDay() === targetDay && (!lastChecked || (now - lastChecked) >= 6*86400000)){
+      dueDate = now;
+    }
+  } else if(schedule.frequency === 'biweekly'){
+    if(!lastChecked || (now - lastChecked) >= 14*86400000){
+      dueDate = now;
+    }
+  } else if(schedule.frequency === 'monthly'){
+    if(!lastChecked || (now - lastChecked) >= 30*86400000){
+      dueDate = now;
+    }
+  }
+
+  return dueDate ? {
+    id: 'spotcheck_reminder_' + now.toISOString().slice(0,10),
+    ts: now.getTime() - 200000,
+    icon: '⏰',
+    title: 'Είναι ώρα για Spot Check',
+    desc: `Σύμφωνα με το schedule σου (${schedule.frequency}). Έλεγξε τα ingredients για διαρροές.`,
+    priority: 'medium',
+    category: 'theft',
+    actions: [
+      {label:'⚗️ Spot Check τώρα', onclick:'brainOpenSpotCheck()'},
+      {label:'📊 Bulk Check', onclick:'brainOpenBulkSpotCheck()'},
+      {label:'⏰ Schedule', onclick:'brainOpenScheduleSettings()'}
+    ]
+  } : null;
+}
+
+// ── BACKGROUND POLLING ───────────────────────────────────
+function brainStartPolling(){
+  if(BRAIN_POLL_TIMER) return; // already running
+  BRAIN_POLL_TIMER = setInterval(()=>{
+    BRAIN_LAST_POLL = new Date();
+    // Ελαφρύς re-render αν είναι στο Brain page
+    if(window.CURRENT_PAGE_ID === 'brain' && typeof renderBrain === 'function'){
+      renderBrain();
+    }
+    // Έλεγχος για schedule reminders
+    const reminder = _brainCheckSpotCheckReminder();
+    if(reminder){
+      // Προσθήκη στο pending events του Brain (μέσω in-memory check)
+      window._brainScheduleReminder = reminder;
+    }
+  }, 5 * 60 * 1000); // κάθε 5 λεπτά
+  console.log('[Brain] Background polling started (5min interval)');
+}
+
+function brainStopPolling(){
+  if(BRAIN_POLL_TIMER){
+    clearInterval(BRAIN_POLL_TIMER);
+    BRAIN_POLL_TIMER = null;
+    console.log('[Brain] Background polling stopped');
+  }
+}
+
+// ── PUSH NOTIFICATIONS ───────────────────────────────────
+async function brainRequestNotificationPermission(){
+  if(!('Notification' in window)){
+    if(typeof toast === 'function') toast('Ο browser δεν υποστηρίζει notifications', 'warning');
+    return false;
+  }
+
+  if(Notification.permission === 'granted'){
+    BRAIN_NOTIFICATIONS_PERMISSION = true;
+    return true;
+  }
+
+  if(Notification.permission === 'denied'){
+    if(typeof toast === 'function') toast('🚫 Αρνήθηκες notifications. Άλλαξε από browser settings.', 'warning');
+    return false;
+  }
+
+  const permission = await Notification.requestPermission();
+  BRAIN_NOTIFICATIONS_PERMISSION = (permission === 'granted');
+  if(BRAIN_NOTIFICATIONS_PERMISSION){
+    if(typeof toast === 'function') toast('✅ Notifications ενεργές', 'success');
+    new Notification('🧠 The Brain', {
+      body: 'Είμαι έτοιμος να σε ειδοποιώ για κρίσιμα events.',
+      icon: '/icon-192.png'
+    });
+  }
+  return BRAIN_NOTIFICATIONS_PERMISSION;
+}
+
+function brainSendNotification(title, body, data){
+  if(!BRAIN_NOTIFICATIONS_PERMISSION) return;
+  try{
+    new Notification(title, {
+      body: body || '',
+      icon: '/icon-192.png',
+      tag: 'brain-' + (data?.tag || 'default'),
+      requireInteraction: data?.priority === 'high'
+    });
+  }catch(e){
+    console.warn('[Brain] notification failed:', e);
+  }
+}
+
+// ── AI MORNING BRIEFING ──────────────────────────────────
+var BRAIN_MORNING_MESSAGE = null;
+
+function _brainMorningCacheKey(){
+  return 'brainMorningBriefing_' + new Date().toISOString().slice(0,10);
+}
+
+async function brainGenerateMorningBriefing(forceFresh){
+  if(!forceFresh){
+    const cached = localStorage.getItem(_brainMorningCacheKey());
+    if(cached){
+      BRAIN_MORNING_MESSAGE = cached;
+      return cached;
+    }
+  }
+
+  // Συγκεντρώνω events από το βράδυ μέχρι τώρα (ή τις τελευταίες 12 ώρες)
+  if(typeof _brainCollectAllEvents !== 'function') return null;
+  const allEvents = _brainCollectAllEvents();
+  const now = Date.now();
+  const overnightLimit = 12 * 60 * 60 * 1000; // 12 ώρες
+  const overnightEvents = allEvents.filter(e => (now - e.ts) <= overnightLimit);
+
+  if(overnightEvents.length === 0){
+    BRAIN_MORNING_MESSAGE = '<p>🌅 Καλημέρα! Όλα ήρεμα τις τελευταίες ώρες — δεν συνέβη τίποτα κρίσιμο.</p>';
+    localStorage.setItem(_brainMorningCacheKey(), BRAIN_MORNING_MESSAGE);
+    return BRAIN_MORNING_MESSAGE;
+  }
+
+  if(typeof askClaude !== 'function') return null;
+
+  // Συγκέντρωση eventslist για prompt
+  const eventsList = overnightEvents.slice(0, 20).map(e =>
+    `- [${e.priority||'info'}] ${e.title}: ${e.desc.replace(/<[^>]+>/g,'')}`
+  ).join('\n');
+
+  const criticals = overnightEvents.filter(e => e.priority === 'high').length;
+  const sales = overnightEvents.filter(e => e.category === 'sale').length;
+  const stock = overnightEvents.filter(e => e.category === 'stock').length;
+  
+  // Smart weather/seasonal context για ορθόλογες προτάσεις
+  let weatherContextStr = '';
+  if(typeof getWeatherSeasonalContext === 'function'){
+    const ctx = getWeatherSeasonalContext();
+    if(ctx && ctx.reasoning_gr && ctx.reasoning_gr.length > 0){
+      weatherContextStr = `
+
+🌡️ ΕΠΟΧΗ + ΚΑΙΡΟΣ:
+- ${ctx.season_gr}${ctx.weather ? `, μ.ό. ${ctx.weather.next_7_days.avg_max_temp_c}°C επόμενες 7 μέρες${ctx.weather.next_7_days.has_heatwave ? ' (καύσωνας ⚠️)' : ''}` : ''}
+- Insights: ${ctx.reasoning_gr.join('. ')}
+- Προτεινόμενες κατηγορίες υγρών: ${ctx.suggested_flavor_categories.join(', ')}`;
+    }
+  }
+
+  const prompt = `Είσαι ο "Brain" — προσωπικός σύμβουλος επιχείρησης για κατάστημα ηλεκτρονικού τσιγάρου.
+
+ΚΑΛΗΜΕΡΑ MESSAGE — Σύνοψη "τι συνέβη όσο κοιμόσουν" (τελευταίες 12 ώρες).
+
+EVENTS:
+${eventsList}
+
+ΣΤΑΤΙΣΤΙΚΑ:
+- ${criticals} κρίσιμα events
+- ${sales} πωλήσεις events
+- ${stock} stock alerts${weatherContextStr}
+
+ΑΠΟΣΤΟΛΗ:
+Γράψε σύντομη σύνοψη "τι έγινε όσο κοιμόσουν" σε μορφή φιλικής αναφοράς. Δομή:
+
+1. Καλημέρα + κάτι θετικό
+2. Τα ΣΗΜΑΝΤΙΚΑ events (ομαδοποιημένα ανά κατηγορία αν χρειάζεται)
+3. ΤΙ ΧΡΕΙΑΖΕΤΑΙ ΠΡΟΣΟΧΗ ΣΗΜΕΡΑ
+4. ΕΠΟΧΙΑΚΟ INSIGHT (μόνο αν υπάρχει στο context): πρόταση παραγγελίας ή προτεραιότητας με βάση καιρό/εποχή πχ "έρχονται ζεστές μέρες — αν παραγγέλνεις, κράτα ζωντανά τα icy/menthol/φρουτώδη"
+5. Κλείσιμο με ενθαρρυντικό μήνυμα
+
+ΣΤΥΛ ΓΡΑΦΗΣ (ΚΡΙΣΙΜΟ):
+- Γράψε σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ΕΛΛΗΝΙΚΑ. ΜΗΝ μεταφράζεις από αγγλικά - σκέψου κατευθείαν στα ελληνικά.
+- ΠΡΟΣΟΧΗ σε σύνταξη, πτώσεις, συμφωνία γένους/αριθμού. Απόφυγε αγγλισμούς και κακομεταφρασμένες εκφράσεις (π.χ. ΠΟΤΕ "το κατάστημα κράτησε καλά τη νύχτα" - σωστό: "ήσυχη νύχτα στο κατάστημα" ή "όλα κύλησαν ομαλά").
+- Διάβασε νοερά κάθε πρόταση: αν δεν θα την έλεγε φυσικός Έλληνας ομιλητής, ξαναγράψ' την.
+- Φιλικό, σύντομο, με <p>, <strong>, <em>. Όχι bullet lists - ρέουσα πρόζα.
+- 100-180 λέξεις. 2-3 emojis σωστά τοποθετημένα.
+
+Δώσε ΜΟΝΟ το κείμενο.`;
+
+  try{
+    const result = await askClaude(
+      [{role:'user', content: prompt}],
+      'Είσαι ο "Brain", έμπειρος Έλληνας σύμβουλος για vape shop, με άριστη γνώση της ελληνικής. Γράφεις σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ελληνικά - σωστή σύνταξη, πτώσεις, συμφωνία γένους/αριθμού, χωρίς αγγλισμούς. Σκέφτεσαι κατευθείαν στα ελληνικά. ΚΡΙΣΙΜΟ: Το κατάστημα πουλάει ΑΠΟΚΛΕΙΣΤΙΚΑ υγρά άτμισης, συσκευές vape και αναλώσιμα. Γεύσεις (Lemonade/Berry/Creamy/Ice) είναι ΓΕΥΣΕΙΣ ΥΓΡΩΝ, όχι πραγματικά ποτά/γλυκά. ΠΟΤΕ προϊόντα άσχετα με vaping. Επιστρέφεις HTML με <p>, <strong>, <em>. Ποτέ markdown.'
+    );
+    BRAIN_MORNING_MESSAGE = result;
+    localStorage.setItem(_brainMorningCacheKey(), result);
+    return result;
+  }catch(err){
+    console.error('Brain morning briefing error:', err);
+    return null;
+  }
+}
+
+// ── BRAIN SETTINGS PANEL ─────────────────────────────────
+function brainOpenSettings(){
+  const schedule = getSpotCheckSchedule();
+  const dismissed = (typeof _brainLoadDismissed === 'function') ? _brainLoadDismissed() : [];
+  const polling = !!BRAIN_POLL_TIMER;
+  const notif = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">⚙️ Brain Settings</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <div style="padding:14px;background:var(--bg-2);border-radius:10px">
+          <div class="fw-700 mb-1">⏰ Spot Check Schedule</div>
+          <div class="text-sm muted">${schedule.frequency==='off'||!schedule.frequency ? 'Απενεργοποιημένο' : 'Συχνότητα: ' + schedule.frequency}</div>
+          <button class="oracle-btn" style="margin-top:8px" onclick="closeModal();brainOpenScheduleSettings()">
+            <i data-lucide="settings" style="width:14px;height:14px"></i> Ρυθμίσεις
+          </button>
+        </div>
+
+        <div style="padding:14px;background:var(--bg-2);border-radius:10px">
+          <div class="fw-700 mb-1">🔔 Push Notifications</div>
+          <div class="text-sm muted">Permission: ${notif === 'granted' ? '✅ Ενεργό' : (notif === 'denied' ? '🚫 Αρνημένο' : '⏳ Δεν έχει ζητηθεί')}</div>
+          ${notif !== 'granted' && notif !== 'unsupported' ? `
+            <button class="oracle-btn" style="margin-top:8px" onclick="brainRequestNotificationPermission()">
+              <i data-lucide="bell" style="width:14px;height:14px"></i> Ενεργοποίηση
+            </button>
+          ` : ''}
+          ${notif === 'unsupported' ? '<div class="text-xs muted" style="margin-top:8px">Ο browser σου δεν υποστηρίζει notifications.</div>' : ''}
+        </div>
+
+        <div style="padding:14px;background:var(--bg-2);border-radius:10px">
+          <div class="fw-700 mb-1">📡 Background Polling</div>
+          <div class="text-sm muted">${polling ? '✅ Τρέχει — ανανέωση κάθε 5 λεπτά' : '⏸️ Σταματημένο'}</div>
+          <button class="oracle-btn" style="margin-top:8px" onclick="${polling ? 'brainStopPolling()' : 'brainStartPolling()'};closeModal();brainOpenSettings()">
+            ${polling ? '⏸️ Παύση' : '▶️ Έναρξη'}
+          </button>
+        </div>
+
+        <div style="padding:14px;background:var(--bg-2);border-radius:10px">
+          <div class="fw-700 mb-1">🌅 Morning Briefing</div>
+          <div class="text-sm muted">ZyroNex σύνοψη "τι έγινε όσο κοιμόσουν". Cache: 1/ημέρα.</div>
+          <button class="oracle-btn" style="margin-top:8px" onclick="closeModal();brainShowMorningBriefing()">
+            <i data-lucide="sun" style="width:14px;height:14px"></i> Δες briefing
+          </button>
+        </div>
+
+        <div style="padding:14px;background:var(--bg-2);border-radius:10px">
+          <div class="fw-700 mb-1">🗑️ Dismissed Events</div>
+          <div class="text-sm muted">${dismissed.length} events αγνοημένα</div>
+          ${dismissed.length > 0 ? `
+            <button class="oracle-btn" style="margin-top:8px" onclick="brainResetDismissed();closeModal()">
+              <i data-lucide="rotate-ccw" style="width:14px;height:14px"></i> Επαναφορά όλων
+            </button>
+          ` : ''}
+        </div>
+
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="closeModal()">Κλείσιμο</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+async function brainShowMorningBriefing(){
+  if(typeof toast === 'function') toast('🔮 Συγκεντρώνω events...', 'info');
+  let msg = BRAIN_MORNING_MESSAGE;
+  if(!msg){
+    msg = await brainGenerateMorningBriefing(false);
+  }
+  if(!msg){
+    if(typeof toast === 'function') toast('Δεν μπόρεσα να φτιάξω briefing', 'warning');
+    return;
+  }
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">🌅 Morning Briefing</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="padding:18px;background:linear-gradient(135deg,rgba(74,163,255,0.08),rgba(155,89,255,0.05));border-radius:12px;border-left:3px solid #4aa3ff;line-height:1.7">
+        ${msg}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="brainGenerateMorningBriefing(true).then(()=>{closeModal();brainShowMorningBriefing()})">
+          🔄 Νέο briefing
+        </button>
+        <button class="btn btn-primary" onclick="closeModal()">Έγινε</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+// Auto-start polling όταν φορτώσει η σελίδα Brain
+function _brainAutoInit(){
+  if(typeof brainStartPolling === 'function' && !BRAIN_POLL_TIMER){
+    brainStartPolling();
+  }
+}
