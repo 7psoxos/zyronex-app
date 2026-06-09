@@ -953,16 +953,15 @@ if(window.navigator && window.navigator.share){
   .prod-card.low{border-color:rgba(255,169,77,0.4)}
   .prod-card.out{border-color:rgba(255,71,87,0.4);opacity:0.55}
   .prod-img{width:100%;height:80px;border-radius:8px;overflow:hidden;background:var(--bg-2);display:flex;align-items:center;justify-content:center;margin-bottom:4px;flex-shrink:0}
-  .prod-img img{width:100%;height:100%;object-fit:contain}
+  .prod-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:0 auto;display:block}
   .prod-img-placeholder{color:var(--text-2)}
   /* Quick POS product card image */
   .quick-pos-product-img{
-    width:100%;height:80px;object-fit:contain;
+    max-width:100%;max-height:80px;width:auto;height:auto;object-fit:contain;
     border-radius:8px;display:block;
     flex-shrink:0;
     background:rgba(0,0,0,0.12);
-    max-height:80px;
-    margin-bottom:2px;
+    margin:0 auto 2px;
     padding:4px;
     box-sizing:border-box;
   }
@@ -27723,7 +27722,15 @@ function renderPOSGrid(){
   const customerId = window.SELECTED_CUSTOMER_ID;
 
   let list;
-  if(POS_CATEGORY==='✨ Top'){
+  const _searchQ = POS_SEARCH && POS_SEARCH.trim() ? POS_SEARCH.trim().toLowerCase() : '';
+
+  if(_searchQ){
+    // When searching, scan ALL products regardless of active category/tab
+    list = PRODUCTS.filter(p=>
+      (p.name||'').toLowerCase().includes(_searchQ) ||
+      (p.barcode||'').toLowerCase().includes(_searchQ)
+    ).filter(p=>(p.stock||0)>0);
+  } else if(POS_CATEGORY==='✨ Top'){
     list = _getPOSTopProducts(24);
   } else if(POS_CATEGORY==='👤 Για σένα'){
     list = _getPOSPersonalized(customerId, 16);
@@ -27737,23 +27744,11 @@ function renderPOSGrid(){
     list = PRODUCTS.filter(function(p){ return compatIds.has(p.id); })
       .sort(function(a,b){ return (b.sales30d||0)-(a.sales30d||0); });
   } else if(POS_CATEGORY==='Όλα'){
-    // Sort by sales30d within Όλα
     list = [...PRODUCTS].sort((a,b)=>(b.sales30d||0)-(a.sales30d||0));
   } else {
-    // Category tab — sort by sales30d within category
     list = PRODUCTS
       .filter(p=>p.category===POS_CATEGORY)
       .sort((a,b)=>(b.sales30d||0)-(a.sales30d||0));
-  }
-
-  // Apply search filter
-  if(POS_SEARCH && POS_SEARCH.trim()){
-    const q = POS_SEARCH.trim().toLowerCase();
-    list = list.filter(p=>{
-      if((p.name||'').toLowerCase().includes(q)) return true;
-      if((p.barcode||'').toLowerCase().includes(q)) return true;
-      return false;
-    });
   }
 
   grid.innerHTML=list.map(p=>{
@@ -29129,8 +29124,15 @@ function changeQty(idx,d){
   else if(p && n>p.stock){toast('Ανεπαρκές απόθεμα','warn');return}
   else{it.qty=n}
   renderCart();
+  if(typeof renderPOSGrid==='function') renderPOSGrid();
+  if(typeof renderQuickCategoriesGrid==='function') renderQuickCategoriesGrid();
 }
-function clearCart(){CART=[];window._ageVerified=false;window._pendingGiftCard=null;renderCart();}
+function clearCart(){
+  CART=[];window._ageVerified=false;window._pendingGiftCard=null;
+  renderCart();
+  if(typeof renderPOSGrid==='function') renderPOSGrid();
+  if(typeof renderQuickCategoriesGrid==='function') renderQuickCategoriesGrid();
+}
 async function checkout(){
   console.log('[checkout] Started');
   if(CART.length===0){toast('Το καλάθι είναι άδειο','warn');return}
