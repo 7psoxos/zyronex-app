@@ -407,6 +407,24 @@ if(window.navigator && window.navigator.share){
     #sidebar,.sidebar{display:flex;position:sticky;left:auto;top:0;transform:none;height:100vh;flex-direction:column}
     .sidebar-backdrop{display:none !important}
     #znTabBar{display:none !important}
+    .hamburger{display:none !important}
+    /* Collapsed sidebar */
+    .app.sidebar-collapsed{grid-template-columns:56px 1fr}
+    .app.sidebar-collapsed .sidebar{width:56px;min-width:56px;overflow:hidden;padding:12px 0}
+    .app.sidebar-collapsed .logo,.app.sidebar-collapsed .nav-label,.app.sidebar-collapsed .nav-section-title,.app.sidebar-collapsed .user-chip .user-name,.app.sidebar-collapsed .user-chip .user-role{display:none !important}
+    .app.sidebar-collapsed .nav-item{justify-content:center;padding:12px 0}
+    .app.sidebar-collapsed .nav-item i,.app.sidebar-collapsed .nav-item [data-lucide]{margin:0}
+    .app.sidebar-collapsed #sidebarCollapseBtn{transform:rotate(180deg)}
+    /* Global search dropdown */
+    #globalSearchDropdown{position:absolute;top:100%;left:0;right:0;background:var(--bg-1);border:1px solid var(--border);border-radius:10px;margin-top:4px;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:500;max-height:320px;overflow-y:auto;display:none}
+    #globalSearchDropdown.open{display:block}
+    .gs-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;font-size:13px;color:var(--text-0);border-bottom:1px solid var(--border)}
+    .gs-item:last-child{border-bottom:none}
+    .gs-item:hover,.gs-item.active{background:var(--bg-2)}
+    .gs-item-icon{font-size:16px;flex-shrink:0;width:20px;text-align:center}
+    .gs-item-label{font-weight:600}
+    .gs-item-sub{font-size:11px;color:var(--text-2);margin-top:1px}
+    .search-box{position:relative}
   }
   .sidebar{background:linear-gradient(180deg,#0d1220 0%,#0a0f1c 100%);border-right:1px solid var(--border);padding:16px 0;position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden}
   .sidebar::after{content:'';position:absolute;top:0;right:0;width:1px;height:100%;background:linear-gradient(180deg,transparent,rgba(99,130,220,0.15) 30%,rgba(0,212,168,0.1) 70%,transparent)}
@@ -2601,6 +2619,12 @@ window.onerror = function(msg, src, line, col, err) {
 <div class="app hidden" id="appWrap">
 <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 <aside class="sidebar" id="sidebar">
+  <!-- Collapse toggle — desktop only -->
+  <button id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Minimize sidebar"
+    style="display:none;position:absolute;top:16px;right:-12px;z-index:10;width:24px;height:24px;background:var(--bg-2);border:1px solid var(--border);border-radius:50%;cursor:pointer;align-items:center;justify-content:center;color:var(--text-2);transition:transform 0.2s,color 0.2s"
+    onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-2)'">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
   <div class="logo">
     <div class="logo-mark">
       <div class="logo-square"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5c-.4 0-.76.2-.98.54C9.5 5.2 5 11.8 5 15.5 5 19.64 8.13 23 12 23s7-3.36 7-7.5c0-3.7-4.5-10.3-6.02-12.46A1.17 1.17 0 0 0 12 2.5Zm-3.2 13.4c-.4 0-.72-.34-.7-.74.08-1.4.78-2.72 1.88-3.72.3-.28.77-.24 1.04.06.28.3.24.77-.06 1.04-.84.76-1.36 1.72-1.42 2.72-.02.38-.34.68-.74.64Z"/></svg></div>
@@ -2702,7 +2726,8 @@ window.onerror = function(msg, src, line, col, err) {
     </div>
     <div class="search-box" id="topbarSearch">
       <i data-lucide="search" size="18"></i>
-      <input placeholder="Αναζήτηση..." id="globalSearch">
+      <input placeholder="Αναζήτηση..." id="globalSearch" autocomplete="off">
+      <div id="globalSearchDropdown"></div>
     </div>
     <div class="topbar-actions" style="margin-left:auto">
       <button class="icon-btn" onclick="toggleTheme()" title="Εναλλαγή θέματος" id="themeToggle" style="display:none"><i data-lucide="moon" size="18"></i></button>
@@ -23828,6 +23853,126 @@ function closeSidebar(){
     if(document.body._scrollY !== undefined) window.scrollTo(0, document.body._scrollY);
   }
 }
+
+// ── Sidebar collapse (desktop) ────────────────────────────────
+function toggleSidebarCollapse(){
+  var app = document.getElementById('appWrap');
+  if(!app) return;
+  app.classList.toggle('sidebar-collapsed');
+  try { localStorage.setItem('sidebarCollapsed', app.classList.contains('sidebar-collapsed') ? '1' : '0'); } catch(_){}
+}
+function _initSidebarCollapse(){
+  // Show collapse button only on desktop
+  if(window.innerWidth < 901) return;
+  var btn = document.getElementById('sidebarCollapseBtn');
+  if(btn) btn.style.display = 'flex';
+  // Restore saved state
+  try { if(localStorage.getItem('sidebarCollapsed') === '1') document.getElementById('appWrap')?.classList.add('sidebar-collapsed'); } catch(_){}
+}
+
+// ── Global search ────────────────────────────────────────────
+(function _initGlobalSearch(){
+  var NAV_PAGES = [
+    {page:'dashboard',label:'Αρχική / Dashboard',icon:'🏠'},
+    {page:'pos',label:'POS — Ταμείο',icon:'🛒'},
+    {page:'inventory',label:'Αποθήκη',icon:'📦'},
+    {page:'customers',label:'Πελάτες',icon:'👥'},
+    {page:'cashbook',label:'Ταμείο (Cashbook)',icon:'💰'},
+    {page:'reports',label:'Στατιστικά Πωλήσεων',icon:'📊'},
+    {page:'suppliers',label:'Προμηθευτές',icon:'🏭'},
+    {page:'purchases',label:'Παραγγελίες',icon:'📋'},
+    {page:'vat',label:'ΦΠΑ',icon:'🧾'},
+    {page:'settings',label:'Ρυθμίσεις',icon:'⚙️'},
+    {page:'users',label:'Χρήστες',icon:'👤'},
+    {page:'shifts',label:'Βάρδιες',icon:'⏱️'},
+    {page:'mixology',label:'Mixology',icon:'🧪'},
+    {page:'hardware',label:'Hardware',icon:'🔌'},
+    {page:'campaigns',label:'Campaigns',icon:'📣'},
+    {page:'bi',label:'Business Intelligence',icon:'🔍'},
+    {page:'warroom',label:'War Room',icon:'⚔️'},
+    {page:'oracle',label:'Oracle',icon:'🔮'},
+  ];
+
+  function _normGR(s){
+    return (s||'').toLowerCase()
+      .replace(/[άάα]/g,'α').replace(/[έε]/g,'ε').replace(/[ήηι]/g,'η')
+      .replace(/[ίίι]/g,'ι').replace(/[όο]/g,'ο').replace(/[ύύ]/g,'υ')
+      .replace(/[ώω]/g,'ω').replace(/[ϊΐ]/g,'ι').replace(/[ϋΰ]/g,'υ');
+  }
+
+  function _gsSearch(q){
+    var nq = _normGR(q);
+    var results = [];
+    // Navigation pages
+    NAV_PAGES.forEach(function(p){
+      if(_normGR(p.label).includes(nq)) results.push({type:'page', icon:p.icon, label:p.label, sub:'Σελίδα', action:function(){ showPage(p.page); }});
+    });
+    // Products
+    if(typeof PRODUCTS !== 'undefined' && PRODUCTS){
+      PRODUCTS.filter(function(p){
+        return _normGR(p.name).includes(nq) || _normGR(p.barcode||'').includes(nq);
+      }).slice(0,6).forEach(function(p){
+        results.push({type:'product', icon:'📦', label:p.name, sub:(p.category||'')+(p.price?' — '+p.price.toFixed(2)+'€':''), action:function(){ showPage('inventory'); }});
+      });
+    }
+    // Customers
+    if(typeof CUSTOMERS !== 'undefined' && CUSTOMERS){
+      CUSTOMERS.filter(function(c){
+        return _normGR(c.name).includes(nq) || _normGR(c.phone||'').includes(nq);
+      }).slice(0,4).forEach(function(c){
+        results.push({type:'customer', icon:'👤', label:c.name, sub:c.phone||'', action:function(){ showPage('customers'); }});
+      });
+    }
+    return results.slice(0,10);
+  }
+
+  function _gsRender(results, dd){
+    if(results.length === 0){
+      dd.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-2);font-size:13px">Δεν βρέθηκαν αποτελέσματα</div>';
+    } else {
+      dd.innerHTML = results.map(function(r,i){
+        return '<div class="gs-item" data-idx="'+i+'"><span class="gs-item-icon">'+r.icon+'</span><div><div class="gs-item-label">'+r.label+'</div><div class="gs-item-sub">'+r.sub+'</div></div></div>';
+      }).join('');
+    }
+    dd.classList.add('open');
+    // Click handlers
+    dd.querySelectorAll('.gs-item').forEach(function(el,i){
+      el.addEventListener('mousedown', function(e){
+        e.preventDefault();
+        results[i].action();
+        _gsClose(inp, dd);
+      });
+    });
+  }
+
+  function _gsClose(inp, dd){ dd.classList.remove('open'); dd.innerHTML = ''; inp.value = ''; }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    _initSidebarCollapse();
+    var inp = document.getElementById('globalSearch');
+    var dd  = document.getElementById('globalSearchDropdown');
+    if(!inp || !dd) return;
+
+    inp.addEventListener('input', function(){
+      var q = inp.value.trim();
+      if(q.length < 1){ dd.classList.remove('open'); return; }
+      _gsRender(_gsSearch(q), dd);
+    });
+
+    inp.addEventListener('keydown', function(e){
+      var items = dd.querySelectorAll('.gs-item');
+      var active = dd.querySelector('.gs-item.active');
+      var idx = active ? parseInt(active.dataset.idx) : -1;
+      if(e.key === 'ArrowDown'){ e.preventDefault(); var next = Math.min(idx+1, items.length-1); items.forEach(function(el){el.classList.remove('active')}); if(items[next]) items[next].classList.add('active'); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); var prev = Math.max(idx-1, 0); items.forEach(function(el){el.classList.remove('active')}); if(items[prev]) items[prev].classList.add('active'); }
+      else if(e.key === 'Enter'){ if(active){ active.dispatchEvent(new MouseEvent('mousedown')); } }
+      else if(e.key === 'Escape'){ _gsClose(inp, dd); inp.blur(); }
+    });
+
+    inp.addEventListener('blur', function(){ setTimeout(function(){ dd.classList.remove('open'); }, 150); });
+    inp.addEventListener('focus', function(){ if(inp.value.trim().length > 0) _gsRender(_gsSearch(inp.value.trim()), dd); });
+  });
+})();
 
 // Page → required permission mapping
 // Αν η σελίδα δεν είναι εδώ, θεωρείται "public" (πχ dashboard)
