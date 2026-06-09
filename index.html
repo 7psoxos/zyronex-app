@@ -948,7 +948,7 @@ if(window.navigator && window.navigator.share){
   .inv-tool-btn.danger:hover{border-color:var(--danger);background:rgba(255,71,87,0.10)}
 
   .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;overflow-y:auto;padding-right:4px;flex:1;align-items:start}
-  .prod-card{background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:4px;min-height:0}
+  .prod-card{background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:10px 8px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:3px;min-height:110px;overflow:hidden;align-items:stretch;position:relative}
   .prod-card:hover{border-color:var(--accent);transform:translateY(-2px)}
   .prod-card.low{border-color:rgba(255,169,77,0.4)}
   .prod-card.out{border-color:rgba(255,71,87,0.4);opacity:0.55}
@@ -1424,7 +1424,7 @@ if(window.navigator && window.navigator.share){
     .tab.tab-with-icon{padding:4px 12px 4px 4px !important}
     .tab-icon-img,.tab-icon-emoji{width:24px;height:24px}
     .tab-icon-emoji{font-size:15px}
-    .prod-card{min-height:0 !important;padding:10px !important}
+    .prod-card{min-height:110px !important;padding:10px 8px !important}
     .prod-name{font-size:12px !important}
     .prod-price{font-size:16px !important}
     .pos-scan{gap:8px !important}
@@ -27713,6 +27713,10 @@ function renderPOSTabs(){
 
 function setPOSCat(c){
   POS_CATEGORY=c;
+  // Clear search when switching category so category filter is not bypassed
+  POS_SEARCH='';
+  var inp=document.getElementById('barcodeInput')||document.getElementById('posSearch');
+  if(inp) inp.value='';
   renderPOSTabs();
   renderPOSGrid();
 }
