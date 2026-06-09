@@ -23573,9 +23573,8 @@ async function submitPin(){
     loadShiftsForUser().then(()=>{
       renderShiftTopbarBadge();
       refreshShiftDisplays();
-      const initialPage = getInitialPage();
-      const canUseInitial = initialPage && (CURRENT_USER.perms?.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage]));
-      const _startPage = canUseInitial ? initialPage : firstAllowedPage();
+      const _startPage = (!PAGE_PERMS['dashboard'] || can(PAGE_PERMS['dashboard']))
+        ? 'dashboard' : firstAllowedPage();
       _appReady = true;
       window._pageHistory = []; // Fresh login — clear history
       // On fresh PIN login: if no hash in URL, reset to dashboard for admin
