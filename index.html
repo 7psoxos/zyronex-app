@@ -28994,7 +28994,6 @@ async function _quickMixConfirm(productId, nicotine, calc){
         const newStock = Math.max(0, (vg.stock||0) - calc.needVgMl);
         await sb.from('products').update({stock: newStock}).eq('id', vg.id);
         vg.stock = newStock;
-        toast(`💧 -${calc.needVgMl.toFixed(1)}ml VG από αποθήκη`, 'info');
       }
     }
     if(calc.needPgMl > 0 && calc.matchingPg){
@@ -29003,7 +29002,6 @@ async function _quickMixConfirm(productId, nicotine, calc){
         const newStock = Math.max(0, (pg.stock||0) - calc.needPgMl);
         await sb.from('products').update({stock: newStock}).eq('id', pg.id);
         pg.stock = newStock;
-        toast(`💧 -${calc.needPgMl.toFixed(1)}ml PG από αποθήκη`, 'info');
       }
     }
     // Backward-compat: αν υπάρχει μόνο γενική βάση (παλιά εγκατάσταση χωρίς VG/PG flagged)
@@ -29013,7 +29011,6 @@ async function _quickMixConfirm(productId, nicotine, calc){
         const newStock = Math.max(0, (base.stock||0) - calc.extraBaseMl);
         await sb.from('products').update({stock: newStock}).eq('id', base.id);
         base.stock = newStock;
-        toast(`🧪 -${calc.extraBaseMl.toFixed(1)}ml βάσης από αποθήκη`, 'info');
       }
     }
   }
