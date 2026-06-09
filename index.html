@@ -37856,27 +37856,27 @@ function renderReports(){
   }
   
   // Helper: Get sales for current date range
+  // Uses string comparison on YYYY-MM-DD to avoid UTC-midnight vs local-time mismatch
   function getSalesForRange(){
-    let filterStart = new Date(today);
-    let filterEnd = new Date(today);
-    
+    const todayStr = addDays(0);
+    let startStr, endStr;
+
     if(window.STATS_DATE_RANGE === 'today'){
-      // Just today
+      startStr = endStr = todayStr;
     }else if(window.STATS_DATE_RANGE === 'week'){
-      filterStart.setDate(filterStart.getDate() - 7);
+      startStr = addDays(-7); endStr = todayStr;
     }else if(window.STATS_DATE_RANGE === 'month'){
-      filterStart.setDate(filterStart.getDate() - 30);
+      startStr = addDays(-30); endStr = todayStr;
     }else if(window.STATS_DATE_RANGE === 'custom'){
-      if(window.STATS_CUSTOM_START) filterStart = new Date(window.STATS_CUSTOM_START);
-      if(window.STATS_CUSTOM_END) filterEnd = new Date(window.STATS_CUSTOM_END);
+      startStr = window.STATS_CUSTOM_START || addDays(-30);
+      endStr   = window.STATS_CUSTOM_END   || todayStr;
+    } else {
+      startStr = addDays(-30); endStr = todayStr;
     }
-    
-    return SALES.filter(s => {
-      const sDate = new Date(s.date);
-      return sDate >= filterStart && sDate <= filterEnd;
-    });
+
+    return SALES.filter(s => s.date >= startStr && s.date <= endStr);
   }
-  
+
   const rangeSales = getSalesForRange();
 
   // ── Online platform breakdown ──
