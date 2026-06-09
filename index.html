@@ -876,7 +876,7 @@ if(window.navigator && window.navigator.share){
   .quick-pos-cash{background:linear-gradient(135deg,#9b59ff,#7d3ddc);border:none;border-radius:10px;padding:10px 6px;color:#fff;font-weight:800;font-size:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all 0.15s;-webkit-tap-highlight-color:transparent;font-family:inherit}
   @media (hover:hover) and (pointer:fine){.quick-pos-cash:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(155,89,255,0.3)}}
   .quick-pos-cash:active{transform:translateY(0)}
-  .quick-pos-categories{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;overflow-y:auto;-webkit-overflow-scrolling:touch;align-content:start;min-height:160px;flex:1}
+  .quick-pos-categories{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;overflow-y:auto;-webkit-overflow-scrolling:touch;align-content:start;min-height:160px;flex:1}
   .quick-pos-cat{background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:18px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--text-0);font-weight:700;transition:all 0.15s;-webkit-tap-highlight-color:transparent;font-family:inherit;font-size:13px;min-height:80px}
   @media (hover: hover) and (pointer: fine){
     .quick-pos-cat:hover{border-color:var(--accent);transform:translateY(-2px)}
@@ -889,7 +889,7 @@ if(window.navigator && window.navigator.share){
   .quick-pos-cat-name{font-size:13px;font-weight:700;text-align:center;line-height:1.2;word-break:break-word}
   .quick-pos-back{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;color:var(--accent);font-size:13px;text-transform:uppercase;letter-spacing:1px}
   @media (hover:hover) and (pointer:fine){.quick-pos-back:hover{background:var(--bg-3)}}
-  .quick-pos-product{background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:8px 6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;color:var(--text-0);transition:all 0.15s;-webkit-tap-highlight-color:transparent;text-align:left;font-family:inherit;overflow:hidden;min-height:130px;position:relative;align-items:stretch}
+  .quick-pos-product{background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:6px 6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;color:var(--text-0);transition:all 0.15s;-webkit-tap-highlight-color:transparent;text-align:left;font-family:inherit;overflow:hidden;min-height:110px;position:relative;align-items:stretch}
   @media (hover:hover) and (pointer:fine){.quick-pos-product:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,212,168,0.12)}}
   .quick-pos-product:active{transform:scale(0.97);border-color:var(--accent)}
   .quick-pos-product-name{font-size:12px;font-weight:600;line-height:1.25;color:var(--text-0);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -948,7 +948,7 @@ if(window.navigator && window.navigator.share){
   .inv-tool-btn.danger:hover{border-color:var(--danger);background:rgba(255,71,87,0.10)}
 
   .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;overflow-y:auto;padding-right:4px;flex:1}
-  .prod-card{background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:6px;min-height:200px}
+  .prod-card{background:var(--bg-1);border:1px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:4px;min-height:150px}
   .prod-card:hover{border-color:var(--accent);transform:translateY(-2px)}
   .prod-card.low{border-color:rgba(255,169,77,0.4)}
   .prod-card.out{border-color:rgba(255,71,87,0.4);opacity:0.55}
@@ -1424,7 +1424,7 @@ if(window.navigator && window.navigator.share){
     .tab.tab-with-icon{padding:4px 12px 4px 4px !important}
     .tab-icon-img,.tab-icon-emoji{width:24px;height:24px}
     .tab-icon-emoji{font-size:15px}
-    .prod-card{min-height:180px !important;padding:10px !important}
+    .prod-card{min-height:150px !important;padding:10px !important}
     .prod-name{font-size:12px !important}
     .prod-price{font-size:16px !important}
     .pos-scan{gap:8px !important}
