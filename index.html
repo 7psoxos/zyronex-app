@@ -28601,6 +28601,9 @@ function _productNeedsNicPicker(p){
   // Non-liquid categories never need Quick-Mix regardless of any other field
   var nonLiquidCats = ['συσκευ', 'αντιστάσ', 'αντιστας', 'μπαταρ', 'αξεσουαρ', 'αξεσουάρ', 'coil', 'device', 'battery'];
   if(nonLiquidCats.some(function(k){ return cat.includes(k); })) return false;
+  // Explicit mixable-liquid signals override the raw-base/ingredient heuristics below
+  var _pt = (p.productType || '').toLowerCase();
+  if (p.hasNicotine || _pt === 'longfill' || _pt === 'shortfill' || (p.shortfillMl > 0)) return true;
   var ingKeywords = ['nicshot','nic shot','nic-shot','booster','νικοτιν','νικσοτ',
                      'glycerin','γλυκερ','propylene','προπυλεν',' vg ',' pg ','βαση','base'];
   if(p.baseType === 'vg' || p.baseType === 'pg') return false;
