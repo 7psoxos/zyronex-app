@@ -736,3 +736,346 @@ function planGuard(feature, requiredPlan = 'Pro') {
   showUpgradePrompt(feature, requiredPlan);
   return false;
 }
+
+// Phase 5b: data loaders
+async function loadHardwareCompat(){
+  try{
+    const {data, error} = await sb.from('hardware_compat')
+      .select('device_id, consumable_id')
+      .eq('shop_id', SHOP_ID);
+    if(error){ console.warn('hardware_compat load error:', error); return; }
+    HARDWARE_COMPAT = {};
+    (data||[]).forEach(function(r){
+      if(!HARDWARE_COMPAT[r.device_id]) HARDWARE_COMPAT[r.device_id] = new Set();
+      HARDWARE_COMPAT[r.device_id].add(r.consumable_id);
+    });
+    console.log('✓ HARDWARE_COMPAT loaded:', Object.keys(HARDWARE_COMPAT).length, 'devices');
+  }catch(e){ console.warn('loadHardwareCompat:', e); }
+}
+async function loadBankingData(){
+  try{
+    if(typeof sb === 'undefined' || !sb) return;
+    const acc = await sb.from('bank_accounts').select('*').eq('active', true).order('id');
+    if(acc.data) BANK_ACCOUNTS = acc.data;
+    const cutoff = new Date(Date.now() - 365*86400000).toISOString().slice(0,10);
+    const tx = await sb.from('bank_transactions').select('*').gte('transaction_date', cutoff).order('transaction_date', {ascending:false}).limit(1000);
+    if(tx.data) BANK_TRANSACTIONS = tx.data;
+    const cfg = await sb.from('bank_aggregator_config').select('*').eq('active', true).maybeSingle();
+    if(cfg.data) BANK_AGGREGATOR_CONFIG = cfg.data;
+  }catch(e){
+    console.warn('[banking] load failed:', e);
+  }
+}
+async function loadShiftsExtensions(){
+  try{
+    if(typeof sb === 'undefined' || !sb) return;
+    const sc = await sb.from('shift_schedules').select('*').eq('active', true);
+    if(sc.data) SHIFT_SCHEDULES = sc.data;
+    const ls = await sb.from('labor_settings').select('*').eq('id', 1).single();
+    if(ls.data) Object.assign(LABOR_SETTINGS, ls.data);
+  }catch(e){
+    console.warn('[shifts ext] load failed:', e);
+  }
+}
+async function loadCustomCategoryIcons(){
+  try{
+    const fromFn = (typeof _origFrom === 'function') ? _origFrom : (sb && sb.from ? sb.from.bind(sb) : null);
+    if(!fromFn || !SHOP_ID){
+      // Fallback: localStorage
+      try{
+        const ls = localStorage.getItem('vs_custom_category_icons');
+        if(ls) CUSTOM_CATEGORY_ICONS = JSON.parse(ls) || {};
+      }catch(_){}
+      return;
+    }
+    const {data, error} = await fromFn('shop_settings')
+      .select('value')
+      .eq('shop_id', SHOP_ID)
+      .eq('key', 'category_icons')
+      .maybeSingle();
+    if(error || !data) return;
+    try{
+      CUSTOM_CATEGORY_ICONS = JSON.parse(data.value) || {};
+    }catch(_){
+      CUSTOM_CATEGORY_ICONS = {};
+    }
+  }catch(e){
+    console.warn('Load category icons failed:', e);
+  }
+}
+async function loadAllData(){
+  try{
+    console.log('🔄 loadAllData started');
+    
+    console.log('Querying app_users...');
+    const usersRes = await sb.from('app_users').select('*').eq('active',true);
+    console.log('✓ app_users loaded:', usersRes.data?.length || 0, 'users');
+
+    await loadHardwareCompat();
+
+    const supRes = await sb.from('suppliers').select('*').order('name');
+    
+    console.log('Querying products...');
+    // Load products in smaller batches to avoid timeout
+    const prodRes = await sb.from('products')
+      .select('id,barcode,name,category,price,cost,stock,min_stock,supplier_id,alt_supplier_id,updated_at,image_url,expiry_date,has_nicotine,nicotine_options,volume_ml,vat_rate,flavor_tags,shortfill_ml,product_type,base_type,vg_pct,pg_pct,nicshot_strength,default_nic_target')
+      .order('name')
+      .limit(2000); // Limit to 2000 products per load
+    
+    console.log('Querying customers...');
+    const custRes = await sb.from('customers')
+      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token')
+      .order('name')
+      .limit(2000);
+    
+    console.log('Querying sales (90-day window)...');
+    const salesRes = await sb.from('sales')
+      .select('id,sale_date,total,payment_method,customer_id,user_id,notes', { count: 'exact' })
+      .gte('sale_date', addDays(-90))
+      .order('sale_date',{ascending:false});
+
+    console.log('Querying all-time monthly totals...');
+    const monthlyRes = await sb.from('sales')
+      .select('sale_date,total')
+      .not('sale_date','is',null);
+
+    console.log('Querying sale_items (90-day window)...');
+    const itemsRes = await sb.from('sale_items')
+      .select('id,sale_id,product_id,quantity,unit_price')
+      .in('sale_id', (salesRes.data||[]).map(s=>s.id));
+    console.log('✓ sale_items loaded:', itemsRes.data?.length || 0, 'items');
+
+    // ── Resilience: ανίχνευση αν τα δεδομένα είναι περιορισμένα στη μνήμη ──
+    // Το Supabase επιστρέφει το ΣΥΝΟΛΙΚΟ πλήθος (count) μαζί με τα limited rows.
+    // Αν φορτώθηκαν λιγότερα από όσα υπάρχουν, σηκώνουμε flag ώστε τα στατιστικά
+    // να μην παρουσιάζονται ως πλήρη (αποφυγή σιωπηλά λάθος αποφάσεων).
+    try {
+      const salesLoaded = (salesRes.data||[]).length;
+      const salesTotal = (typeof salesRes.count === 'number') ? salesRes.count : salesLoaded;
+      window._DATA_LIMITED = {
+        active: salesTotal > salesLoaded,
+        salesLoaded: salesLoaded,
+        salesTotal: salesTotal
+      };
+    } catch(_) { window._DATA_LIMITED = { active:false }; }
+
+    // Supabase connected successfully → Inspector μπορεί τώρα να γράφει logs
+    INSPECTOR.dbReady = true;
+    INSPECTOR.flushQueue();
+
+    // Detailed error reporting
+    if(usersRes.error){ 
+      console.error('app_users error:', usersRes.error);
+      throw usersRes.error; 
+    }
+    if(supRes.error){ console.error('suppliers error:', supRes.error); throw supRes.error; }
+    if(prodRes.error){ console.error('products error:', prodRes.error); throw prodRes.error; }
+    if(custRes.error){ console.error('customers error:', custRes.error); throw custRes.error; }
+
+    console.log('Mapping USERS...');
+    USERS = (usersRes.data||[]).map(u=>({
+      id:u.id, name:u.name, role:u.role, pin:u.pin, perms:u.permissions||[]
+    }));
+    console.log('✓ USERS mapped:', USERS.length);
+    
+    console.log('Mapping SUPPLIERS...');
+    SUPPLIERS = (supRes.data||[]).map(s=>({
+      id:s.id, name:s.name, contact:s.contact, phone:s.phone, email:s.email,
+      city:s.city, address:s.address, notes:s.notes,
+      country_type:s.country_type||'GR', vies_number:s.vies_number||null,
+      website:s.website||null, country_code:s.country_code||null
+    }));
+    console.log('✓ SUPPLIERS mapped:', SUPPLIERS.length);
+    
+    console.log('Mapping PRODUCTS...');
+    PRODUCTS = (prodRes.data||[]).map(p=>({
+      id:p.id, barcode:p.barcode, name:p.name, category:p.category,
+      price:parseFloat(p.price), cost:parseFloat(p.cost),
+      stock:p.stock, minStock:p.min_stock,
+      supplier:p.supplier_id, altSupplier:p.alt_supplier_id,
+      expiry:p.expiry_date, hasNicotine:p.has_nicotine,
+      nicotineOptions:p.nicotine_options||[], sales30d:0,
+      volumeMl: p.volume_ml?parseFloat(p.volume_ml):null,
+      image_url: p.image_url||null,
+      imageUrl: p.image_url||null,
+      vatRate: p.vat_rate!=null?parseInt(p.vat_rate):24,
+      flavorTags: Array.isArray(p.flavor_tags)?p.flavor_tags:[],
+      shortfillMl: p.shortfill_ml?parseFloat(p.shortfill_ml):null,
+      productType: p.product_type||'longfill',
+      baseType: p.base_type||null,
+      vgPct: p.vg_pct!=null?parseInt(p.vg_pct):70,
+      pgPct: p.pg_pct!=null?parseInt(p.pg_pct):30,
+      nicshotStrength: p.nicshot_strength?parseInt(p.nicshot_strength):20,
+      defaultNicTarget: p.default_nic_target?parseFloat(p.default_nic_target):3
+    }));
+    console.log('✓ PRODUCTS mapped:', PRODUCTS.length);
+    
+    console.log('Mapping CUSTOMERS...');
+    CUSTOMERS = (custRes.data||[]).map(c=>({
+      id:c.id, name:c.name, phone:c.phone, email:c.email,
+      totalSpent:parseFloat(c.total_spent||0), visits:c.visits||0,
+      lastVisit:c.last_visit, preferredNicotine:c.preferred_nicotine, orders:[],
+      loyaltyPoints: c.loyalty_points||0,
+      loyaltyTier: c.loyalty_tier||'bronze',
+      birthday: c.birthday||null,
+      storeCredit: parseFloat(c.store_credit||0),
+      loyalty_qr_token: c.loyalty_qr_token||null,
+      // Shipping fields (delivery / eshop)
+      address: c.address||null,
+      postalCode: c.postal_code||null,
+      city: c.city||null,
+      floor: c.floor||null,
+      doorbellName: c.doorbell_name||null,
+      deliveryNotes: c.delivery_notes||null
+    }));
+    console.log('✓ CUSTOMERS mapped:', CUSTOMERS.length);
+    
+    console.log('Mapping SALES...');
+    // Μετατροπή sales σε flat list για συμβατότητα με το υπάρχον UI
+    const saleMap = {};
+    (salesRes.data||[]).forEach(s=>{saleMap[s.id]=s});
+    // Pre-compute raw item sum per sale for proportional discount distribution
+    const saleItemRawSums = {};
+    (itemsRes.data||[]).forEach(function(i){
+      saleItemRawSums[i.sale_id] = (saleItemRawSums[i.sale_id]||0) + parseFloat(i.unit_price)*(i.quantity||1);
+    });
+    SALES = (itemsRes.data||[]).map(i=>{
+      const s = saleMap[i.sale_id];
+      const itemRaw = parseFloat(i.unit_price)*(i.quantity||1);
+      // Use sales.total (discounted) distributed proportionally across items
+      const saleTotal = parseFloat(s?s.total:0)||0;
+      const saleRaw = saleItemRawSums[i.sale_id]||itemRaw||1;
+      const itemTotal = saleRaw>0 ? itemRaw*(saleTotal/saleRaw) : itemRaw;
+      return {
+        id:i.id, date:s?(s.sale_date||addDays(0)):addDays(0),
+        productId:i.product_id, qty:i.quantity,
+        price:parseFloat(i.unit_price), total:itemTotal,
+        customerId:s?s.customer_id:null, nicotine:i.nicotine_mg,
+        paymentMethod:s?(s.payment_method||'other'):'other'
+      };
+    });
+
+    // Build all-time monthly totals from aggregate query
+    SALES_MONTHLY_TOTALS = {};
+    (monthlyRes.data||[]).forEach(function(s){
+      if(!s.sale_date) return;
+      var m = s.sale_date.slice(0,7);
+      if(!SALES_MONTHLY_TOTALS[m]) SALES_MONTHLY_TOTALS[m]={total:0,count:0};
+      SALES_MONTHLY_TOTALS[m].total += parseFloat(s.total)||0;
+      SALES_MONTHLY_TOTALS[m].count++;
+    });
+    console.log('✓ SALES_MONTHLY_TOTALS:', Object.keys(SALES_MONTHLY_TOTALS).length, 'months');
+
+    // Υπολογισμός sales30d για κάθε προϊόν
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()-30);
+    PRODUCTS.forEach(p=>{
+      p.sales30d = SALES.filter(s=>s.productId===p.id && new Date(s.date)>=cutoff)
+        .reduce((a,b)=>a+b.qty,0);
+    });
+
+    // Migration: ενοποίηση ορφανών κατηγοριών (case-insensitive)
+    if(typeof migrateOrphanCategories === 'function'){
+      migrateOrphanCategories().catch(e => console.warn('Category migration:', e));
+    }
+    
+    // Page restore is handled EXCLUSIVELY by the session restore paths in init()
+    // (both PIN login and auto-session restore call getInitialPage() → showPage() after shifts load)
+    // Calling showPage() here races with session restore and causes redirect to dashboard.
+
+    return true;
+  }catch(err){
+    console.error('Load error:', err);
+    return false;
+  }
+}
+async function logShopChange(category, entity, field, oldVal, newVal, note){
+  try{
+    if(typeof sb === 'undefined' || !SHOP_ID) return;
+    var u = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? CURRENT_USER : {};
+    var details = {
+      category: category || 'other',          // 'price' | 'cost' | 'policy' | 'catalog' | 'supplier' | 'other'
+      entity: entity || '',                    // π.χ. όνομα προϊόντος ή ρύθμισης
+      field: field || '',                      // π.χ. 'price', 'minMarginPct'
+      old_value: (oldVal !== undefined && oldVal !== null) ? String(oldVal) : '',
+      new_value: (newVal !== undefined && newVal !== null) ? String(newVal) : '',
+      note: note || '',
+      user_id: u.id != null ? u.id : null,
+      user_name: u.name || u.username || 'Άγνωστος',
+      timestamp_client: new Date().toISOString()
+    };
+    await sb.from('activity_log').insert({
+      shop_id: SHOP_ID,
+      user_id: u.id != null ? u.id : null,
+      action: 'shop_change',
+      details: JSON.stringify(details)
+    });
+  }catch(_){ /* δεν μπλοκάρουμε τη ροή αν αποτύχει το log */ }
+}
+async function reloadProducts(){
+  const {data,error} = await sb.from('products').select('*').order('name');
+  if(error) return;
+  PRODUCTS = (data||[]).map(p=>({
+    id:p.id, barcode:p.barcode, name:p.name, category:p.category,
+    price:parseFloat(p.price), cost:parseFloat(p.cost),
+    stock:p.stock, minStock:p.min_stock,
+    supplier:p.supplier_id, altSupplier:p.alt_supplier_id,
+    expiry:p.expiry_date, hasNicotine:p.has_nicotine,
+    nicotineOptions:p.nicotine_options||[],
+    image_url: p.image_url||null,
+    imageUrl: p.image_url||null,
+    volumeMl: p.volume_ml?parseFloat(p.volume_ml):null,
+    vatRate: p.vat_rate||24,
+    flavorTags: Array.isArray(p.flavor_tags)?p.flavor_tags:[],
+    shortfillMl: p.shortfill_ml?parseFloat(p.shortfill_ml):null,
+    productType: p.product_type||'longfill',
+    baseType: p.base_type||null,
+    vgPct: p.vg_pct!=null?parseInt(p.vg_pct):70,
+    pgPct: p.pg_pct!=null?parseInt(p.pg_pct):30,
+    nicshotStrength: p.nicshot_strength?parseInt(p.nicshot_strength):20,
+    defaultNicTarget: p.default_nic_target?parseFloat(p.default_nic_target):3,
+    sales30d:0
+  }));
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()-30);
+  PRODUCTS.forEach(p=>{
+    p.sales30d = SALES.filter(s=>s.productId===p.id && new Date(s.date)>=cutoff).reduce((a,b)=>a+b.qty,0);
+  });
+  // Refresh bell badge after stock data updates
+  if(typeof updateNotifDot==='function') updateNotifDot();
+}
+async function reloadCustomers(){
+  const {data,error} = await sb.from('customers')
+    .select('id,name,phone,email,total_spent,visits,last_visit,preferred_nicotine,loyalty_points,loyalty_tier,birthday,store_credit,address,postal_code,city,notes,loyalty_qr_token')
+    .order('name');
+  if(error) return;
+  CUSTOMERS = (data||[]).map(c=>({
+    id:c.id, name:c.name, phone:c.phone, email:c.email,
+    totalSpent:parseFloat(c.total_spent||0), visits:c.visits||0,
+    lastVisit:c.last_visit, preferredNicotine:c.preferred_nicotine, orders:[],
+    loyaltyPoints: c.loyalty_points||0,
+    loyaltyTier: c.loyalty_tier||'bronze',
+    birthday: c.birthday||null,
+    storeCredit: parseFloat(c.store_credit||0),
+    loyalty_qr_token: c.loyalty_qr_token||null,
+    // Shipping fields
+    address: c.address||null,
+    postalCode: c.postal_code||null,
+    city: c.city||null,
+    floor: c.floor||null,
+    doorbellName: c.doorbell_name||null,
+    deliveryNotes: c.delivery_notes||null
+  }));
+}
+async function loadPluginSubscriptions(){
+  try {
+    var res = await sb.from('shop_plugin_subscriptions')
+      .select('plugin_id,status,mode,current_period_end,cancel_at_period_end')
+      .eq('shop_id', SHOP_ID);
+    var map = {};
+    (res.data || []).forEach(function(r){ map[r.plugin_id] = r; });
+    PLUGIN_SUBS_CACHE = map;
+    // Refresh any visible plugin gates now that we have authoritative data.
+    try { if (typeof _applyPluginGates === 'function') _applyPluginGates(); } catch(_){}
+    try { if (typeof refreshNav === 'function') refreshNav(); } catch(_){}
+    return map;
+  } catch(e) { console.warn('[PLUGIN-SUB] load failed:', e); return null; }
+}
