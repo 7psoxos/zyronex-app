@@ -20244,7 +20244,8 @@ async function loadAllData(){
         id:i.id, date:s?(s.sale_date||addDays(0)):addDays(0),
         productId:i.product_id, qty:i.quantity,
         price:parseFloat(i.unit_price), total:itemTotal,
-        customerId:s?s.customer_id:null, nicotine:i.nicotine_mg
+        customerId:s?s.customer_id:null, nicotine:i.nicotine_mg,
+        paymentMethod:s?(s.payment_method||'other'):'other'
       };
     });
 
@@ -29263,7 +29264,8 @@ async function _doCheckout(){
       SALES.unshift({
         id:saleData.id+'_'+it.productId, date:addDays(0),
         productId:it.productId, qty:it.qty, price:it.price,
-        total:_itemTotal, customerId:customerId, nicotine:it.nicotine
+        total:_itemTotal, customerId:customerId, nicotine:it.nicotine,
+        paymentMethod:payMethod
       });
     });
 
@@ -37889,15 +37891,16 @@ function renderReports(){
   // 1. PAYMENT METHODS Analysis
   // ════════════════════════════════════════════════════════════════
   const paymentStats = {
-    card: {count: 0, total: 0, pct: 0},
-    cash: {count: 0, total: 0, pct: 0},
-    mobile: {count: 0, total: 0, pct: 0},
-    qr: {count: 0, total: 0, pct: 0}
+    card:  {count: 0, total: 0, pct: 0},
+    cash:  {count: 0, total: 0, pct: 0},
+    iris:  {count: 0, total: 0, pct: 0},
+    split: {count: 0, total: 0, pct: 0},
+    other: {count: 0, total: 0, pct: 0}
   };
-  
+
   let totalAmount = 0;
   rangeSales.forEach(s => {
-    const method = s.paymentMethod || 'card';
+    const method = s.paymentMethod || 'other';
     if(!paymentStats[method]) paymentStats[method] = {count: 0, total: 0, pct: 0};
     paymentStats[method].count++;
     paymentStats[method].total += s.total;
@@ -37931,9 +37934,12 @@ function renderReports(){
   
   // Payment method colors & labels
   const paymentMethods = [
-    {key: 'card', label: '💳 Κάρτα', color: '#4aa3ff'},
-    {key: 'cash', label: '💵 Μετρητά', color: '#2ed573'}
-  ];
+    {key: 'cash',  label: '💵 Μετρητά',     color: '#2ed573'},
+    {key: 'card',  label: '💳 Κάρτα',       color: '#4aa3ff'},
+    {key: 'iris',  label: '📱 IRIS',         color: '#00d4ff'},
+    {key: 'split', label: '✂️ Split Pay',    color: '#9b4dff'},
+    {key: 'other', label: '❓ Άγνωστο',      color: '#888888'}
+  ].filter(pm => paymentStats[pm.key] && paymentStats[pm.key].count > 0);
 
   // ════════════════════════════════════════════════════════════════
   // Platform revenue breakdown HTML
