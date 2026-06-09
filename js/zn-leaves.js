@@ -309,3 +309,130 @@ function setCustomLogo(url){
     else localStorage.removeItem(LOGO_KEY);
   }catch(e){}
 }
+
+// Phase 4c: safe router pieces
+var PAGE_PERMS = {
+  pos: 'pos',
+  inventory: 'inventory',
+  customers: 'customers',
+  shipments: 'shipments',
+  suppliers: 'suppliers',
+  purchases: 'suppliers',
+  cashbook: 'cashbook',
+  'inspector-competitors': '*',  // Επιπλέον check μέσα στο page renderer για isDeveloperOwner()
+  reports: '*',     // Μόνο Διαχειριστής (ευαίσθητα οικονομικά)
+  vat: '*',         // Μόνο Διαχειριστής
+  balance: '*',     // Μόνο Διαχειριστής
+  ai: 'ai',
+  bi: 'ai',
+  mixology: 'pos',  // DIY & Mixology — ο Ταμίας το χρειάζεται στο ταμείο
+  warroom: 'ai',
+  'customer-intel': 'ai',
+  campaigns: 'campaigns',
+  alerts: 'alerts',
+  shifts: 'users',
+  banking: '*',     // Μόνο Διαχειριστής βλέπει banking
+  waste: '*',       // Μόνο Διαχειριστής (απομειώσεις)
+  batches: '*',     // Μόνο Διαχειριστής (παρτίδες)
+  competitors: '*', // Μόνο Διαχειριστής (ανταγωνισμός)
+  hardware: 'inventory',
+  oracle: '*',      // The Oracle — μόνο Διαχειριστής
+  brain: '*',       // The Brain — μόνο Διαχειριστής
+  'seasonal-intel': '*', // Εποχική Νοημοσύνη — μόνο Διαχειριστής
+  'supplier-scorecard': '*', // Βαθμολογία Προμηθευτών — μόνο Διαχειριστής
+  'remember-this': '*', // Θυμάσαι αυτό; — μόνο Διαχειριστής
+  'dosage-tracker': '*', // Παρακολούθηση Νικοτίνης — μόνο Διαχειριστής
+  'energy-tracker': '*', // Ενέργεια & Λογαριασμοί — μόνο Διαχειριστής
+  compliance: '*',
+  pricewar: '*',    // Price War — μόνο Διαχειριστής
+  support: '*',     // Υποστήριξη — μόνο Διαχειριστής
+  helpdesk: '*',    // Help Desk — μόνο Διαχειριστής
+  users: 'users',
+  settings: 'settings',
+  inspector: '*',   // μόνο για Διαχειριστή (πλήρη δικαιώματα)
+  audit: null,      // Audit Mode — ΟΛΟΙ έχουν πρόσβαση (έλεγχοι έρχονται ξαφνικά)
+  'data-cleanup': '*', // μόνο για Διαχειριστή
+  'shop-changelog': '*', // Ιστορικό Αλλαγών — μόνο Διαχειριστής
+  'age-log': '*', // Μητρώο Ηλικίας — μόνο Διαχειριστής
+  'compliance-calendar': '*', // Ημερολόγιο Συμμόρφωσης — μόνο Διαχειριστής
+  breakeven: '*', // Νεκρό Σημείο — μόνο Διαχειριστής
+  legal: '*',       // Νομικά — μόνο Διαχειριστής
+  help: '*',        // Knowledge Base — μόνο Διαχειριστής
+  'dead-stock': '*', // Dead Stock Recovery — μόνο Διαχειριστής (κρίσιμες οικονομικές αποφάσεις)
+  'expense-calendar': '*', // Ημερολόγιο Εξόδων — μόνο Διαχειριστής (πληρωμές, λογιστής)
+  // ── Σελίδες που έλειπαν εντελώς (= ήταν ορατές σε ΟΛΟΥΣ). Τώρα admin-only. ──
+  kiosk: '*',          // Kiosk & Idle Screen — μόνο Διαχειριστής
+  plugins: '*',        // Plugin Market — μόνο Διαχειριστής
+  sitebuilder: '*',    // Site Builder — μόνο Διαχειριστής
+  vault: '*',          // ZyroNex Vault — μόνο Διαχειριστής
+  agents: '*',         // Εξειδικευμένοι Βοηθοί — μόνο Διαχειριστής
+  subscription: '*',   // Συνδρομή & Plugins — μόνο Διαχειριστής
+  documents: '*',      // Έγγραφα — μόνο Διαχειριστής
+  taxagent: '*',       // Λογιστήριο AI — μόνο Διαχειριστής (ευαίσθητα οικονομικά)
+  'online-orders': '*',// Wolt/efood/Skroutz — μόνο Διαχειριστής
+  exchange: '*',       // ZyroNex Exchange — μόνο Διαχειριστής
+  pulse: '*'           // ZyroNex Pulse — μόνο Διαχειριστής
+};
+// Η αρχική (dashboard) είναι πάντα προσβάσιμη σε όποιον μπει στο app.
+// Αν κάποιος δεν έχει κανένα permission, θα δει ένα "no access" placeholder.
+
+function firstAllowedPage(){
+  // Admin πάντα dashboard
+  if(CURRENT_USER && (CURRENT_USER.perms?.includes('*'))) return 'dashboard';
+  // Non-admin: προτεραιότητα βάσει ρόλου
+  const role = (CURRENT_USER?.role||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  if(role.includes('ταμ') || role.includes('cashier')) return can(PAGE_PERMS['pos']) ? 'pos' : 'dashboard';
+  if(role.includes('αποθ') || role.includes('warehouse')) return can(PAGE_PERMS['inventory']) ? 'inventory' : 'dashboard';
+  // Generic: πρώτη allowed σελίδα
+  const prefOrder = ['pos','inventory','customers','shipments','suppliers','reports','alerts','ai'];
+  for(const p of prefOrder){ if(can(PAGE_PERMS[p])) return p; }
+  return 'dashboard';
+}
+
+function getInitialPage(){
+  // Λίστα των έγκυρων pages — αν δεν είναι εδώ, fallback στο dashboard
+  const validPages = ['dashboard','pos','inventory','customers','suppliers','purchases',
+    'shipments','cashbook','reports','vat','bi','ai','oracle','brain','warroom','pricewar','seasonal-intel','supplier-scorecard','remember-this','dosage-tracker','energy-tracker',
+    'customer-intel','mixology','campaigns','alerts','shifts','users','settings','inspector',
+    'hardware','batches','waste','competitors','banking','balance','documents',
+    'data-cleanup','help','legal','dead-stock','expense-calendar','compliance','audit',
+    'shop-changelog','compliance-calendar','breakeven','age-log',
+    'online-orders','support','helpdesk','security','inspector-competitors','plugins'];
+
+  // 1) Αν δεν υπάρχει hash στο URL → προσπάθησε να επαναφέρεις την τελευταία σελίδα (επιβίωση από refresh)
+  const hashPage = (location.hash||'').replace('#','').trim();
+  if(!hashPage){
+    // fresh open / refresh without hash — restore lastPage if it's still valid
+    try{
+      const saved = localStorage.getItem('lastPage');
+      if(saved && validPages.includes(saved)){
+        // respect role permissions: non-admin must be allowed on that page
+        if(typeof CURRENT_USER !== 'undefined' && CURRENT_USER){
+          const perms = CURRENT_USER.perms||[];
+          if(perms.includes('*') || perms.includes(saved)) return saved;
+        } else {
+          return saved;
+        }
+      }
+    }catch(_){}
+    // no valid saved page → role default
+    if(typeof CURRENT_USER !== 'undefined' && CURRENT_USER && (CURRENT_USER.perms||[]).includes('*')){
+      return 'dashboard';
+    }
+    return null;
+  }
+
+  // 2) Υπάρχει hash → χρησιμοποίησέ το αν είναι έγκυρο
+  if(validPages.includes(hashPage)) return hashPage;
+
+  // 3) Άκυρο hash → καθάρισέ το
+  try { history.replaceState(null, '', location.pathname + location.search); } catch(_){}
+
+  // 4) Fallback σε localStorage μόνο αν υπήρχε hash αλλά ήταν άκυρο
+  try{
+    const saved = localStorage.getItem('lastPage');
+    if(saved && validPages.includes(saved)) return saved;
+  }catch(_){}
+
+  return null;
+}
