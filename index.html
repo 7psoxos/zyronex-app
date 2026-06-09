@@ -411,7 +411,7 @@ if(window.navigator && window.navigator.share){
     /* Collapsed sidebar */
     .app.sidebar-collapsed{grid-template-columns:56px 1fr}
     .app.sidebar-collapsed .sidebar{width:56px;min-width:56px;overflow:visible;padding:12px 0}
-    .app.sidebar-collapsed .logo,.app.sidebar-collapsed .nav-section-title,.app.sidebar-collapsed .user-chip .user-name,.app.sidebar-collapsed .user-chip .user-role{display:none !important}
+    .app.sidebar-collapsed .logo,.app.sidebar-collapsed .nav-section,.app.sidebar-collapsed .nav-section-title,.app.sidebar-collapsed .user-chip .user-name,.app.sidebar-collapsed .user-chip .user-role{display:none !important}
     .app.sidebar-collapsed .nav-item{justify-content:center;padding:12px 0;font-size:0}
     .app.sidebar-collapsed .nav-item i,.app.sidebar-collapsed .nav-item [data-lucide]{margin:0;font-size:18px}
     .app.sidebar-collapsed #sidebarCollapseBtn{transform:rotate(180deg)}
@@ -2619,12 +2619,6 @@ window.onerror = function(msg, src, line, col, err) {
 <div class="app hidden" id="appWrap">
 <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 <aside class="sidebar" id="sidebar">
-  <!-- Collapse toggle — desktop only -->
-  <button id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Minimize sidebar"
-    style="display:none;position:absolute;top:16px;right:-12px;z-index:10;width:24px;height:24px;background:var(--bg-2);border:1px solid var(--border);border-radius:50%;cursor:pointer;align-items:center;justify-content:center;color:var(--text-2);transition:transform 0.2s,color 0.2s"
-    onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-2)'">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-  </button>
   <div class="logo">
     <div class="logo-mark">
       <div class="logo-square"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5c-.4 0-.76.2-.98.54C9.5 5.2 5 11.8 5 15.5 5 19.64 8.13 23 12 23s7-3.36 7-7.5c0-3.7-4.5-10.3-6.02-12.46A1.17 1.17 0 0 0 12 2.5Zm-3.2 13.4c-.4 0-.72-.34-.7-.74.08-1.4.78-2.72 1.88-3.72.3-.28.77-.24 1.04.06.28.3.24.77-.06 1.04-.84.76-1.36 1.72-1.42 2.72-.02.38-.34.68-.74.64Z"/></svg></div>
@@ -2713,6 +2707,12 @@ window.onerror = function(msg, src, line, col, err) {
   </div>
 
   <div class="nav-item" onclick="logout()" style="margin:8px 8px 4px"><i data-lucide="log-out" size="18"></i> Αποσύνδεση</div>
+  <!-- Collapse toggle — desktop only, pinned to bottom -->
+  <button id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Minimize sidebar"
+    style="display:none;margin:8px auto 8px;width:32px;height:32px;background:var(--bg-2);border:1px solid var(--border);border-radius:50%;cursor:pointer;align-items:center;justify-content:center;color:var(--text-2);transition:transform 0.2s,color 0.2s;flex-shrink:0"
+    onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-2)'">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
 </aside>
 
 <main class="main">
@@ -23873,24 +23873,53 @@ function _initSidebarCollapse(){
 // ── Global search ────────────────────────────────────────────
 (function _initGlobalSearch(){
   var NAV_PAGES = [
-    {page:'dashboard',label:'Αρχική / Dashboard',icon:'🏠'},
-    {page:'pos',label:'POS — Ταμείο',icon:'🛒'},
-    {page:'inventory',label:'Αποθήκη',icon:'📦'},
-    {page:'customers',label:'Πελάτες',icon:'👥'},
-    {page:'cashbook',label:'Ταμείο (Cashbook)',icon:'💰'},
-    {page:'reports',label:'Στατιστικά Πωλήσεων',icon:'📊'},
-    {page:'suppliers',label:'Προμηθευτές',icon:'🏭'},
-    {page:'purchases',label:'Παραγγελίες',icon:'📋'},
-    {page:'vat',label:'ΦΠΑ',icon:'🧾'},
-    {page:'settings',label:'Ρυθμίσεις',icon:'⚙️'},
-    {page:'users',label:'Χρήστες',icon:'👤'},
-    {page:'shifts',label:'Βάρδιες',icon:'⏱️'},
-    {page:'mixology',label:'Mixology',icon:'🧪'},
-    {page:'hardware',label:'Hardware',icon:'🔌'},
-    {page:'campaigns',label:'Campaigns',icon:'📣'},
-    {page:'bi',label:'Business Intelligence',icon:'🔍'},
-    {page:'warroom',label:'War Room',icon:'⚔️'},
-    {page:'oracle',label:'Oracle',icon:'🔮'},
+    {page:'dashboard',       label:'Αρχική Dashboard',                    icon:'🏠'},
+    {page:'pos',             label:'Ταμείο Πωλήσεις POS',                 icon:'🛒'},
+    {page:'inventory',       label:'Αποθήκη Αποθεματικά Προϊόντα',        icon:'📦'},
+    {page:'customers',       label:'Πελάτες Loyalty',                     icon:'👥'},
+    {page:'shipments',       label:'Αποστολές Παραδόσεις',                icon:'📫'},
+    {page:'suppliers',       label:'Προμηθευτές Εφοδιαστές',              icon:'🏭'},
+    {page:'purchases',       label:'Αγορές Παραγγελίες',                  icon:'🛍️'},
+    {page:'documents',       label:'Έγγραφα Τιμολόγια',                   icon:'📄'},
+    {page:'vault',           label:'ZyroNex Vault Αρχείο',                icon:'🗄️'},
+    {page:'shifts',          label:'Βάρδιες Εργασία Ωράριο',              icon:'⏱️'},
+    {page:'waste',           label:'Απομειώσεις Χαλασμένα Απόβλητα',      icon:'🗑️'},
+    {page:'batches',         label:'Παρτίδες Lotteries Batch',            icon:'🧱'},
+    {page:'competitors',     label:'Ανταγωνισμός Τιμές',                  icon:'👁️'},
+    {page:'hardware',        label:'Hardware Εκτυπωτής Barcode',          icon:'🔌'},
+    {page:'cashbook',        label:'Ταμείο Ημέρας Cashbook Έσοδα',        icon:'💰'},
+    {page:'banking',         label:'Τράπεζες Λογαριασμοί Banking',        icon:'🏦'},
+    {page:'expense-calendar',label:'Ημερολόγιο Εξόδων Πληρωμές',         icon:'📅'},
+    {page:'compliance-calendar',label:'Ημερολόγιο Συμμόρφωσης Υποχρεώσεις',icon:'🗓️'},
+    {page:'breakeven',       label:'Νεκρό Σημείο Break-even Ισοζύγιο',   icon:'⚖️'},
+    {page:'reports',         label:'Στατιστικά Πωλήσεων Αναφορές Reports',icon:'📊'},
+    {page:'vat',             label:'ΦΠΑ Απόδοση Φόρος',                  icon:'🧾'},
+    {page:'balance',         label:'Ισοζύγια Balance Οικονομικά',         icon:'📈'},
+    {page:'oracle',          label:'Oracle Πρόβλεψη AI',                  icon:'🔮'},
+    {page:'brain',           label:'The Brain AI Ανάλυση',               icon:'🧠'},
+    {page:'seasonal-intel',  label:'Εποχική Νοημοσύνη Καιρός',           icon:'🌦️'},
+    {page:'supplier-scorecard',label:'Βαθμολογία Προμηθευτών Scorecard',  icon:'🏆'},
+    {page:'remember-this',   label:'Θυμάσαι Αυτό Σημειώσεις',           icon:'💭'},
+    {page:'dosage-tracker',  label:'Παρακολούθηση Νικοτίνης Nicotine',   icon:'💨'},
+    {page:'energy-tracker',  label:'Ενέργεια Λογαριασμοί Ρεύμα',        icon:'⚡'},
+    {page:'compliance',      label:'TPD Vault Συμμόρφωση',               icon:'🛡️'},
+    {page:'audit',           label:'Audit Mode Έλεγχος ΑΑΔΕ',            icon:'🔍'},
+    {page:'online-orders',   label:'Online Orders Παραγγελίες Internet',  icon:'🛒'},
+    {page:'pricewar',        label:'Price War Τιμοπόλεμος',              icon:'💰'},
+    {page:'warroom',         label:'Κέντρο Ελέγχου Επιχειρήσεων War Room',icon:'⚔️'},
+    {page:'ai',              label:'ZyroNex Βοηθός AI Assistant',        icon:'✨'},
+    {page:'bi',              label:'Επιχειρηματική Ανάλυση Business Intelligence BI',icon:'🔬'},
+    {page:'customer-intel',  label:'Ανάλυση Πελατών Customer Intelligence',icon:'👥'},
+    {page:'mixology',        label:'Ανάμειξη DIY Mixology',              icon:'🧪'},
+    {page:'campaigns',       label:'Προσφορές Email Campaigns Marketing', icon:'📣'},
+    {page:'pulse',           label:'ZyroNex Pulse Νέα',                  icon:'✨'},
+    {page:'alerts',          label:'Ειδοποιήσεις Alerts',                icon:'🔔'},
+    {page:'users',           label:'Χρήστες Δικαιώματα Ρόλοι',           icon:'👤'},
+    {page:'data-cleanup',    label:'Data Cleanup Καθαρισμός Δεδομένων',  icon:'🧹'},
+    {page:'shop-changelog',  label:'Ιστορικό Αλλαγών Changelog',         icon:'📜'},
+    {page:'age-log',         label:'Μητρώο Ηλικίας Ηλικιακός Έλεγχος',  icon:'🔞'},
+    {page:'subscription',    label:'Συνδρομή Plugins Plugin Market',      icon:'💎'},
+    {page:'settings',        label:'Ρυθμίσεις Settings',                 icon:'⚙️'},
   ];
 
   function _normGR(s){
