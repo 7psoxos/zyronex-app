@@ -25357,9 +25357,9 @@ async function runSecurityAudit(){
     loadShiftsForUser().then(()=>{
       renderShiftTopbarBadge();
       refreshShiftDisplays();
-      const initialPage = getInitialPage();
-      const canUseInitial = initialPage && (CURRENT_USER.perms?.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage]));
-      const _startPage = canUseInitial ? initialPage : firstAllowedPage();
+      const _startPage = _isPageReload()
+        ? (()=>{ const initialPage = getInitialPage(); const canUseInitial = initialPage && (CURRENT_USER.perms?.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage])); return canUseInitial ? initialPage : firstAllowedPage(); })()
+        : ((!PAGE_PERMS['dashboard'] || can(PAGE_PERMS['dashboard'])) ? 'dashboard' : firstAllowedPage());
       _appReady = true;
       history.replaceState({ page: _startPage }, '', '#' + _startPage);
       showPage(_startPage);
@@ -46103,9 +46103,9 @@ async function init(){
       loadShiftsForUser().then(()=>{
         renderShiftTopbarBadge();
         refreshShiftDisplays();
-        const initialPage = getInitialPage();
-        const canUseInitial = initialPage && (CURRENT_USER.perms?.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage]));
-        const startPage = canUseInitial ? initialPage : firstAllowedPage();
+        const startPage = _isPageReload()
+          ? (()=>{ const initialPage = getInitialPage(); const canUseInitial = initialPage && (CURRENT_USER.perms?.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage])); return canUseInitial ? initialPage : firstAllowedPage(); })()
+          : ((!PAGE_PERMS['dashboard'] || can(PAGE_PERMS['dashboard'])) ? 'dashboard' : firstAllowedPage());
         showPage(startPage);
         // Only prompt for clock-in AFTER shifts are loaded and page is shown
         checkAndPromptClockIn();

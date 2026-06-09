@@ -436,3 +436,12 @@ function getInitialPage(){
 
   return null;
 }
+
+// Phase 4: reload detection helper
+function _isPageReload(){
+  try {
+    var nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]);
+    if (nav && nav.type) return nav.type === 'reload';
+    return performance.navigation && performance.navigation.type === 1;
+  } catch(e){ return false; }
+}
