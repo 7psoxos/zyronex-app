@@ -60,3 +60,8 @@ var WASTE_REASONS = {
   defective: {label:'⚠️ Ελαττωματικό', color:'var(--warn)'},
   other: {label:'❓ Άλλο', color:'var(--text-2)'}
 };
+
+// Phase 2: static Supabase + AI config
+var SUPABASE_URL = 'https://wopyucsdaeamywscxfzs.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHl1Y3NkYWVhbXl3c2N4ZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MzI3MjMsImV4cCI6MjA5MjIwODcyM30.ZCCf-fZ1IQRKMLOR2eR_eZzEg_klSH7W38m1eA2VAoE';
+var AI_ENDPOINT = `${SUPABASE_URL}/functions/v1/claude-proxy`;
