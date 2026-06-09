@@ -5870,3 +5870,2029 @@ function aiShowError(err){
     <button class="btn btn-primary mt-4" onclick="closeModal()">Κλείσιμο</button>
     </div>`);
 }
+
+// Phase oracle: ORACLE_*, WEATHER_DATA/LOADING, GREEK_HOLIDAYS,
+// TRENDS_DATA/LOADING, renderOracle, oracleRefresh + all oracle helpers,
+// _oracleAutoLoadOnFirstVisit, getRecipes/SpotChecks helpers
+var ORACLE_MESSAGE = null;        // Το ZYRONEX κείμενο που είδε ο χρήστης σήμερα
+var ORACLE_LOADING = false;
+var ORACLE_PENDING = [];          // Pending actions array από localStorage
+var ORACLE_BILLS = [];            // Recurring bills
+
+// Storage helpers
+function _oracleLoadBills(){
+  try{ ORACLE_BILLS = JSON.parse(localStorage.getItem('oracleBills')||'[]'); }catch{ ORACLE_BILLS = []; }
+}
+function _oracleSaveBills(){
+  localStorage.setItem('oracleBills', JSON.stringify(ORACLE_BILLS));
+}
+function _oraclePendingLoad(){
+  try{ ORACLE_PENDING = JSON.parse(localStorage.getItem('oraclePendingActions')||'[]'); }catch{ ORACLE_PENDING = []; }
+}
+function _oraclePendingSave(){
+  localStorage.setItem('oraclePendingActions', JSON.stringify(ORACLE_PENDING));
+}
+function _oracleAddPending(action){
+  _oraclePendingLoad();
+  action.id = 'PA_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  action.created = new Date().toISOString();
+  action.status = 'pending';
+  ORACLE_PENDING.push(action);
+  _oraclePendingSave();
+}
+
+// Cache του AI message ανά ημέρα
+function _oracleCacheKey(){
+  return 'oracleMsg_' + new Date().toISOString().slice(0,10);
+}
+function _oracleLoadCachedMsg(){
+  return localStorage.getItem(_oracleCacheKey());
+}
+function _oracleCacheMsg(msg){
+  localStorage.setItem(_oracleCacheKey(), msg);
+}
+
+// Εντοπίζει επερχόμενες πληρωμές (επόμενες 7 ημέρες)
+function _oracleUpcomingBills(){
+  _oracleLoadBills();
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const upcoming = [];
+  ORACLE_BILLS.forEach(b=>{
+    // bill: {name, amount, dayOfMonth, recurring, category}
+    const dueDay = parseInt(b.dayOfMonth) || 1;
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    const nextMonth = new Date(today.getFullYear(), today.getMonth()+1, dueDay);
+    const due = thisMonth >= today ? thisMonth : nextMonth;
+    const daysUntil = Math.floor((due - today)/(1000*60*60*24));
+    if(daysUntil <= 7){
+      upcoming.push({...b, dueDate:due, daysUntil});
+    }
+  });
+  return upcoming.sort((a,b)=>a.daysUntil - b.daysUntil);
+}
+
+// Εντοπίζει τα regular customers (έχουν έρθει 3+ φορές, την ίδια μέρα της εβδομάδας)
+function _oracleRegularCustomers(){
+  if(typeof CUSTOMERS === 'undefined' || typeof SALES === 'undefined') return [];
+  const today = new Date();
+  const todayDayOfWeek = today.getDay(); // 0=Sun, 1=Mon, ...
+  const regulars = [];
+  CUSTOMERS.forEach(c=>{
+    const customerSales = SALES.filter(s=>s.customerId===c.id);
+    if(customerSales.length < 3) return;
+    // Πόσες πωλήσεις στην ίδια ημέρα της εβδομάδας;
+    let sameDayCount = 0;
+    let totalSpent = 0;
+    let avgBasket = 0;
+    customerSales.forEach(s=>{
+      const d = new Date(s.date || s.createdAt);
+      if(d.getDay() === todayDayOfWeek){
+        sameDayCount++;
+        totalSpent += (s.total||0);
+      }
+    });
+    if(sameDayCount >= 2){
+      avgBasket = totalSpent / sameDayCount;
+      // Έχει έρθει σήμερα;
+      const cameToday = customerSales.some(s=>{
+        const d = new Date(s.date || s.createdAt);
+        return d.toDateString() === today.toDateString();
+      });
+      if(!cameToday){
+        regulars.push({customer:c, avgBasket:Math.round(avgBasket*100)/100, sameDayCount});
+      }
+    }
+  });
+  return regulars.slice(0, 3); // top 3
+}
+
+// Συνοπτικά business stats για να δοθούν στο AI
+function _oracleBusinessSnapshot(){
+  if(typeof PRODUCTS === 'undefined') return null;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const yesterday = new Date(today.getTime() - 86400000);
+  const last7days = new Date(today.getTime() - 7*86400000);
+  const last30days = new Date(today.getTime() - 30*86400000);
+
+  const todaySales = (typeof SALES!=='undefined'?SALES:[]).filter(s=>{
+    const d = new Date(s.date || s.createdAt);
+    return d >= today;
+  });
+  const yesterdaySales = (typeof SALES!=='undefined'?SALES:[]).filter(s=>{
+    const d = new Date(s.date || s.createdAt);
+    return d >= yesterday && d < today;
+  });
+  const last7Sales = (typeof SALES!=='undefined'?SALES:[]).filter(s=>{
+    const d = new Date(s.date || s.createdAt);
+    return d >= last7days;
+  });
+
+  const todayRev = todaySales.reduce((s,x)=>s+(x.total||0),0);
+  const yesterdayRev = yesterdaySales.reduce((s,x)=>s+(x.total||0),0);
+  const last7Rev = last7Sales.reduce((s,x)=>s+(x.total||0),0);
+  const avgDailyRev = last7Rev / 7;
+
+  // Κρίσιμα stock
+  const lowStock = PRODUCTS.filter(p=>(p.stock||0) < (p.minStock||0) && p.stock > 0);
+  const outOfStock = PRODUCTS.filter(p=>p.stock===0 && p.minStock>0);
+
+  // Λήγουν σύντομα
+  const expiringSoon = PRODUCTS.filter(p=>{
+    if(!p.expiry) return false;
+    const exp = new Date(p.expiry);
+    const days = Math.floor((exp-today)/86400000);
+    return days >= 0 && days <= 7;
+  });
+
+  return {
+    todayRev: Math.round(todayRev*100)/100,
+    yesterdayRev: Math.round(yesterdayRev*100)/100,
+    last7Rev: Math.round(last7Rev*100)/100,
+    avgDailyRev: Math.round(avgDailyRev*100)/100,
+    transactionsToday: todaySales.length,
+    lowStock: lowStock.slice(0,5).map(p=>({name:p.name, stock:p.stock, min:p.minStock})),
+    outOfStock: outOfStock.slice(0,5).map(p=>p.name),
+    expiringSoon: expiringSoon.slice(0,5).map(p=>p.name),
+    customersTotal: typeof CUSTOMERS!=='undefined'?CUSTOMERS.length:0
+  };
+}
+
+async function _oracleGenerateMessage(forceFresh){
+  // Cache: μία πρόβλεψη/ημέρα
+  if(!forceFresh){
+    const cached = _oracleLoadCachedMsg();
+    if(cached){
+      ORACLE_MESSAGE = cached;
+      return cached;
+    }
+  }
+
+  ORACLE_LOADING = true;
+  renderOracle();
+
+  try{
+    const snapshot = _oracleBusinessSnapshot();
+    const regulars = _oracleRegularCustomers();
+    const bills = _oracleUpcomingBills();
+    const today = new Date();
+    const greekDays = ['Κυριακή','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'];
+    const dayName = greekDays[today.getDay()];
+
+    let prompt = `Είσαι ο "Oracle" - ένας φιλικός, σοφός σύμβουλος επιχείρησης για ένα κατάστημα ηλεκτρονικού τσιγάρου στην Ελλάδα. Μιλάς ΦΙΛΙΚΑ, ΠΡΟΣΩΠΙΚΑ, με WARMTH - σαν έμπιστος σύμβουλος, όχι σαν AI.
+
+Σήμερα είναι ${dayName}, ${today.toLocaleDateString('el-GR')}.
+
+ΔΕΔΟΜΕΝΑ ΕΠΙΧΕΙΡΗΣΗΣ:
+- Σημερινός τζίρος μέχρι τώρα: ${snapshot?snapshot.todayRev:0}€ από ${snapshot?snapshot.transactionsToday:0} συναλλαγές
+- Χθες: ${snapshot?snapshot.yesterdayRev:0}€
+- 7-day average: ${snapshot?snapshot.avgDailyRev:0}€/ημέρα
+- Σύνολο πελατών: ${snapshot?snapshot.customersTotal:0}
+${snapshot && snapshot.lowStock.length ? '- Χαμηλό stock: ' + snapshot.lowStock.map(p=>`${p.name} (${p.stock} τμχ, min ${p.min})`).join(', ') : ''}
+${snapshot && snapshot.outOfStock.length ? '- ΕΞΑΝΤΛΗΜΕΝΑ: ' + snapshot.outOfStock.join(', ') : ''}
+${snapshot && snapshot.expiringSoon.length ? '- Λήγουν σε 7 μέρες: ' + snapshot.expiringSoon.join(', ') : ''}
+
+ΤΑΚΤΙΚΟΙ ΠΕΛΑΤΕΣ που έρχονται κάθε ${dayName}:
+${regulars.length ? regulars.map(r=>`- ${r.customer.name} (μ.ο. ${r.avgBasket}€/επίσκεψη, ${r.sameDayCount} φορές την τελευταία περίοδο)`).join('\n') : '(κανένας τακτικός)'}
+
+ΕΠΕΡΧΟΜΕΝΕΣ ΠΛΗΡΩΜΕΣ:
+${bills.length ? bills.map(b=>`- ${b.name}: ${b.amount}€ ${b.daysUntil===0?'ΣΗΜΕΡΑ':`σε ${b.daysUntil} ημέρες`}`).join('\n') : '(κανένα bill δεν έχει καταχωρηθεί)'}
+${(typeof WEATHER_DATA!=='undefined' && WEATHER_DATA && WEATHER_DATA.days) ? `
+ΚΑΙΡΟΣ 7 ΗΜΕΡΩΝ:
+${WEATHER_DATA.days.map((d,i)=>`- ${i===0?'Σήμερα':new Date(d.date).toLocaleDateString('el-GR',{weekday:'short'})}: ${d.tempMax}°/${d.tempMin}°${d.precipitation>5?' (βροχή)':''}${d.tempMax>=30?' 🥵 ΚΑΥΣΩΝΑΣ':''}${d.tempMax<=12?' 🥶 ΚΡΥΟ':''}`).join('\n')}` : ''}
+${(typeof TRENDS_DATA!=='undefined' && TRENDS_DATA && TRENDS_DATA.local && TRENDS_DATA.local.length) ? `
+VIRAL ΠΡΟΪΟΝΤΑ (last 7 days vs prev):
+${TRENDS_DATA.local.slice(0,3).map(t=>`- ${t.product.name}: ${t.soldNow} τμχ (vs ${t.soldPrev}, +${t.growth}%)${t.atRisk?' ⚠️ stock κρίσιμο':''}`).join('\n')}` : ''}
+${(()=>{ 
+  if(typeof getWeatherSeasonalContext !== 'function') return '';
+  const ctx = getWeatherSeasonalContext();
+  if(!ctx || !ctx.reasoning_gr || ctx.reasoning_gr.length === 0) return '';
+  return `
+🌡️ SMART SEASONAL/WEATHER ANALYSIS:
+- Εποχή: ${ctx.season_gr}
+${ctx.weather ? `- Επόμενες 7 μέρες: μ.ό. μέγιστης ${ctx.weather.next_7_days.avg_max_temp_c}°C, βροχή ${ctx.weather.next_7_days.total_precipitation_mm}mm${ctx.weather.next_7_days.has_heatwave ? ', ΚΑΥΣΩΝΑΣ ⚠️':''}` : ''}
+- Προτεινόμενες κατηγορίες γεύσεων: ${ctx.suggested_flavor_categories.join(', ')}
+- Insights: ${ctx.reasoning_gr.join(' | ')}
+${ctx.upcoming_holidays.length > 0 ? `- Προσεχείς εορτές: ${ctx.upcoming_holidays.map(h => `${h.name} σε ${h.days_away} ημέρες`).join(', ')}` : ''}`;
+})()}
+
+ΑΠΟΣΤΟΛΗ ΣΟΥ:
+Γράψε μήνυμα στον ιδιοκτήτη σαν να είσαι παλιός σύμβουλος επιχειρήσεων. Δομή:
+
+1. Καλημέρα/καλησπέρα (ανάλογα με την ώρα)
+2. ΠΡΟΒΛΕΨΗ τζίρου ημέρας (με βάση το avg + τους τακτικούς πελάτες + τον καιρό)
+3. Προσωπική αναφορά σε 1-2 τακτικούς πελάτες (αν υπάρχουν): "Σήμερα θα έρθει ο Γιώργος, μην ξεχάσεις...". Πρόσθεσε ΣΥΓΚΕΚΡΙΜΕΝΗ προσωπική σύσταση.
+4. ΚΑΙΡΟΣ + ΕΠΟΧΗ → ΠΡΟΤΑΣΗ ΠΑΡΑΓΓΕΛΙΑΣ - Με βάση το SMART SEASONAL/WEATHER ANALYSIS, αν προβλέπεται ζέστη/καύσωνας/βροχή/εποχιακή αλλαγή, δώσε ΣΥΓΚΕΚΡΙΜΕΝΗ πρόταση πχ "Έρχονται ζεστές μέρες (35°C+) - αν σκοπεύεις παραγγελία, βάλε έμφαση σε φρουτώδη/icy/menthol γεύσεις γιατί εκτοξεύονται οι πωλήσεις τους". Συνδύασε με τα viral προϊόντα αν υπάρχουν.
+5. VIRAL προϊόντα - Αν υπάρχουν trending, αναφέρω παραγγελιά
+6. ΚΡΙΣΙΜΑ θέματα stock (αν υπάρχουν)
+7. ΠΛΗΡΩΜΕΣ που λήγουν (αν υπάρχουν)
+8. Μία τελική σοφή προτροπή
+
+ΣΤΥΛ ΓΡΑΦΗΣ (ΚΡΙΣΙΜΟ):
+- Γράψε σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ΕΛΛΗΝΙΚΑ όπως θα έγραφε ένας μορφωμένος Έλληνας σύμβουλος. ΜΗΝ μεταφράζεις από αγγλικά - σκέψου κατευθείαν στα ελληνικά.
+- ΠΡΟΣΟΧΗ στη σύνταξη, τις πτώσεις, τη συμφωνία γένους/αριθμού και τη σειρά των λέξεων. Κάθε πρόταση πρέπει να είναι γραμματικά σωστή και να ακούγεται φυσική.
+- ΑΠΟΦΥΓΕ αγγλισμούς και κακομεταφρασμένες εκφράσεις (π.χ. ΠΟΤΕ "Ποιος είσαι έτοιμος;" - σωστό: "Έτοιμος;" ή "Πάμε;").
+- Χρησιμοποίησε σύγχρονη, ζεστή, επαγγελματική γλώσσα - σαν έμπειρος συνεργάτης που σε ξέρει χρόνια.
+- Διάβασε νοερά κάθε πρόταση πριν τη γράψεις: αν δεν θα την έλεγε φυσικός ομιλητής, ξαναγράψ' την.
+- Χρησιμοποίησε <strong>...</strong> για αριθμούς/ονόματα και <em>...</em> για έμφαση.
+- Χρησιμοποίησε <p>...</p> για παραγράφους. Όχι bullet lists - ρέουσα πρόζα.
+- 180-280 λέξεις. Emojis φυσικά (3-5 max), τοποθετημένα σωστά.
+
+Δώσε ΜΟΝΟ το κείμενο, χωρίς preamble.`;
+
+    const result = await askClaude(
+      [{role:'user', content: prompt}],
+      'Είσαι ο "Oracle", έμπειρος Έλληνας σύμβουλος για κατάστημα ηλεκτρονικού τσιγάρου (vape shop), με άριστη γνώση της ελληνικής. Γράφεις σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ελληνικά - σωστή σύνταξη, πτώσεις, συμφωνία γένους/αριθμού. ΠΟΤΕ δεν μεταφράζεις από αγγλικά ούτε χρησιμοποιείς αγγλισμούς. Σκέφτεσαι κατευθείαν στα ελληνικά, κάθε πρόταση φυσική σαν μητρικού ομιλητή. ΚΡΙΣΙΜΟ: Το κατάστημα πουλάει ΑΠΟΚΛΕΙΣΤΙΚΑ υγρά άτμισης, συσκευές vape και αναλώσιμα. Γεύσεις όπως Lemonade/Berry/Creamy/Ice/Menthol είναι ΓΕΥΣΕΙΣ ΥΓΡΩΝ ΑΤΜΙΣΗΣ, όχι πραγματικά ποτά/αναψυκτικά/γλυκά. ΠΟΤΕ μην προτείνεις προϊόντα άσχετα με vaping. Έχεις ζεστή, προσωπική φωνή. Επιστρέφεις ΜΟΝΟ HTML με <p>, <strong>, <em>. Ποτέ markdown.'
+    );
+    ORACLE_MESSAGE = result;
+    if(typeof ORACLE_FORECAST_MESSAGES !== 'undefined') ORACLE_FORECAST_MESSAGES['today'] = result;
+    _oracleCacheMsg(result);
+  }catch(err){
+    console.error('Oracle error:', err);
+    ORACLE_MESSAGE = '<p>Συγγνώμη, δεν μπόρεσα να συνδεθώ με την σοφία μου αυτή τη στιγμή. Δοκίμασε ξανά σε λίγο.</p>';
+  }finally{
+    ORACLE_LOADING = false;
+    renderOracle();
+  }
+}
+
+
+/* ============================================================
+   🔮 ORACLE PHASE 2 — Voice / Multi-Day / Auto-Suggestions
+   ============================================================ */
+
+var ORACLE_VOICE_RECORDING = false;
+var ORACLE_VOICE_RECOGNITION = null;
+var ORACLE_FORECAST_VIEW = 'today'; // today | tomorrow | week
+var ORACLE_FORECAST_MESSAGES = {}; // {today, tomorrow, week}
+var ORACLE_PATTERNS = null; // detected patterns
+
+// ── VOICE INPUT ─────────────────────────────────────────────
+function oracleVoiceSupported(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+  return !!SR && !(isIOS && isSafari);
+}
+
+function oracleStartVoice(){
+  if(ORACLE_VOICE_RECORDING){
+    oracleStopVoice();
+    return;
+  }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+
+  if(!SR){
+    if(typeof toast === 'function') toast('🚫 Ο browser σου δεν υποστηρίζει voice recognition. Δοκίμασε Chrome.', 'warning');
+    return;
+  }
+  if(isIOS && isSafari){
+    if(typeof toast === 'function') toast('🚫 Το iOS Safari δεν υποστηρίζει συνεχόμενη φωνητική αναγνώριση. Άνοιξε σε Chrome για iOS.', 'warning');
+    return;
+  }
+
+  ORACLE_VOICE_RECOGNITION = new SR();
+  ORACLE_VOICE_RECOGNITION.lang = 'el-GR';
+  ORACLE_VOICE_RECOGNITION.continuous = !isIOS; // iOS doesn't support continuous
+  ORACLE_VOICE_RECOGNITION.interimResults = true;
+
+  let finalTranscript = '';
+
+  ORACLE_VOICE_RECOGNITION.onresult = (event) => {
+    let interim = '';
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const transcript = event.results[i][0].transcript;
+      if(event.results[i].isFinal){
+        finalTranscript += transcript + ' ';
+      } else {
+        interim += transcript;
+      }
+    }
+    const textarea = document.getElementById('oracleDocText');
+    if(textarea){
+      textarea.value = (finalTranscript + interim).trim();
+    }
+    const indicator = document.getElementById('oracleVoiceIndicator');
+    if(indicator){
+      indicator.textContent = interim ? '🎤 ' + interim.slice(0, 50) + '...' : '🎤 Ακούω...';
+    }
+  };
+
+  ORACLE_VOICE_RECOGNITION.onerror = (event) => {
+    console.error('Voice error:', event.error);
+    if(event.error === 'not-allowed'){
+      if(typeof toast === 'function') toast('🚫 Άδεια μικροφώνου απαιτείται. Πήγαινε στις ρυθμίσεις του browser.', 'danger');
+    } else if(event.error !== 'no-speech' && event.error !== 'aborted'){
+      if(typeof toast === 'function') toast('Σφάλμα φωνής: ' + event.error, 'warning');
+    }
+    oracleStopVoice();
+  };
+
+  ORACLE_VOICE_RECOGNITION.onend = () => {
+    if(ORACLE_VOICE_RECORDING){
+      // restart automatically
+      try{ ORACLE_VOICE_RECOGNITION.start(); }catch(e){}
+    }
+  };
+
+  try{
+    ORACLE_VOICE_RECOGNITION.start();
+    ORACLE_VOICE_RECORDING = true;
+    const btn = document.getElementById('oracleVoiceBtn');
+    if(btn){
+      btn.innerHTML = '<i data-lucide="mic-off" style="width:14px;height:14px"></i> Διακοπή';
+      btn.classList.add('voice-active');
+    }
+    const indicator = document.getElementById('oracleVoiceIndicator');
+    if(indicator) indicator.style.display = 'block';
+    if(typeof lucide !== 'undefined') lucide.createIcons();
+    if(typeof toast === 'function') toast('🎤 Ακούω... Μίλα ελληνικά', 'info');
+  }catch(e){
+    console.error(e);
+    if(typeof toast === 'function') toast('Δεν μπόρεσα να ξεκινήσω την εγγραφή φωνής.', 'danger');
+  }
+}
+
+function oracleStopVoice(){
+  ORACLE_VOICE_RECORDING = false;
+  if(ORACLE_VOICE_RECOGNITION){
+    try{ ORACLE_VOICE_RECOGNITION.stop(); }catch(e){}
+    ORACLE_VOICE_RECOGNITION = null;
+  }
+  const btn = document.getElementById('oracleVoiceBtn');
+  if(btn){
+    btn.innerHTML = '<i data-lucide="mic" style="width:14px;height:14px"></i> Φωνή';
+    btn.classList.remove('voice-active');
+  }
+  const indicator = document.getElementById('oracleVoiceIndicator');
+  if(indicator) indicator.style.display = 'none';
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ── MULTI-DAY FORECAST ─────────────────────────────────────
+async function _oracleGenerateForecast(period, forceFresh){
+  // period: 'today' | 'tomorrow' | 'week'
+  const cacheKey = 'oracleMsg_' + period + '_' + new Date().toISOString().slice(0,10);
+  if(!forceFresh){
+    const cached = localStorage.getItem(cacheKey);
+    if(cached){
+      ORACLE_FORECAST_MESSAGES[period] = cached;
+      return cached;
+    }
+  }
+
+  ORACLE_LOADING = true;
+  renderOracle();
+
+  try{
+    const snapshot = _oracleBusinessSnapshot();
+    const bills = _oracleUpcomingBills();
+    const today = new Date();
+    const greekDays = ['Κυριακή','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'];
+
+    let targetDay, periodText, regulars, dayFocus;
+    if(period === 'tomorrow'){
+      const tomorrow = new Date(today.getTime() + 86400000);
+      targetDay = greekDays[tomorrow.getDay()];
+      periodText = 'αύριο (' + tomorrow.toLocaleDateString('el-GR') + ')';
+      regulars = _oracleRegularsForDay(tomorrow.getDay());
+      dayFocus = `Αύριο είναι ${targetDay}.`;
+    } else if(period === 'week'){
+      targetDay = '7 ημέρες';
+      periodText = 'τις επόμενες 7 ημέρες';
+      regulars = _oracleRegularCustomers();
+      dayFocus = 'Επόμενη εβδομάδα.';
+    } else {
+      // today
+      targetDay = greekDays[today.getDay()];
+      periodText = 'σήμερα (' + today.toLocaleDateString('el-GR') + ')';
+      regulars = _oracleRegularCustomers();
+      dayFocus = `Σήμερα είναι ${targetDay}.`;
+    }
+
+    let prompt = `Είσαι ο "Oracle" - φιλικός σύμβουλος επιχείρησης για κατάστημα ηλεκτρονικού τσιγάρου στην Ελλάδα. Μιλάς ΦΙΛΙΚΑ, ΠΡΟΣΩΠΙΚΑ - σαν έμπιστος σύμβουλος.
+
+${dayFocus}
+
+ΔΕΔΟΜΕΝΑ ΕΠΙΧΕΙΡΗΣΗΣ:
+- Σημερινός τζίρος μέχρι τώρα: ${snapshot?snapshot.todayRev:0}€ (${snapshot?snapshot.transactionsToday:0} συναλλαγές)
+- Χθες: ${snapshot?snapshot.yesterdayRev:0}€
+- 7-day average: ${snapshot?snapshot.avgDailyRev:0}€/ημέρα
+- Σύνολο πελατών: ${snapshot?snapshot.customersTotal:0}
+${snapshot && snapshot.lowStock.length ? '- Χαμηλό stock: ' + snapshot.lowStock.map(p=>`${p.name} (${p.stock}/${p.min})`).join(', ') : ''}
+${snapshot && snapshot.outOfStock.length ? '- ΕΞΑΝΤΛΗΜΕΝΑ: ' + snapshot.outOfStock.join(', ') : ''}
+
+ΤΑΚΤΙΚΟΙ ΠΕΛΑΤΕΣ ${period==='week'?'εβδομάδας':`για ${targetDay}`}:
+${regulars.length ? regulars.map(r=>`- ${r.customer.name} (μ.ο. ${r.avgBasket}€)`).join('\n') : '(κανένας τακτικός)'}
+
+ΕΠΕΡΧΟΜΕΝΕΣ ΠΛΗΡΩΜΕΣ:
+${bills.length ? bills.map(b=>`- ${b.name}: ${b.amount}€ ${b.daysUntil===0?'ΣΗΜΕΡΑ':`σε ${b.daysUntil} μέρες`}`).join('\n') : '(κανένα)'}
+
+ΑΠΟΣΤΟΛΗ:
+Γράψε προσωπικό μήνυμα σύμβουλου για ${periodText}. Δομή:
+
+${period === 'today' ? `
+1. Καλημέρα/καλησπέρα ανάλογα με την ώρα
+2. ΠΡΟΒΛΕΨΗ τζίρου ημέρας (avg + τακτικοί)
+3. Αναφορά σε 1-2 τακτικούς (αν υπάρχουν) με ΣΥΓΚΕΚΡΙΜΕΝΗ σύσταση
+4. Κρίσιμα stock + πληρωμές
+5. Σοφή προτροπή
+` : period === 'tomorrow' ? `
+1. "Για αύριο..." style intro
+2. ΠΡΟΕΤΟΙΜΑΣΙΑ: τι να κάνει σήμερα ώστε να είναι έτοιμος αύριο
+3. Πρόβλεψη τζίρου αύριο + τακτικούς πελάτες αύριας ημέρας
+4. Stock που θα μπει σε κίνδυνο αν δεν παραγγείλει σήμερα
+5. Κίνηση σήμερα για άριστη απόδοση αύριο
+` : `
+1. "Για την επόμενη εβδομάδα..." εισαγωγή
+2. ΕΒΔΟΜΑΔΙΑΙΟ ΠΛΑΝΟ: μεγαλύτερη εικόνα
+3. Ποιες ημέρες θα είναι κορυφαίες (βάσει patterns)
+4. Strategic προτεραιότητες (παραγγελίες, campaigns)
+5. Στόχοι εβδομάδας
+`}
+
+ΣΤΥΛ ΓΡΑΦΗΣ (ΚΡΙΣΙΜΟ):
+- Γράψε σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ΕΛΛΗΝΙΚΑ. ΜΗΝ μεταφράζεις από αγγλικά - σκέψου κατευθείαν στα ελληνικά.
+- ΠΡΟΣΟΧΗ σε σύνταξη, πτώσεις, συμφωνία γένους/αριθμού. Απόφυγε αγγλισμούς (π.χ. ΠΟΤΕ "Ποιος είσαι έτοιμος;").
+- Διάβασε νοερά κάθε πρόταση: αν δεν θα την έλεγε φυσικός ομιλητής, ξαναγράψ' την.
+- <strong>...</strong> για αριθμούς/ονόματα, <em>...</em> για έμφαση. <p>...</p> για παραγράφους.
+- 150-250 λέξεις. 3-5 emojis φυσικά, σωστά τοποθετημένα.
+
+Δώσε ΜΟΝΟ το κείμενο, χωρίς preamble.`;
+
+    const result = await askClaude(
+      [{role:'user', content: prompt}],
+      'Είσαι ο "Oracle", έμπειρος Έλληνας σύμβουλος για κατάστημα ηλεκτρονικού τσιγάρου (vape shop), με άριστη γνώση της ελληνικής. Γράφεις σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ελληνικά - σωστή σύνταξη, πτώσεις, συμφωνία γένους/αριθμού. ΠΟΤΕ δεν μεταφράζεις από αγγλικά ούτε χρησιμοποιείς αγγλισμούς. Σκέφτεσαι κατευθείαν στα ελληνικά, κάθε πρόταση φυσική σαν μητρικού ομιλητή. ΚΡΙΣΙΜΟ: Το κατάστημα πουλάει ΑΠΟΚΛΕΙΣΤΙΚΑ υγρά άτμισης, συσκευές vape και αναλώσιμα. Γεύσεις όπως Lemonade/Berry/Creamy/Ice/Menthol είναι ΓΕΥΣΕΙΣ ΥΓΡΩΝ ΑΤΜΙΣΗΣ, όχι πραγματικά ποτά/αναψυκτικά/γλυκά. ΠΟΤΕ μην προτείνεις προϊόντα άσχετα με vaping. Έχεις ζεστή, προσωπική φωνή. Επιστρέφεις ΜΟΝΟ HTML με <p>, <strong>, <em>. Ποτέ markdown.'
+    );
+    ORACLE_FORECAST_MESSAGES[period] = result;
+    localStorage.setItem(cacheKey, result);
+  }catch(err){
+    console.error('Oracle forecast error:', err);
+    ORACLE_FORECAST_MESSAGES[period] = '<p>Συγγνώμη, δεν μπόρεσα να συνδεθώ. Δοκίμασε ξανά σε λίγο.</p>';
+  }finally{
+    ORACLE_LOADING = false;
+    renderOracle();
+  }
+}
+
+function _oracleRegularsForDay(dayOfWeek){
+  if(typeof CUSTOMERS === 'undefined' || typeof SALES === 'undefined') return [];
+  const regulars = [];
+  CUSTOMERS.forEach(c=>{
+    const customerSales = SALES.filter(s=>s.customerId===c.id);
+    if(customerSales.length < 3) return;
+    let sameDayCount = 0, totalSpent = 0;
+    customerSales.forEach(s=>{
+      const d = new Date(s.date || s.createdAt);
+      if(d.getDay() === dayOfWeek){
+        sameDayCount++;
+        totalSpent += (s.total||0);
+      }
+    });
+    if(sameDayCount >= 2){
+      regulars.push({
+        customer:c,
+        avgBasket:Math.round((totalSpent/sameDayCount)*100)/100,
+        sameDayCount
+      });
+    }
+  });
+  return regulars.slice(0, 3);
+}
+
+function oracleSwitchForecast(period){
+  ORACLE_FORECAST_VIEW = period;
+  if(!ORACLE_FORECAST_MESSAGES[period]){
+    _oracleGenerateForecast(period, false);
+  } else {
+    renderOracle();
+  }
+}
+
+// ── AI AUTO-SUGGESTIONS (Pattern Detection) ────────────────
+function _oracleDetectPatterns(){
+  if(typeof SALES === 'undefined' || SALES.length < 20) return null;
+  const today = new Date();
+  const greekDays = ['Κυριακή','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'];
+  const last60days = new Date(today.getTime() - 60*86400000);
+  const recentSales = SALES.filter(s=>{
+    const d = new Date(s.date || s.createdAt);
+    return d >= last60days;
+  });
+  if(recentSales.length < 10) return null;
+
+  // Pattern 1: Day-of-week revenue
+  const byDay = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
+  const dayDates = {0:new Set(),1:new Set(),2:new Set(),3:new Set(),4:new Set(),5:new Set(),6:new Set()};
+  recentSales.forEach(s=>{
+    const d = new Date(s.date || s.createdAt);
+    const dow = d.getDay();
+    byDay[dow].push(s.total || 0);
+    dayDates[dow].add(d.toDateString());
+  });
+  const dayAvg = {};
+  for(let i=0;i<7;i++){
+    const numDays = dayDates[i].size;
+    const totalRev = byDay[i].reduce((s,x)=>s+x,0);
+    dayAvg[i] = numDays > 0 ? totalRev/numDays : 0;
+  }
+  // Find best & worst day
+  let bestDay = 0, worstDay = 0;
+  for(let i=1;i<7;i++){
+    if(dayAvg[i] > dayAvg[bestDay]) bestDay = i;
+    if(dayAvg[i] < dayAvg[worstDay] && dayAvg[i] > 0) worstDay = i;
+  }
+  const overallAvg = Object.values(dayAvg).reduce((s,x)=>s+x,0)/7;
+
+  // Pattern 2: Customer frequency by day
+  const customerPatterns = {};
+  if(typeof CUSTOMERS !== 'undefined'){
+    CUSTOMERS.forEach(c=>{
+      const cSales = recentSales.filter(s=>s.customerId===c.id);
+      if(cSales.length < 3) return;
+      const cByDay = {0:0,1:0,2:0,3:0,4:0,5:0,6:0};
+      cSales.forEach(s=>{
+        const d = new Date(s.date || s.createdAt);
+        cByDay[d.getDay()]++;
+      });
+      // Find dominant day
+      let domDay = 0;
+      for(let i=1;i<7;i++) if(cByDay[i] > cByDay[domDay]) domDay = i;
+      if(cByDay[domDay] >= 2){
+        if(!customerPatterns[domDay]) customerPatterns[domDay] = [];
+        customerPatterns[domDay].push({name:c.name, count:cByDay[domDay]});
+      }
+    });
+  }
+
+  // Pattern 3: Top product trends (last 14 vs prev 14)
+  const last14 = new Date(today.getTime() - 14*86400000);
+  const prev14start = new Date(today.getTime() - 28*86400000);
+  const productSales14 = {};
+  const productSalesPrev = {};
+  recentSales.forEach(s=>{
+    const d = new Date(s.date || s.createdAt);
+    const items = s.items || [];
+    items.forEach(it=>{
+      const pid = it.productId || it.id;
+      if(!pid) return;
+      if(d >= last14){
+        productSales14[pid] = (productSales14[pid]||0) + (it.qty||1);
+      } else if(d >= prev14start){
+        productSalesPrev[pid] = (productSalesPrev[pid]||0) + (it.qty||1);
+      }
+    });
+  });
+  const trendingProducts = [];
+  Object.keys(productSales14).forEach(pid=>{
+    const now = productSales14[pid];
+    const prev = productSalesPrev[pid] || 0;
+    if(prev > 0 && now > prev * 1.5 && now >= 5){
+      const p = (typeof PRODUCTS !== 'undefined') ? PRODUCTS.find(x=>x.id==pid) : null;
+      if(p){
+        trendingProducts.push({
+          name: p.name,
+          growth: Math.round(((now-prev)/prev)*100),
+          stock: p.stock || 0,
+          minStock: p.minStock || 0
+        });
+      }
+    }
+  });
+  trendingProducts.sort((a,b)=>b.growth-a.growth);
+
+  return {
+    dayAvg,
+    bestDay,
+    worstDay,
+    overallAvg: Math.round(overallAvg*100)/100,
+    bestDayName: greekDays[bestDay],
+    worstDayName: greekDays[worstDay],
+    bestDayRev: Math.round(dayAvg[bestDay]*100)/100,
+    worstDayRev: Math.round(dayAvg[worstDay]*100)/100,
+    customerPatterns,
+    trendingProducts: trendingProducts.slice(0,5),
+    daysAnalyzed: 60
+  };
+}
+
+function _oracleSuggestions(){
+  const patterns = _oracleDetectPatterns();
+  ORACLE_PATTERNS = patterns;
+  if(!patterns) return [];
+
+  const suggestions = [];
+  const greekDays = ['Κυριακή','Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο'];
+
+  // Suggestion 1: Best vs worst day
+  if(patterns.bestDayRev > patterns.worstDayRev * 1.5){
+    suggestions.push({
+      icon: '📊',
+      title: `${patterns.bestDayName} είναι η καλύτερή σου μέρα`,
+      desc: `Βγάζεις ${patterns.bestDayRev}€ μέσο όρο (vs ${patterns.worstDayRev}€ τη ${patterns.worstDayName}). Σκέψου: extra προσωπικό, μεγαλύτερη παραγγελία πριν, social media campaigns Παρασκευή απόγευμα.`,
+      type: 'pattern'
+    });
+  }
+
+  // Suggestion 2: Customer day patterns
+  Object.keys(patterns.customerPatterns).forEach(dayIdx=>{
+    const customers = patterns.customerPatterns[dayIdx];
+    if(customers.length >= 3){
+      suggestions.push({
+        icon: '👥',
+        title: `Τις ${greekDays[dayIdx]}ες έχεις ${customers.length} τακτικούς`,
+        desc: `Έρχονται: ${customers.slice(0,3).map(c=>c.name).join(', ')}${customers.length>3?` και άλλοι ${customers.length-3}`:''}. Ίσως κάνε Tuesday Special ή κράτα τα αγαπημένα τους products σε καλό stock.`,
+        type: 'pattern'
+      });
+    }
+  });
+
+  // Suggestion 3: Trending products
+  if(patterns.trendingProducts.length > 0){
+    const top = patterns.trendingProducts[0];
+    if(top.stock < top.minStock * 2){
+      suggestions.push({
+        icon: '🚀',
+        title: `"${top.name}" εκτοξεύτηκε +${top.growth}%`,
+        desc: `Stock σου: ${top.stock} τμχ — ίσως δεν φτάσει. Σκέψου να αυξήσεις την παραγγελία 2-3x από συνηθισμένα.`,
+        type: 'trend',
+        action: 'order_more',
+        productName: top.name
+      });
+    } else {
+      suggestions.push({
+        icon: '🚀',
+        title: `"${top.name}" πάει +${top.growth}%`,
+        desc: `Έχεις stock (${top.stock}). Καλή στιγμή για featured προβολή στο μαγαζί ή campaign email στους πελάτες.`,
+        type: 'trend'
+      });
+    }
+  }
+
+  return suggestions;
+}
+
+
+
+/* ============================================================
+   🌦️ WEATHER INTELLIGENCE — Καιρός + Αργίες → Πωλήσεις
+   ============================================================
+   Παίρνει 7-day forecast από Open-Meteo (δωρεάν, no API key)
+   και προτείνει παραγγελίες βάσει καιρού + Greek holidays.
+   ============================================================ */
+
+var WEATHER_DATA = null;
+var WEATHER_LOADING = false;
+
+function _weatherCacheKey(){
+  return 'weatherForecast_' + new Date().toISOString().slice(0,10);
+}
+
+async function _fetchWeather(forceRefresh){
+  if(!forceRefresh){
+    try{
+      const cached = localStorage.getItem(_weatherCacheKey());
+      if(cached){
+        WEATHER_DATA = JSON.parse(cached);
+        return WEATHER_DATA;
+      }
+    }catch{}
+  }
+
+  // Παίρνουμε τοποθεσία από settings ή default Athens
+  const settings = (typeof getSettings === 'function') ? getSettings() : {};
+  const lat = settings.shopLat || 37.9838;  // Athens default
+  const lng = settings.shopLng || 23.7275;
+
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum&timezone=Europe%2FAthens&forecast_days=7`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Weather API failed');
+    const data = await res.json();
+
+    WEATHER_DATA = {
+      lat, lng,
+      days: data.daily.time.map((date, i) => ({
+        date,
+        tempMax: Math.round(data.daily.temperature_2m_max[i]),
+        tempMin: Math.round(data.daily.temperature_2m_min[i]),
+        weatherCode: data.daily.weathercode[i],
+        precipitation: data.daily.precipitation_sum[i]
+      })),
+      fetched: new Date().toISOString()
+    };
+    localStorage.setItem(_weatherCacheKey(), JSON.stringify(WEATHER_DATA));
+    return WEATHER_DATA;
+  }catch(err){
+    console.error('Weather fetch error:', err);
+    return null;
+  }
+}
+
+// WMO weather code → emoji + description
+function _weatherIcon(code){
+  if(code === 0) return {icon:'☀️', desc:'Ηλιοφάνεια'};
+  if(code <= 3) return {icon:'⛅', desc:'Μερικώς συννεφιά'};
+  if(code <= 48) return {icon:'🌫️', desc:'Ομίχλη'};
+  if(code <= 57) return {icon:'🌦️', desc:'Ψιχάλα'};
+  if(code <= 67) return {icon:'🌧️', desc:'Βροχή'};
+  if(code <= 77) return {icon:'❄️', desc:'Χιόνι'};
+  if(code <= 82) return {icon:'⛈️', desc:'Καταιγίδα'};
+  if(code <= 99) return {icon:'⚡', desc:'Καταιγίδα με χαλάζι'};
+  return {icon:'🌤️', desc:'—'};
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   🌡️ WEATHER + SEASONAL CONTEXT για AI Predictive Ordering
+   ════════════════════════════════════════════════════════════════════════
+   Δίνει structured context που μπαίνει σε όλα τα AI prompts (Oracle, 
+   Brain, Predictive Ordering) ώστε οι προτάσεις παραγγελίας να λαμβάνουν 
+   υπόψη τον καιρό + εποχή + εορτές.
+*/
+function getWeatherSeasonalContext(){
+  const now = new Date();
+  const month = now.getMonth() + 1; // 1-12
+  
+  // Εποχή με βάση μήνα (Ελληνικά κλίματα)
+  let season, seasonGr;
+  if(month >= 3 && month <= 5){ season = 'spring'; seasonGr = 'Άνοιξη'; }
+  else if(month >= 6 && month <= 8){ season = 'summer'; seasonGr = 'Καλοκαίρι'; }
+  else if(month >= 9 && month <= 11){ season = 'autumn'; seasonGr = 'Φθινόπωρο'; }
+  else { season = 'winter'; seasonGr = 'Χειμώνας'; }
+  
+  // Weather snapshot (αν υπάρχει)
+  let weatherSummary = null;
+  let avgTempMax = null, avgPrecip = null, hasHotDays = false, hasRainyDays = false;
+  if(typeof WEATHER_DATA !== 'undefined' && WEATHER_DATA && WEATHER_DATA.days){
+    const next7 = WEATHER_DATA.days.slice(0, 7);
+    if(next7.length > 0){
+      avgTempMax = Math.round(next7.reduce((s,d) => s + (d.tempMax || 0), 0) / next7.length);
+      avgPrecip = +(next7.reduce((s,d) => s + (d.precipitation || 0), 0) / next7.length).toFixed(1);
+      hasHotDays = next7.some(d => d.tempMax >= 28);
+      hasRainyDays = next7.some(d => d.precipitation > 2);
+      
+      const hottest = Math.max(...next7.map(d => d.tempMax || 0));
+      const coldest = Math.min(...next7.map(d => d.tempMin || 99));
+      const totalRain = next7.reduce((s,d) => s + (d.precipitation || 0), 0).toFixed(1);
+      
+      weatherSummary = {
+        next_7_days: {
+          avg_max_temp_c: avgTempMax,
+          hottest_max_c: hottest,
+          coldest_min_c: coldest,
+          total_precipitation_mm: parseFloat(totalRain),
+          has_hot_days: hasHotDays,        // ≥28°C
+          has_rainy_days: hasRainyDays,    // >2mm/μέρα
+          has_heatwave: next7.filter(d => d.tempMax >= 37).length >= 2  // ΕΜΥ: καύσωνας ≥37°C
+        }
+      };
+    }
+  }
+  
+  // Smart suggestions με βάση συνδυασμό season + weather
+  const flavorSuggestions = [];
+  const reasoningGr = [];
+  
+  if(season === 'summer' || hasHotDays){
+    flavorSuggestions.push('fruity', 'menthol', 'icy', 'menthol-fruit', 'tropical');
+    if(avgTempMax >= 37){
+      reasoningGr.push(`Καύσωνας με μέγιστες ${avgTempMax}°C — προτεραιότητα στα icy/menthol/φρουτώδη υγρά για άμεση δροσιά`);
+    } else if(avgTempMax >= 33){
+      reasoningGr.push(`Έντονη ζέστη (μέσος όρος ${avgTempMax}°C) — αυξημένη ζήτηση για δροσερές γεύσεις (φρούτα, menthol, ice)`);
+    } else if(avgTempMax >= 28){
+      reasoningGr.push(`Ζεστές μέρες (μέσος όρος ${avgTempMax}°C) — αυξημένη ζήτηση για δροσερές γεύσεις (φρούτα, menthol, ice)`);
+    } else {
+      reasoningGr.push(`Καλοκαιρινή σεζόν — οι πελάτες προτιμούν ελαφρύτερες, φρουτώδεις γεύσεις`);
+    }
+  }
+  
+  if(season === 'winter'){
+    flavorSuggestions.push('tobacco', 'creamy', 'dessert', 'custard', 'vanilla', 'chocolate');
+    reasoningGr.push('Χειμωνιάτικη σεζόν — δίνει χώρο σε πιο πλούσιες γεύσεις (καπνικά, custard, σοκολάτα, κρέμες)');
+  }
+  
+  if(season === 'autumn'){
+    flavorSuggestions.push('tobacco', 'creamy', 'dessert', 'apple', 'cinnamon');
+    if(hasRainyDays){
+      reasoningGr.push(`Φθινόπωρο με βροχές — τα warm flavors (καπνικά, dessert, μήλο, κανέλα) έχουν ζήτηση`);
+    } else {
+      reasoningGr.push('Φθινοπωρινή σεζόν — μετάβαση από φρουτώδη σε πιο πλούσιες γεύσεις');
+    }
+  }
+  
+  if(season === 'spring'){
+    flavorSuggestions.push('fruity', 'floral', 'menthol-fruit', 'citrus');
+    if(hasHotDays){
+      reasoningGr.push(`Άνοιξη με ζέστες (${avgTempMax}°C) — οι πελάτες ξεκινούν να ζητούν δροσερές γεύσεις`);
+    } else {
+      reasoningGr.push('Ανοιξιάτικη σεζόν — ελαφριές, φρέσκες γεύσεις (φρούτα, εσπεριδοειδή)');
+    }
+  }
+  
+  // Mixed weather: ζέστη + βροχή = υγρασία = ακόμα περισσότερη ζήτηση για δροσερά
+  if(hasHotDays && hasRainyDays){
+    reasoningGr.push('Συνδυασμός ζέστης + βροχής = υψηλή υγρασία. Τα δροσερά υγρά γίνονται ακόμα πιο ελκυστικά');
+  }
+  
+  // Greek holidays προσεχείς
+  const upcomingHolidays = [];
+  if(typeof GREEK_HOLIDAYS !== 'undefined'){
+    const next30 = new Date(now.getTime() + 30*86400000);
+    for(let d = new Date(now); d <= next30; d.setDate(d.getDate()+1)){
+      const key = `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      if(GREEK_HOLIDAYS[key]){
+        upcomingHolidays.push({
+          date: d.toISOString().split('T')[0],
+          name: GREEK_HOLIDAYS[key],
+          days_away: Math.floor((d - now) / 86400000)
+        });
+        if(upcomingHolidays.length >= 3) break;
+      }
+    }
+  }
+  
+  if(upcomingHolidays.length > 0){
+    const next = upcomingHolidays[0];
+    reasoningGr.push(`Σε ${next.days_away} ημέρες έρχεται ${next.name} — αναμένεται αυξημένη κίνηση, σκέψου stock buffer`);
+  }
+  
+  return {
+    month,
+    season,
+    season_gr: seasonGr,
+    weather: weatherSummary,
+    suggested_flavor_categories: [...new Set(flavorSuggestions)],
+    reasoning_gr: reasoningGr,
+    upcoming_holidays: upcomingHolidays,
+    summary_text_gr: reasoningGr.join('. ')
+  };
+}
+window.getWeatherSeasonalContext = getWeatherSeasonalContext;
+
+// ── GREEK HOLIDAYS DETECTOR ────────────────────────────────
+var GREEK_HOLIDAYS = {
+  '01-01': 'Πρωτοχρονιά',
+  '01-06': 'Θεοφάνεια',
+  '03-25': '25 Μαρτίου',
+  '05-01': 'Πρωτομαγιά',
+  '08-15': 'Δεκαπενταύγουστος',
+  '10-28': '28 Οκτωβρίου',
+  '12-25': 'Χριστούγεννα',
+  '12-26': 'Σύναξη Θεοτόκου',
+  // Easter dates need calculation - simplified for now
+};
+
+function _isGreekHoliday(dateStr){
+  // dateStr: YYYY-MM-DD
+  const mmdd = dateStr.slice(5);
+  return GREEK_HOLIDAYS[mmdd] || null;
+}
+
+function _detectLongWeekend(forecast){
+  // Detect 3-day weekends (holiday touching weekend)
+  const longWeekends = [];
+  forecast.forEach((day, i) => {
+    const d = new Date(day.date);
+    const dow = d.getDay(); // 0=Sun, 6=Sat
+    const holiday = _isGreekHoliday(day.date);
+    if(holiday && (dow === 1 || dow === 5)){ // Mon or Fri = long weekend
+      longWeekends.push({...day, holiday, dayOfWeek: dow});
+    }
+  });
+  return longWeekends;
+}
+
+// ── ΠΡΟΤΑΣΕΙΣ ΑΝΑ ΚΑΙΡΟ ─────────────────────────────────
+// Βοηθητικό: βρες πραγματικά προϊόντα της αποθήκης που ταιριάζουν σε keywords
+function _matchProducts(keywords){
+  if(typeof PRODUCTS === 'undefined' || !Array.isArray(PRODUCTS)) return [];
+  const kw = keywords.map(k=>k.toLowerCase());
+  return PRODUCTS.filter(p=>{
+    const hay = ((p.name||'')+' '+(p.flavor||'')+' '+(p.category||'')+' '+((p.tags||[]).join(' '))).toLowerCase();
+    return kw.some(k=>hay.includes(k));
+  }).sort((a,b)=>(a.stock||0)-(b.stock||0)); // χαμηλό απόθεμα πρώτα
+}
+
+// Βοηθητικό: φτιάξε πρόταση προϊόντων με πραγματικά ονόματα + απόθεμα
+function _productSuggestionHtml(keywords, maxItems){
+  const matches = _matchProducts(keywords);
+  if(matches.length === 0){
+    return `<em>Δεν βρέθηκαν σχετικά προϊόντα στην αποθήκη σου με αυτά τα χαρακτηριστικά (${keywords.join(', ')}). Σκέψου να τα προσθέσεις στο επόμενο stock.</em>`;
+  }
+  const top = matches.slice(0, maxItems||5);
+  const items = top.map(p=>{
+    const low = (p.stock||0) <= 5;
+    return `• <strong>${znEscape(p.name)}</strong> — απόθεμα ${p.stock||0}${low?' ⚠️ χαμηλό':''}`;
+  }).join('<br>');
+  return `Σχετικά προϊόντα στην αποθήκη σου (${matches.length}):<br>${items}`;
+}
+
+function _weatherInsights(forecast){
+  if(!forecast || forecast.length === 0) return [];
+  const insights = [];
+
+  // ── ΣΩΣΤΑ ΟΡΙΑ ΓΙΑ ΕΛΛΑΔΑ ──
+  // Καύσωνας (επίσημα ΕΜΥ): ≥37°C. Ζέστη: 33-36°C. Ήπια ζέστη: 30-32°C.
+  const heatwaveDays = forecast.filter(d => d.tempMax >= 37);   // πραγματικός καύσωνας
+  const hotDays = forecast.filter(d => d.tempMax >= 33 && d.tempMax < 37); // έντονη ζέστη
+  const warmDays = forecast.filter(d => d.tempMax >= 30 && d.tempMax < 33); // ήπια ζέστη
+  const peakDay = forecast.reduce((a,b) => (a.tempMax > b.tempMax ? a : b), forecast[0]);
+  const dayNames = ['Κυρ','Δευ','Τρι','Τετ','Πεμ','Παρ','Σαβ'];
+  const peakWhen = (()=>{ try{ const d=new Date(peakDay.date); return `${dayNames[d.getDay()]} ${d.toLocaleDateString('el-GR',{day:'numeric',month:'short'})}`; }catch(e){ return ''; } })();
+
+  if(heatwaveDays.length >= 2){
+    insights.push({
+      icon: '🥵', type: 'heat',
+      title: `Καύσωνας — ${heatwaveDays.length} ημέρες ≥37°C (κορυφή ${peakDay.tempMax}°C, ${peakWhen})`,
+      desc: `Σε καύσωνα οι vapers στρέφονται σε δροσερές γεύσεις (Ice/Menthol/Mint) — ιστορικά +25-40% ζήτηση. ${_productSuggestionHtml(['ice','menthol','mint','cool','fresh','παγωμ','μέντα'], 5)}`,
+      tags: ['Ice','Menthol','Mint'], priority: 'high'
+    });
+  } else if(hotDays.length >= 2){
+    insights.push({
+      icon: '☀️', type: 'heat',
+      title: `Έντονη ζέστη — ${hotDays.length} ημέρες 33-36°C (κορυφή ${peakDay.tempMax}°C, ${peakWhen})`,
+      desc: `Ζεστές μέρες ευνοούν icy/menthol & φρουτώδεις γεύσεις. ${_productSuggestionHtml(['ice','menthol','mint','fruit','φρούτ','watermelon','καρπούζ','lemon','λεμόν'], 5)}`,
+      tags: ['Ice','Fruity'], priority: 'medium'
+    });
+  } else if(warmDays.length >= 3){
+    insights.push({
+      icon: '🌤️', type: 'heat',
+      title: `Ήπια ζέστη — ${warmDays.length} ημέρες 30-32°C (κορυφή ${peakDay.tempMax}°C, ${peakWhen})`,
+      desc: `Ανεβαίνει ελαφρά η ζήτηση για δροσερές/φρουτώδεις γεύσεις. ${_productSuggestionHtml(['ice','menthol','fruit','φρούτ'], 4)}`,
+      tags: ['Ice','Fruity'], priority: 'low'
+    });
+  }
+
+  // Κρύος καιρός (<12°C) → γλυκές/κρεμώδεις
+  const coldDays = forecast.filter(d => d.tempMax <= 12);
+  if(coldDays.length >= 3){
+    insights.push({
+      icon: '🥶', type: 'cold',
+      title: `Κρύος καιρός — ${coldDays.length} ημέρες ≤12°C`,
+      desc: `Σε κρύες μέρες ανεβαίνουν γλυκές/κρεμώδεις γεύσεις (vanilla, custard, tobacco). ${_productSuggestionHtml(['creamy','custard','vanilla','dessert','bakery','tobacco','καπν','κρέμ'], 5)}`,
+      tags: ['Creamy','Dessert'], priority: 'medium'
+    });
+  }
+
+  // Βροχερές μέρες
+  const rainDays = forecast.filter(d => d.precipitation > 5);
+  if(rainDays.length >= 2){
+    insights.push({
+      icon: '🌧️', type: 'rain',
+      title: `Βροχή σε ${rainDays.length} ημέρες`,
+      desc: `Λιγότεροι περαστικοί στο φυσικό κατάστημα. Καλή ευκαιρία για <strong>delivery / online παραγγελίες</strong> ή email στους τακτικούς πελάτες.`,
+      priority: 'low'
+    });
+  }
+
+  // Long weekends / αργίες
+  const longWeekends = _detectLongWeekend(forecast);
+  if(longWeekends.length > 0){
+    longWeekends.forEach(lw => {
+      const d = new Date(lw.date);
+      insights.push({
+        icon: '🎉', type: 'holiday',
+        title: `${lw.holiday} (${dayNames[d.getDay()]} ${d.toLocaleDateString('el-GR')})`,
+        desc: `<strong>Τριήμερο/τετραήμερο</strong> = συνήθως +30-50% τζίρος, αλλά πολλοί φεύγουν εκτός. Φρόντισε επαρκές απόθεμα στις κορυφαίες γεύσεις σου.`,
+        priority: 'high'
+      });
+    });
+  }
+
+  return insights;
+}
+
+// ── TREND RADAR (Google Trends + Local Velocity) ──────────
+var TRENDS_DATA = null;
+var TRENDS_LOADING = false;
+
+function _trendsCacheKey(){
+  return 'trendsRadar_' + new Date().toISOString().slice(0,10);
+}
+
+// Detect local velocity changes (αυτό λειτουργεί 100% χωρίς Google Trends)
+function _detectLocalTrends(){
+  if(typeof SALES === 'undefined' || typeof PRODUCTS === 'undefined') return [];
+  const today = new Date();
+  const last7 = new Date(today.getTime() - 7*86400000);
+  const prev7 = new Date(today.getTime() - 14*86400000);
+
+  // Πωλήσεις τελευταίων 7 ημερών vs προηγούμενες 7
+  const last7Sales = {};
+  const prev7Sales = {};
+
+  SALES.forEach(s => {
+    const d = new Date(s.date || s.createdAt);
+    const items = s.items || [s];
+    items.forEach(item => {
+      const pid = item.productId || s.productId;
+      const qty = item.qty || s.qty || 1;
+      if(!pid) return;
+      if(d >= last7) last7Sales[pid] = (last7Sales[pid]||0) + qty;
+      else if(d >= prev7) prev7Sales[pid] = (prev7Sales[pid]||0) + qty;
+    });
+  });
+
+  const trends = [];
+  Object.keys(last7Sales).forEach(pid => {
+    const now = last7Sales[pid];
+    const prev = prev7Sales[pid] || 0;
+    if(now < 3) return; // ignore noise
+    const growth = prev === 0 ? 999 : Math.round(((now - prev) / prev) * 100);
+    if(growth >= 50){ // 50%+ growth = trending
+      const p = PRODUCTS.find(x => x.id == pid);
+      if(!p) return;
+      trends.push({
+        product: p,
+        soldNow: now,
+        soldPrev: prev,
+        growth,
+        stockNow: p.stock || 0,
+        atRisk: (p.stock || 0) < (p.minStock || 0) * 2
+      });
+    }
+  });
+
+  trends.sort((a,b) => b.growth - a.growth);
+  return trends.slice(0, 5);
+}
+
+function _trendInsights(localTrends){
+  const insights = [];
+
+  localTrends.forEach(t => {
+    const growth = t.growth >= 999 ? '🚀 ξαφνικά viral' : `+${t.growth}%`;
+    if(t.atRisk){
+      insights.push({
+        icon: '🚨',
+        type: 'trend-urgent',
+        title: `"${t.product.name}" τρέχει ${growth}`,
+        desc: `Πούλησες <strong>${t.soldNow} τμχ</strong> τελευταία 7 ημέρες (vs ${t.soldPrev} πριν). Stock σου: <strong>${t.stockNow}</strong> τμχ — <em>θα τελειώσει σύντομα!</em> Παράγγειλε ΣΗΜΕΡΑ.`,
+        priority: 'high',
+        productId: t.product.id
+      });
+    } else {
+      insights.push({
+        icon: '📈',
+        type: 'trend',
+        title: `"${t.product.name}" τρέχει ${growth}`,
+        desc: `<strong>${t.soldNow} τμχ</strong> τις τελευταίες 7 ημέρες. Stock OK (${t.stockNow} τμχ) — καλή ευκαιρία για featured προβολή ή campaign.`,
+        priority: 'medium',
+        productId: t.product.id
+      });
+    }
+  });
+
+  return insights;
+}
+
+// ── MANUAL TREND FLAGS ───────────────────────────────────
+// Ο owner μπορεί να flagάρει "είδα αυτό σε TikTok"
+function getManualTrendFlags(){
+  try{ return JSON.parse(localStorage.getItem('manualTrendFlags') || '[]'); }catch{ return []; }
+}
+
+function saveManualTrendFlag(flag){
+  const flags = getManualTrendFlags();
+  flag.id = 'TF_' + Date.now();
+  flag.created = new Date().toISOString();
+  flags.push(flag);
+  localStorage.setItem('manualTrendFlags', JSON.stringify(flags));
+}
+
+function deleteManualTrendFlag(flagId){
+  const flags = getManualTrendFlags().filter(f => f.id !== flagId);
+  localStorage.setItem('manualTrendFlags', JSON.stringify(flags));
+}
+
+// ── COMBINED RENDER (Weather + Trends in Oracle) ─────────
+async function _oracleLoadIntelligence(forceRefresh){
+  if(forceRefresh) {
+    localStorage.removeItem(_weatherCacheKey());
+    localStorage.removeItem(_trendsCacheKey());
+  }
+  WEATHER_DATA = await _fetchWeather(forceRefresh);
+  // Trends είναι local computation — γρήγορο
+  const localTrends = _detectLocalTrends();
+  TRENDS_DATA = {
+    local: localTrends,
+    insights: _trendInsights(localTrends),
+    manualFlags: getManualTrendFlags()
+  };
+}
+
+function _renderWeatherSection(){
+  if(!WEATHER_DATA || !WEATHER_DATA.days || WEATHER_DATA.days.length === 0){
+    return `<div class="oracle-section-title">🌦️ Καιρός & Πωλήσεις</div>
+      <div class="oracle-bills-card upcoming" style="text-align:center">
+        <div class="muted">Δεν έχω δεδομένα καιρού.</div>
+        <button class="oracle-btn" onclick="oracleRefreshIntel()" style="margin-top:10px">
+          <i data-lucide="cloud" style="width:14px;height:14px"></i> Ανανέωση
+        </button>
+      </div>`;
+  }
+
+  const insights = _weatherInsights(WEATHER_DATA.days);
+  const days = WEATHER_DATA.days.slice(0, 7);
+  const dayNames = ['Κυρ','Δευ','Τρι','Τετ','Πεμ','Παρ','Σαβ'];
+
+  return `
+    <div class="oracle-section-title">🌦️ Καιρός & Επιπτώσεις</div>
+
+    <div class="weather-strip">
+      ${days.map(d => {
+        const dt = new Date(d.date);
+        const wi = _weatherIcon(d.weatherCode);
+        const isHot = d.tempMax >= 30;
+        const isCold = d.tempMax <= 12;
+        const isToday = d.date === new Date().toISOString().slice(0,10);
+        return `<div class="weather-day ${isHot?'hot':''} ${isCold?'cold':''} ${isToday?'today':''}" title="${wi.desc}">
+          <div class="weather-dow">${isToday?'Σήμερα':dayNames[dt.getDay()]}</div>
+          <div class="weather-icon">${wi.icon}</div>
+          <div class="weather-temp"><strong>${d.tempMax}°</strong> <span class="muted">/${d.tempMin}°</span></div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${insights.length > 0 ? `
+      <div class="oracle-suggestions" style="margin-top:14px">
+        ${insights.map(i => `
+          <div class="oracle-suggestion-card oracle-suggestion-${i.priority==='high'?'trend':'pattern'}">
+            <div class="oracle-suggestion-icon">${i.icon}</div>
+            <div class="oracle-suggestion-body">
+              <div class="oracle-suggestion-title">${i.title}</div>
+              <div class="oracle-suggestion-desc">${i.desc}</div>
+              ${i.tags ? `<div class="weather-tags">${i.tags.map(t=>`<span class="weather-tag">${t}</span>`).join('')}</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : `
+      <div class="text-sm muted text-center" style="padding:12px">Καμία ιδιαίτερη πρόβλεψη για αυτή την εβδομάδα.</div>
+    `}
+  `;
+}
+
+function _renderTrendsSection(){
+  if(!TRENDS_DATA){
+    return '';
+  }
+
+  const localInsights = TRENDS_DATA.insights || [];
+  const manualFlags = TRENDS_DATA.manualFlags || [];
+
+  return `
+    <div class="oracle-section-title">📡 Trend Radar — Τι Ανεβαίνει</div>
+
+    ${localInsights.length > 0 ? `
+      <div class="oracle-suggestions">
+        ${localInsights.map(i => `
+          <div class="oracle-suggestion-card oracle-suggestion-${i.priority==='high'?'trend':'pattern'}">
+            <div class="oracle-suggestion-icon">${i.icon}</div>
+            <div class="oracle-suggestion-body">
+              <div class="oracle-suggestion-title">${i.title}</div>
+              <div class="oracle-suggestion-desc">${i.desc}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : `
+      <div class="text-sm muted text-center" style="padding:12px">
+        Δεν εντοπίστηκαν viral προϊόντα τις τελευταίες 7 ημέρες.
+      </div>
+    `}
+
+    ${manualFlags.length > 0 ? `
+      <div class="oracle-section-title" style="margin-top:18px;font-size:12px">🎯 Δικά σου flags</div>
+      <div class="manual-flags-list">
+        ${manualFlags.map(f => `
+          <div class="manual-flag-card">
+            <div class="manual-flag-body">
+              <div class="fw-700">${f.productName}</div>
+              <div class="text-xs muted">${f.source||'manual'} • ${new Date(f.created).toLocaleDateString('el-GR')}</div>
+              ${f.note?`<div class="text-sm" style="margin-top:4px">${f.note}</div>`:''}
+            </div>
+            <button class="oracle-btn reject" onclick="oracleDeleteFlag('${f.id}')" style="padding:6px 10px">
+              <i data-lucide="trash-2" style="width:12px;height:12px"></i>
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    <div class="text-center" style="margin-top:12px">
+      <button class="oracle-btn" onclick="oracleAddTrendFlag()">
+        <i data-lucide="flag" style="width:14px;height:14px"></i> Είδα κάτι σε TikTok/Instagram
+      </button>
+      <button class="oracle-btn" onclick="oracleRefreshIntel()">
+        <i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Ανανέωση
+      </button>
+    </div>
+  `;
+}
+
+function oracleRefreshIntel(){
+  _oracleLoadIntelligence(true).then(()=>{
+    if(typeof toast === 'function') toast('🔄 Ανανέωση δεδομένων', 'info');
+    renderOracle();
+  });
+}
+
+function oracleAddTrendFlag(){
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">🎯 Νέο Trend Flag</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm muted" style="margin:0 0 12px">Είδες κάτι trending σε social media; Κατάγραψέ το για να το έχεις υπόψιν στις παραγγελίες.</p>
+      <div class="form-row">
+        <label>Όνομα Προϊόντος</label>
+        <input type="text" id="trendName" placeholder="π.χ. Lost Mary BM600 Blueberry" />
+      </div>
+      <div class="form-row">
+        <label>Πηγή</label>
+        <select id="trendSource">
+          <option value="📱 TikTok">📱 TikTok</option>
+          <option value="instagram">📸 Instagram</option>
+          <option value="🐦 Twitter/X">🐦 Twitter/X</option>
+          <option value="📺 YouTube">📺 YouTube</option>
+          <option value="💬 Reddit">💬 Reddit</option>
+          <option value="🗣️ Πελάτης">🗣️ Πελάτης ζήτησε</option>
+          <option value="📰 Άλλο">📰 Άλλο</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Σημείωση (προαιρετικά)</label>
+        <input type="text" id="trendNote" placeholder="π.χ. 50K views, viral video" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+        <button class="btn btn-primary" onclick="_oracleSaveTrendFlag()">Αποθήκευση</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function') openModal(html);
+}
+
+function _oracleSaveTrendFlag(){
+  const productName = document.getElementById('trendName')?.value?.trim();
+  const source = document.getElementById('trendSource')?.value;
+  const note = document.getElementById('trendNote')?.value?.trim();
+  if(!productName){
+    if(typeof toast === 'function') toast('Συμπλήρωσε το όνομα του προϊόντος', 'warning');
+    return;
+  }
+  saveManualTrendFlag({productName, source, note});
+  if(typeof closeModal === 'function') closeModal();
+  if(typeof toast === 'function') toast('✅ Trend flag αποθηκεύτηκε', 'success');
+  TRENDS_DATA.manualFlags = getManualTrendFlags();
+  renderOracle();
+}
+
+function oracleDeleteFlag(flagId){
+  deleteManualTrendFlag(flagId);
+  TRENDS_DATA.manualFlags = getManualTrendFlags();
+  if(typeof toast === 'function') toast('Διαγράφτηκε', 'info');
+  renderOracle();
+}
+
+
+function renderOracle(){
+  const content = document.getElementById('content');
+  if(!content) return;
+
+  _oraclePendingLoad();
+  _oracleLoadBills();
+  const bills = _oracleUpcomingBills();
+  const pendingActions = ORACLE_PENDING.filter(a=>a.status==='pending');
+
+  // Get the right message for current forecast view
+  const period = ORACLE_FORECAST_VIEW || 'today';
+  const currentMessage = period === 'today'
+    ? (ORACLE_MESSAGE || ORACLE_FORECAST_MESSAGES[period])
+    : ORACLE_FORECAST_MESSAGES[period];
+
+  // Auto-generated suggestions based on patterns
+  const suggestions = (typeof _oracleSuggestions === 'function') ? _oracleSuggestions() : [];
+
+  content.innerHTML = `
+  <div class="oracle-hero">
+    <div class="oracle-orb">🔮</div>
+    <h1 class="oracle-title">The Oracle</h1>
+    <p class="oracle-subtitle">Ο σύμβουλός σου με μαγική σοφία</p>
+  </div>
+
+  <div class="oracle-conversation">
+
+    <!-- Forecast Tabs -->
+    <div class="oracle-forecast-tabs">
+      <button class="oracle-tab ${period==='today'?'active':''}" onclick="oracleSwitchForecast('today')">
+        ☀️ Σήμερα
+      </button>
+      <button class="oracle-tab ${period==='tomorrow'?'active':''}" onclick="oracleSwitchForecast('tomorrow')">
+        🌅 Αύριο
+      </button>
+      <button class="oracle-tab ${period==='week'?'active':''}" onclick="oracleSwitchForecast('week')">
+        📅 Εβδομάδα
+      </button>
+    </div>
+
+    ${ORACLE_LOADING ? `
+      <div class="oracle-loading">
+        <div style="font-size:32px;margin-bottom:8px">🔮</div>
+        <div>Συμβουλεύομαι τα άστρα<span class="dots">...</span></div>
+      </div>
+    ` : (currentMessage ? `
+      <div class="oracle-message">
+        ${currentMessage}
+        <div class="oracle-actions">
+          <button class="oracle-btn" onclick="oracleRefreshCurrent()">
+            <i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Νέα ανάλυση
+          </button>
+          <button class="oracle-btn" onclick="showPage('warroom')">
+            <i data-lucide="compass" style="width:14px;height:14px"></i> Στρατηγείο
+          </button>
+          <button class="oracle-btn" onclick="showPage('dashboard')">
+            <i data-lucide="layout-dashboard" style="width:14px;height:14px"></i> Αρχική
+          </button>
+        </div>
+      </div>
+    ` : `
+      <div class="oracle-message" style="text-align:center">
+        <p>Είμαι έτοιμος να σου μιλήσω για ${period==='today'?'σήμερα':(period==='tomorrow'?'αύριο':'την εβδομάδα')}.</p>
+        <div class="oracle-actions" style="justify-content:center">
+          <button class="oracle-btn" onclick="oracleRefreshCurrent()" style="background:linear-gradient(135deg,rgba(155,89,255,0.3),rgba(74,163,255,0.2));border-color:rgba(155,89,255,0.5);font-size:15px;padding:12px 20px">
+            ✨ Συμβουλέψου τον Oracle
+          </button>
+        </div>
+      </div>
+    `)}
+
+    ${pendingActions.length ? `
+      <div class="oracle-section-title">⏳ Σε Αναμονή Έγκρισης (${pendingActions.length})</div>
+      <div class="oracle-pending-list">
+        ${pendingActions.map(a=>`
+          <div class="oracle-pending-item">
+            <div class="fw-700 mb-1">${a.title}</div>
+            <div class="text-sm muted mb-2">${a.description||''}</div>
+            <div class="oracle-actions">
+              <button class="oracle-btn approve" onclick="oracleApprove('${a.id}')">
+                <i data-lucide="check" style="width:14px;height:14px"></i> Έγκριση
+              </button>
+              <button class="oracle-btn reject" onclick="oracleReject('${a.id}')">
+                <i data-lucide="x" style="width:14px;height:14px"></i> Απόρριψη
+              </button>
+              <button class="oracle-btn" onclick="oracleViewDetails('${a.id}')">
+                <i data-lucide="eye" style="width:14px;height:14px"></i> Λεπτομέρειες
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${suggestions.length ? `
+      <div class="oracle-section-title">💡 Προτάσεις Βάσει Patterns</div>
+      <div class="oracle-suggestions">
+        ${suggestions.map(s=>`
+          <div class="oracle-suggestion-card oracle-suggestion-${s.type}">
+            <div class="oracle-suggestion-icon">${s.icon}</div>
+            <div class="oracle-suggestion-body">
+              <div class="oracle-suggestion-title">${s.title}</div>
+              <div class="oracle-suggestion-desc">${s.desc}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${typeof _renderWeatherSection === 'function' ? _renderWeatherSection() : ''}
+
+    ${typeof _renderTrendsSection === 'function' ? _renderTrendsSection() : ''}
+
+    <div class="oracle-section-title">💸 Επερχόμενες Πληρωμές</div>
+    ${bills.length ? bills.map(b=>{
+      const cls = b.daysUntil===0 ? 'due-today' : (b.daysUntil<=2 ? '' : 'upcoming');
+      const label = b.daysUntil===0 ? 'ΛΗΓΕΙ ΣΗΜΕΡΑ' : (b.daysUntil===1?'Λήγει αύριο':`Σε ${b.daysUntil} ημέρες`);
+      return `<div class="oracle-bills-card ${cls}">
+        <div class="flex justify-between items-center">
+          <div>
+            <div class="fw-700">${b.name}</div>
+            <div class="text-xs muted">${b.category||''} • ${label}</div>
+          </div>
+          <div class="fw-800" style="font-size:18px;color:${b.daysUntil===0?'#e74c3c':(b.daysUntil<=2?'#f39c12':'var(--accent)')}">${typeof eur==='function'?eur(b.amount):b.amount+'€'}</div>
+        </div>
+      </div>`;
+    }).join('') : `
+      <div class="oracle-bills-card upcoming" style="text-align:center">
+        <div class="muted">Δεν έχεις καταχωρήσει επερχόμενες πληρωμές.</div>
+        <button class="oracle-btn" onclick="oracleAddBill()" style="margin-top:10px">
+          <i data-lucide="plus" style="width:14px;height:14px"></i> Πρόσθεσε λογαριασμό
+        </button>
+      </div>
+    `}
+
+    ${bills.length ? `<div class="text-center mt-2">
+      <button class="oracle-btn" onclick="oracleAddBill()"><i data-lucide="plus" style="width:14px;height:14px"></i> Νέος λογαριασμός</button>
+      <button class="oracle-btn" onclick="oracleManageBills()"><i data-lucide="list" style="width:14px;height:14px"></i> Διαχείριση</button>
+    </div>` : ''}
+
+    <div class="oracle-section-title">📥 Δελτίο Παραγγελίας</div>
+    <div class="oracle-input-section">
+      <h3>📦 Ανέβασε Δελτίο για AI Auto-Update</h3>
+      <p class="text-sm muted" style="margin:0 0 12px">Πέρασε κείμενο δελτίου παραγγελίας ή <b>μίλα</b> με το μικρόφωνο. Ο Oracle θα εντοπίσει προϊόντα και ποσότητες.</p>
+      <p class="text-xs muted" style="margin:0 0 8px"><strong>⚠️ Όλες οι αλλαγές μένουν σε αναμονή για έγκρισή σου</strong> πριν εφαρμοστούν.</p>
+      <div id="oracleVoiceIndicator" class="oracle-voice-indicator" style="display:none">🎤 Ακούω...</div>
+      <textarea id="oracleDocText" rows="5" placeholder="Πέρασε εδώ ή πάτα το μικρόφωνο για να μιλήσεις..."></textarea>
+      <div class="oracle-actions" style="margin-top:10px">
+        ${(typeof oracleVoiceSupported==='function' && oracleVoiceSupported()) ? `
+        <button class="oracle-btn" id="oracleVoiceBtn" onclick="oracleStartVoice()">
+          <i data-lucide="mic" style="width:14px;height:14px"></i> Φωνή
+        </button>
+        ` : ''}
+        <button class="oracle-btn" onclick="oracleParseDocument()">
+          <i data-lucide="sparkles" style="width:14px;height:14px"></i> ZyroNex Ανάλυση & Πρόταση
+        </button>
+      </div>
+    </div>
+
+  </div>
+  `;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function oracleRefreshCurrent(){
+  const period = ORACLE_FORECAST_VIEW || 'today';
+  if(period === 'today'){
+    localStorage.removeItem(_oracleCacheKey());
+    localStorage.removeItem('oracleMsg_today_' + new Date().toISOString().slice(0,10));
+    _oracleGenerateMessage(true);
+  } else {
+    localStorage.removeItem('oracleMsg_' + period + '_' + new Date().toISOString().slice(0,10));
+    _oracleGenerateForecast(period, true);
+  }
+}
+
+function oracleRefresh(){
+  // Καθαρίζει το cache για σήμερα και ζητάει νέα
+  localStorage.removeItem(_oracleCacheKey());
+  _oracleGenerateMessage(true);
+}
+
+function oracleApprove(actionId){
+  _oraclePendingLoad();
+  const action = ORACLE_PENDING.find(a=>a.id===actionId);
+  if(!action) return;
+
+  if(typeof showConfirm === 'function'){
+    showConfirm(`Έγκριση: ${action.title}\n\n${action.description||''}\n\nΘα εφαρμοστούν όλες οι αλλαγές. Συνέχεια;`, ()=>{
+      _oracleExecuteAction(action);
+    });
+  } else {
+    if(confirm(`Εφαρμογή: ${action.title}?`)){
+      _oracleExecuteAction(action);
+    }
+  }
+}
+
+async function _oracleExecuteAction(action){
+  // Εκτέλεση action ανάλογα με τον τύπο
+  try{
+    if(action.type === 'stock_update' && Array.isArray(action.changes)){
+      // Update stock σε products
+      for(const ch of action.changes){
+        if(typeof PRODUCTS !== 'undefined'){
+          const p = PRODUCTS.find(x=>x.id===ch.productId || x.name===ch.productName);
+          if(p){
+            const updates = {};
+            if(ch.newStock !== undefined && ch.newStock !== null) updates.stock = ch.newStock;
+            if(ch.newCost !== undefined && ch.newCost !== null) updates.cost = ch.newCost;
+            if(ch.newPrice !== undefined && ch.newPrice !== null) updates.price = ch.newPrice;
+
+            if(typeof sb !== 'undefined' && p.id){
+              try{
+                await sb.from('products').update({
+                  ...(updates.stock!==undefined?{stock:updates.stock}:{}),
+                  ...(updates.cost!==undefined?{cost:updates.cost}:{}),
+                  ...(updates.price!==undefined?{price:updates.price}:{})
+                }).eq('id', p.id);
+              }catch(e){ console.error('Failed to update product', e); }
+            }
+            Object.assign(p, updates);
+          }
+        }
+      }
+    }
+    // Mark as approved
+    action.status = 'approved';
+    action.approvedAt = new Date().toISOString();
+    _oraclePendingSave();
+    if(typeof toast === 'function') toast('✅ Έγινε έγκριση. Οι αλλαγές εφαρμόστηκαν.', 'success');
+    if(typeof reloadProducts === 'function') await reloadProducts();
+    renderOracle();
+  }catch(e){
+    console.error('Oracle execute error:', e);
+    if(typeof toast === 'function') toast('Σφάλμα κατά την εφαρμογή.', 'danger');
+  }
+}
+
+function oracleReject(actionId){
+  _oraclePendingLoad();
+  const action = ORACLE_PENDING.find(a=>a.id===actionId);
+  if(!action) return;
+
+  if(typeof showConfirm === 'function'){
+    showConfirm(`Απόρριψη: "${action.title}";\n\nΗ ενέργεια θα ακυρωθεί.`, ()=>{
+      action.status = 'rejected';
+      action.rejectedAt = new Date().toISOString();
+      _oraclePendingSave();
+      if(typeof toast === 'function') toast('Απορρίφθηκε.', 'info');
+      renderOracle();
+    });
+  }
+}
+
+function oracleViewDetails(actionId){
+  _oraclePendingLoad();
+  const action = ORACLE_PENDING.find(a=>a.id===actionId);
+  if(!action) return;
+
+  let body = `<div class="fw-700 mb-2">${action.title}</div>`;
+  body += `<p class="text-sm muted">${action.description||''}</p>`;
+  if(action.changes && action.changes.length){
+    body += `<div class="fw-700 mt-3 mb-2">Αναλυτικές αλλαγές (${action.changes.length}):</div><div style="max-height:300px;overflow-y:auto">`;
+    action.changes.forEach(ch=>{
+      body += `<div style="padding:10px;background:var(--bg-2);border-radius:8px;margin-bottom:6px;font-size:13px">
+        <div class="fw-700">${ch.productName||ch.name||'—'}</div>
+        ${ch.newStock!==undefined?`<div>Stock: <strong>${ch.newStock}</strong> τμχ ${ch.qtyReceived?`(+${ch.qtyReceived})`:''}</div>`:''}
+        ${ch.newCost!==undefined?`<div>Κόστος: <strong>${typeof eur==='function'?eur(ch.newCost):ch.newCost+'€'}</strong></div>`:''}
+        ${ch.newPrice!==undefined?`<div>Τιμή: <strong>${typeof eur==='function'?eur(ch.newPrice):ch.newPrice+'€'}</strong></div>`:''}
+        ${ch.note?`<div class="muted text-xs">${ch.note}</div>`:''}
+      </div>`;
+    });
+    body += `</div>`;
+  }
+  if(action.unmatched && action.unmatched.length){
+    body += `<div class="fw-700 mt-3 mb-2">⚠️ Δεν ταιριάστηκαν στην αποθήκη:</div>`;
+    body += `<div class="text-sm muted">${action.unmatched.join(', ')}</div>`;
+  }
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">👁️ Λεπτομέρειες</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">${body}</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Κλείσιμο</button>
+    </div>
+  `;
+  if(typeof openModal === 'function'){
+    openModal(html);
+  }
+}
+
+function oracleAddBill(){
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">💸 Νέος Λογαριασμός</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Όνομα</label>
+        <input type="text" id="billName" placeholder="π.χ. ΔΕΗ - Ηλεκτρικό" />
+      </div>
+      <div class="form-row">
+        <label>Κατηγορία</label>
+        <select id="billCategory">
+          <option value="🔌 Ρεύμα">🔌 Ρεύμα</option>
+          <option value="💧 Νερό">💧 Νερό</option>
+          <option value="🏠 Ενοίκιο">🏠 Ενοίκιο</option>
+          <option value="📞 Τηλέφωνο/Internet">📞 Τηλέφωνο/Internet</option>
+          <option value="🏢 ΕΦΚΑ/ΙΚΑ">🏢 ΕΦΚΑ/ΙΚΑ</option>
+          <option value="📋 Ασφαλιστικές εισφορές">📋 Ασφαλιστικές εισφορές</option>
+          <option value="💼 Λογιστής">💼 Λογιστής</option>
+          <option value="🛡️ Ασφάλεια καταστήματος">🛡️ Ασφάλεια καταστήματος</option>
+          <option value="📺 Συνδρομές">📺 Συνδρομές</option>
+          <option value="💳 Δάνειο">💳 Δάνειο</option>
+          <option value="📦 Άλλο">📦 Άλλο</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Ποσό (€)</label>
+        <input type="number" id="billAmount" step="0.01" placeholder="π.χ. 250" />
+      </div>
+      <div class="form-row">
+        <label>Ημέρα μήνα που λήγει (1-31)</label>
+        <input type="number" id="billDay" min="1" max="31" placeholder="π.χ. 25" />
+      </div>
+      <div class="form-row">
+        <label>Σημειώσεις (προαιρετικά)</label>
+        <input type="text" id="billNote" placeholder="π.χ. Λογαριασμός ΔΕΗ μαγαζιού" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+        <button class="btn btn-primary" onclick="_oracleSaveBill()">Αποθήκευση</button>
+      </div>
+    </div>
+  `;
+  if(typeof openModal === 'function'){
+    openModal(html);
+  }
+}
+
+function _oracleSaveBill(){
+  const name = document.getElementById('billName')?.value?.trim();
+  const category = document.getElementById('billCategory')?.value;
+  const amount = parseFloat(document.getElementById('billAmount')?.value);
+  const dayOfMonth = parseInt(document.getElementById('billDay')?.value);
+  const note = document.getElementById('billNote')?.value?.trim();
+
+  if(!name || !amount || !dayOfMonth){
+    if(typeof toast === 'function') toast('Συμπλήρωσε όνομα, ποσό και ημέρα', 'warning');
+    return;
+  }
+
+  _oracleLoadBills();
+  ORACLE_BILLS.push({
+    id: 'BILL_'+Date.now(),
+    name, category, amount, dayOfMonth, note,
+    recurring: true,
+    created: new Date().toISOString()
+  });
+  _oracleSaveBills();
+  if(typeof closeModal === 'function') closeModal();
+  if(typeof toast === 'function') toast('✅ Λογαριασμός αποθηκεύτηκε', 'success');
+  renderOracle();
+}
+
+function oracleManageBills(){
+  _oracleLoadBills();
+  let body = '';
+  if(!ORACLE_BILLS.length){
+    body = `<p class="muted">Δεν υπάρχουν λογαριασμοί.</p>`;
+  } else {
+    body = ORACLE_BILLS.map(b=>`<div style="padding:12px;background:var(--bg-2);border-radius:10px;margin-bottom:8px">
+        <div class="flex justify-between items-center">
+          <div>
+            <div class="fw-700">${b.name}</div>
+            <div class="text-xs muted">${b.category||''} • Ημέρα ${b.dayOfMonth}</div>
+          </div>
+          <div class="flex gap-2 items-center">
+            <span class="fw-800" style="color:var(--accent)">${typeof eur==='function'?eur(b.amount):b.amount+'€'}</span>
+            <button class="btn btn-sm" style="background:rgba(231,76,60,0.15);color:#e74c3c" onclick="_oracleDeleteBill('${b.id}')"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  const html = `
+    <div class="modal-head">
+      <div class="modal-title">📋 Διαχείριση Λογαριασμών</div>
+      <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-body" style="max-height:400px;overflow-y:auto">${body}</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Κλείσιμο</button>
+      <button class="btn btn-primary" onclick="closeModal();oracleAddBill()">+ Νέος</button>
+    </div>
+  `;
+  if(typeof openModal === 'function'){
+    openModal(html);
+  }
+}
+
+function _oracleDeleteBill(billId){
+  _oracleLoadBills();
+  ORACLE_BILLS = ORACLE_BILLS.filter(b=>b.id!==billId);
+  _oracleSaveBills();
+  if(typeof toast === 'function') toast('Διαγράφτηκε', 'info');
+  oracleManageBills();
+  renderOracle();
+}
+
+async function _oracleAnswerQuestion(userQuestion){
+  if(typeof toast === 'function') toast('🔮 Σκέφτομαι...', 'info');
+  ORACLE_LOADING = true;
+  renderOracle();
+
+  try{
+    const snapshot = _oracleBusinessSnapshot();
+    const regulars = _oracleRegularCustomers();
+    const bills = _oracleUpcomingBills();
+
+    const prompt = `Είσαι ο "Oracle" - φιλικός, σοφός σύμβουλος επιχείρησης για κατάστημα ηλεκτρονικού τσιγάρου στην Ελλάδα.
+
+ΕΡΩΤΗΣΗ ΙΔΙΟΚΤΗΤΗ:
+"${userQuestion}"
+
+ΔΕΔΟΜΕΝΑ ΕΠΙΧΕΙΡΗΣΗΣ:
+- Σημερινός τζίρος: ${snapshot?snapshot.todayRev:0}€ (${snapshot?snapshot.transactionsToday:0} συναλλαγές)
+- Χθες: ${snapshot?snapshot.yesterdayRev:0}€
+- 7-day average: ${snapshot?snapshot.avgDailyRev:0}€/ημέρα
+- Σύνολο πελατών: ${snapshot?snapshot.customersTotal:0}
+${snapshot && snapshot.lowStock.length ? '- Χαμηλό stock: ' + snapshot.lowStock.map(p=>`${p.name} (${p.stock}/${p.min})`).join(', ') : ''}
+${snapshot && snapshot.outOfStock.length ? '- ΕΞΑΝΤΛΗΜΕΝΑ: ' + snapshot.outOfStock.join(', ') : ''}
+${regulars.length ? '\nΤακτικοί πελάτες σήμερα: ' + regulars.map(r=>`${r.customer.name} (μ.ο. ${r.avgBasket}€)`).join(', ') : ''}
+${bills.length ? '\nΕπερχόμενες πληρωμές: ' + bills.map(b=>`${b.name} ${b.amount}€`).join(', ') : ''}
+
+ΑΠΟΣΤΟΛΗ:
+Απάντησε στην ερώτηση του ιδιοκτήτη σαν προσωπικός σύμβουλος. Δώσε ΣΥΓΚΕΚΡΙΜΕΝΕΣ συμβουλές βάσει των δεδομένων του. Όχι γενικές κουβέντες — μίλα για τη ΔΙΚΗ ΤΟΥ επιχείρηση.
+
+ΣΤΥΛ:
+- Καθαρά ελληνικά
+- Φιλικό, ζεστό, με personality
+- HTML με <p>, <strong>, <em> tags
+- 150-300 λέξεις
+- 2-3 πρακτικές προτάσεις με αριθμούς όπου γίνεται
+- Όχι markdown
+- Όχι preamble — άρχισε κατευθείαν με την απάντηση`;
+
+    const result = await askClaude(
+      [{role:'user', content: prompt}],
+      'Είσαι ο "Oracle", έμπειρος Έλληνας σύμβουλος για κατάστημα ηλεκτρονικού τσιγάρου (vape shop). Γράφεις σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ελληνικά - σωστή σύνταξη/πτώσεις, χωρίς αγγλισμούς. ΚΡΙΣΙΜΟ: Το κατάστημα πουλάει ΑΠΟΚΛΕΙΣΤΙΚΑ υγρά άτμισης, συσκευές vape και αναλώσιμα. Γεύσεις όπως Lemonade/Berry/Creamy/Ice είναι ΓΕΥΣΕΙΣ ΥΓΡΩΝ ΑΤΜΙΣΗΣ, όχι πραγματικά ποτά/αναψυκτικά/γλυκά. ΠΟΤΕ μην προτείνεις προϊόντα άσχετα με vaping. Επιστρέφεις ΜΟΝΟ HTML με <p>, <strong>, <em>. Ποτέ markdown.'
+    );
+
+    ORACLE_MESSAGE = result;
+    if(typeof ORACLE_FORECAST_MESSAGES !== 'undefined') ORACLE_FORECAST_MESSAGES['today'] = result;
+    ORACLE_FORECAST_VIEW = 'today';
+
+    // Καθάρισμα του textarea
+    const ta = document.getElementById('oracleDocText');
+    if(ta) ta.value = '';
+
+    if(typeof toast === 'function') toast('✨ Έτοιμη η απάντηση', 'success');
+  }catch(err){
+    console.error('Oracle Q&A error:', err);
+    if(typeof toast === 'function') toast('Σφάλμα στην απάντηση. Δοκίμασε ξανά.', 'danger');
+  }finally{
+    ORACLE_LOADING = false;
+    renderOracle();
+    // Scroll στο message
+    setTimeout(()=>{
+      const msg = document.querySelector('.oracle-message');
+      if(msg) msg.scrollIntoView({behavior:'smooth', block:'start'});
+    }, 100);
+  }
+}
+
+async function oracleParseDocument(){
+  const text = document.getElementById('oracleDocText')?.value?.trim();
+  if(!text || text.length < 20){
+    if(typeof toast === 'function') toast('Πέρασε λίγο περισσότερο κείμενο για να αναλύσω.', 'warning');
+    return;
+  }
+
+  // Heuristic: αν φαίνεται για ερώτηση/συζήτηση και όχι δελτίο, redirect στο chat
+  const lower = text.toLowerCase();
+  const questionIndicators = ['πες μου','ρώτησέ','ποιος','ποια','πώς','πως μπορ','γιατί','τι κάνω','πες μ','πες σε','δώσε μου','βοήθα','βοήθησε','συμβούλευσε','εξήγησε','εξηγησ','εξήγησέ','τι λες','τι είναι','απάντησε','απαντ','?'];
+  const isLikelyQuestion = questionIndicators.some(q => lower.includes(q));
+
+  // Heuristic: φαίνεται για δελτίο αν περιέχει αριθμούς + "τμχ"/"qty"/"x"/"€" κλπ
+  const hasReceiptIndicators = /\d+\s*(τμχ|τεμ|qty|x|χ|€|eur|κουτ|βαζ|ml|mg)/i.test(text) || /\d+\.\d+\s*€/.test(text);
+
+  if(isLikelyQuestion && !hasReceiptIndicators){
+    // Είναι μάλλον ερώτηση — απαντάμε σαν Oracle conversation
+    return await _oracleAnswerQuestion(text);
+  }
+
+  if(typeof toast === 'function') toast('🔮 Ανάλυση δελτίου...', 'info');
+
+  try{
+    // Συνδυάζω με την υπάρχουσα αποθήκη για product matching
+    const productsContext = (typeof PRODUCTS !== 'undefined' ? PRODUCTS.slice(0,200).map(p=>({
+      id:p.id, name:p.name, barcode:p.barcode||'', stock:p.stock||0, cost:p.cost||0, price:p.price||0
+    })) : []);
+
+    const prompt = `Είσαι AI parser για δελτία παραγγελιών vape shop. Δίνεται κείμενο δελτίου. Εντόπισε τα προϊόντα και τις ποσότητες.
+
+ΚΕΙΜΕΝΟ ΔΕΛΤΙΟΥ:
+${text.slice(0, 4000)}
+
+ΥΠΑΡΧΟΝΤΑ ΠΡΟΪΟΝΤΑ ΣΤΗΝ ΑΠΟΘΗΚΗ (για matching):
+${JSON.stringify(productsContext.slice(0,80))}
+
+ΑΠΟΣΤΟΛΗ:
+Επέστρεψε JSON ΜΟΝΟ (no preamble, no markdown). Format:
+{
+  "summary": "σύντομη περιγραφή τι κατάλαβα",
+  "matches": [
+    {
+      "productName": "όνομα προϊόντος",
+      "matchedProductId": "id αν υπάρχει στην αποθήκη ή null",
+      "qtyReceived": αριθμός,
+      "newStock": προτεινόμενο νέο stock (current + qtyReceived),
+      "newCost": νέο κόστος (αν αναφέρεται),
+      "newPrice": νέα τιμή (αν αναφέρεται),
+      "note": "σημείωση αν χρειάζεται"
+    }
+  ],
+  "unmatched": ["προϊόντα που δεν βρέθηκαν στην αποθήκη"]
+}`;
+
+    const result = await askClaude(
+      [{role:'user', content: prompt}],
+      'Είσαι AI parser για δελτία παραγγελίας. Επιστρέφεις ΜΟΝΟ valid JSON, ποτέ markdown ή preamble.'
+    );
+
+    // Try parse as JSON
+    let parsed;
+    try{
+      // Extract JSON if wrapped
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : result);
+    }catch(e){
+      console.error('Parse error', e, result);
+      if(typeof toast === 'function') toast('Δεν μπόρεσα να διαβάσω σωστά το δελτίο.', 'warning');
+      return;
+    }
+
+    if(!parsed.matches || !Array.isArray(parsed.matches) || parsed.matches.length === 0){
+      if(typeof toast === 'function') toast('Δεν εντοπίστηκαν προϊόντα στο δελτίο.', 'warning');
+      return;
+    }
+
+    // Create pending action
+    const changes = parsed.matches.map(m=>({
+      productId: m.matchedProductId,
+      productName: m.productName,
+      newStock: m.newStock,
+      newCost: m.newCost,
+      newPrice: m.newPrice,
+      qtyReceived: m.qtyReceived,
+      note: m.note
+    }));
+
+    _oracleAddPending({
+      type: 'stock_update',
+      title: `📥 Παραλαβή προϊόντων (${changes.length} items)`,
+      description: parsed.summary || 'AI ανάλυση δελτίου παραγγελίας',
+      changes,
+      unmatched: parsed.unmatched || [],
+      sourceText: text.slice(0,500)
+    });
+
+    document.getElementById('oracleDocText').value = '';
+    if(typeof toast === 'function') toast('✨ Πρόταση δημιουργήθηκε. Έλεγξε & εγκρίνε από πάνω.', 'success');
+    renderOracle();
+
+  }catch(err){
+    console.error('Oracle parse error:', err);
+    if(typeof toast === 'function') toast('Σφάλμα κατά την ανάλυση.', 'danger');
+  }
+}
+
+// Auto-load on page show
+function _oracleAutoLoadOnFirstVisit(){
+  if(!ORACLE_MESSAGE && !ORACLE_LOADING){
+    const cached = _oracleLoadCachedMsg();
+    if(cached){
+      ORACLE_MESSAGE = cached;
+    }
+  }
+}
+
+
+
+/* ============================================================
+   ⚗️ BOM (Bill of Materials) + SPOT CHECK
+   ============================================================
+   Tracking για custom mixes / DIY προϊόντα.
+   Σύνταγες αποθηκεύονται σε localStorage (ή Supabase αν θες αργότερα).
+
+   Δομή recipe:
+   {
+     productId: 'product_id',
+     productName: '...',
+     ingredients: [
+       {ingredientId: 'product_id', name:'Base 70/30', qty: 40, unit: 'ml'},
+       {ingredientId: 'product_id', name:'Strawberry Aroma', qty: 10, unit: 'ml'},
+       {ingredientId: 'product_id', name:'Nic Shot 20mg', qty: 18, unit: 'ml'}
+     ]
+   }
+
+   Δομή spot check:
+   {
+     id, productId, productName, unit,
+     theoreticalRemaining, actualRemaining,
+     deviation (%), deviationAbs,
+     suggestion, created
+   }
+   ============================================================ */
+
+// ── RECIPES (BOM) ────────────────────────────────────────
+function getRecipes(){
+  try{ return JSON.parse(localStorage.getItem('productRecipes') || '{}'); }
+  catch{ return {}; }
+}
+
+function saveRecipes(recipes){
+  localStorage.setItem('productRecipes', JSON.stringify(recipes));
+}
+
+function getRecipeFor(productId){
+  const recipes = getRecipes();
+  return recipes[productId] || null;
+}
+
+function setRecipeFor(productId, recipe){
+  const recipes = getRecipes();
+  recipes[productId] = recipe;
+  saveRecipes(recipes);
+}
+
+function deleteRecipeFor(productId){
+  const recipes = getRecipes();
+  delete recipes[productId];
+  saveRecipes(recipes);
+}
+
+// ── SPOT CHECKS ──────────────────────────────────────────
+function getSpotChecks(){
+  try{ return JSON.parse(localStorage.getItem('spotChecks') || '[]'); }
+  catch{ return []; }
+}
+
+function saveSpotChecks(arr){
+  localStorage.setItem('spotChecks', JSON.stringify(arr));
+}
+
+function addSpotCheck(check){
+  const checks = getSpotChecks();
+  check.id = 'SC_' + Date.now();
+  check.created = new Date().toISOString();
+  checks.push(check);
+  saveSpotChecks(checks);
+  return check;
+}
+
+// ── COMPUTE THEORETICAL REMAINING ────────────────────────
+// Για ένα ingredient (π.χ. "Base 70/30"), υπολογίζει πόσο "θα έπρεπε" να έχει μείνει
+// βάσει: αρχικού stock + παραλαβές - (πωλήσεις × ποσότητα συνταγής).
+
+function computeTheoreticalRemaining(ingredientProductId, sinceDate){
+  if(typeof PRODUCTS === 'undefined' || typeof SALES === 'undefined') return null;
+
+  const ingredient = PRODUCTS.find(p => p.id == ingredientProductId);
+  if(!ingredient) return null;
+
+  const currentStock = ingredient.stock || 0;
+  const recipes = getRecipes();
+  const since = sinceDate ? new Date(sinceDate) : new Date(Date.now() - 7*86400000); // default last 7 days
+
+  // Πόση ποσότητα του ingredient καταναλώθηκε από πωλήσεις custom mixes
+  let consumedFromSales = 0;
+  const salesInPeriod = SALES.filter(s => {
+    const d = new Date(s.date || s.createdAt);
+    return d >= since;
+  });
+
+  salesInPeriod.forEach(sale => {
+    const items = sale.items || [sale];
+    items.forEach(item => {
+      const pid = item.productId || sale.productId;
+      const qty = item.qty || sale.qty || 1;
+      const recipe = recipes[pid];
+      if(recipe && recipe.ingredients){
+        const ing = recipe.ingredients.find(i => i.ingredientId == ingredientProductId);
+        if(ing){
+          consumedFromSales += (ing.qty || 0) * qty;
+        }
+      }
+    });
+  });
+
+  // Παραλαβές ingredient στην περίοδο
+  let receivedInPeriod = 0;
+  if(typeof SHIPMENTS !== 'undefined'){
+    SHIPMENTS.forEach(sh => {
+      const d = new Date(sh.date || sh.createdAt);
+      if(d >= since){
+        const items = sh.items || [];
+        items.forEach(it => {
+          if(it.productId == ingredientProductId){
+            receivedInPeriod += (it.qty || 0);
+          }
+        });
+      }
+    });
+  }
+
+  return {
+    ingredient,
+    currentStock,
+    consumedFromSales,
+    receivedInPeriod,
+    expectedRemaining: currentStock,  // current stock IS what should remain
+    salesInPeriodCount: salesInPeriod.length,
+    sinceDate: since.toISOString()
+  };
+}
