@@ -78,3 +78,22 @@ var CURRENT_USER = null;
 var _appReady = false; // set to true after successful login
 var PIN_BUFFER = '';
 var SELECTED_USER_ID = null;
+
+// Phase 3b: categories
+var DEFAULT_CATEGORIES = ['Υγρά Αναπλήρωσης','Συσκευές','Αντιστάσεις','Μπαταρίες','Αξεσουάρ'];
+
+// Mutable list — μπορεί να επεξεργαστεί ο admin από Settings
+// Πάντα διατηρεί 'Όλα' στην αρχή για filtering
+var CATEGORIES = (() => {
+  try {
+    const saved = localStorage.getItem('vs_product_categories');
+    if (saved) {
+      const arr = JSON.parse(saved);
+      if (Array.isArray(arr) && arr.length > 0) {
+        // Φρόντισε να υπάρχει 'Όλα' στην αρχή
+        return ['Όλα', ...arr.filter(c => c && c !== 'Όλα')];
+      }
+    }
+  } catch(e) {}
+  return ['Όλα', ...DEFAULT_CATEGORIES];
+})();

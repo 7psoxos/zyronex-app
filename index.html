@@ -19539,24 +19539,6 @@ function renderShiftTopbarBadge(){
   if(typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-// Default κατηγορίες — προσαρμοσμένες για vape shop
-var DEFAULT_CATEGORIES = ['Υγρά Αναπλήρωσης','Συσκευές','Αντιστάσεις','Μπαταρίες','Αξεσουάρ'];
-
-// Mutable list — μπορεί να επεξεργαστεί ο admin από Settings
-// Πάντα διατηρεί 'Όλα' στην αρχή για filtering
-var CATEGORIES = (() => {
-  try {
-    const saved = localStorage.getItem('vs_product_categories');
-    if (saved) {
-      const arr = JSON.parse(saved);
-      if (Array.isArray(arr) && arr.length > 0) {
-        // Φρόντισε να υπάρχει 'Όλα' στην αρχή
-        return ['Όλα', ...arr.filter(c => c && c !== 'Όλα')];
-      }
-    }
-  } catch(e) {}
-  return ['Όλα', ...DEFAULT_CATEGORIES];
-})();
 
 // Helper: αποθήκευση κατηγοριών (χωρίς το 'Όλα')
 function saveCategories() {
