@@ -97,3 +97,176 @@ var CATEGORIES = (() => {
   } catch(e) {}
   return ['Όλα', ...DEFAULT_CATEGORIES];
 })();
+
+// Phase 4a: modal system
+function openModal(html){
+  const m=document.createElement('div');m.className='modal-overlay';m.id='activeModal';
+  m.innerHTML=`<div class="modal">${html}</div>`;
+  m.addEventListener('click',e=>{if(e.target===m)closeModal()});
+  document.getElementById('modalHost').appendChild(m);
+  document.body.classList.add('modal-open');
+  document.documentElement.classList.add('modal-open');
+
+  // ┌─────────────────────────────────────────────────────────────┐
+  // │ STICKY HEADER FIX — INLINE STYLES (νικάνε ΟΛΑ τα CSS rules) │
+  // └─────────────────────────────────────────────────────────────┘
+  // Inline styles έχουν τη μεγαλύτερη προτεραιότητα από κάθε external CSS,
+  // ακόμα και με !important. Έτσι εξαλείφεται κάθε conflict.
+  const modalEl = m.querySelector('.modal');
+  if(modalEl){
+    // Ενσωμάτωση στο modal-body του υπόλοιπου content (αν δεν υπάρχει ήδη wrapper)
+    const head = modalEl.querySelector(':scope > .modal-head');
+    let body = modalEl.querySelector(':scope > .modal-body');
+    if(head && !body){
+      const bodyContent = [];
+      let next = head.nextSibling;
+      while(next){
+        const cur = next;
+        next = next.nextSibling;
+        bodyContent.push(cur);
+      }
+      body = document.createElement('div');
+      body.className = 'modal-body';
+      bodyContent.forEach(n => body.appendChild(n));
+      modalEl.appendChild(body);
+    }
+
+    // ── INLINE STYLES — αδύνατο να ακυρωθούν από CSS rules ──
+    // 1) Modal: flex container που ΔΕΝ scrolls μόνο του
+    Object.assign(modalEl.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      maxHeight: 'calc(100dvh - 24px)',
+      minHeight: '0'
+    });
+
+    // 2) Header: fixed στο top, δεν scrolls
+    if(head){
+      Object.assign(head.style, {
+        flex: '0 0 auto',
+        flexShrink: '0',
+        position: 'relative',
+        top: 'auto',
+        zIndex: '10',
+        background: 'var(--bg-1)'
+      });
+    }
+
+    // 3) Body: το ΜΟΝΟ scrollable element
+    if(body){
+      Object.assign(body.style, {
+        flex: '1 1 auto',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        minHeight: '0',
+        webkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain'
+      });
+      // -webkit prefix needs setProperty για να δουλέψει
+      body.style.setProperty('-webkit-overflow-scrolling', 'touch');
+      body.style.setProperty('overscroll-behavior', 'contain');
+    }
+
+    // touch-move propagation για iOS
+    modalEl.addEventListener('touchmove', e=>e.stopPropagation(), {passive:true});
+  }
+
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+function closeModal(){
+  const m=document.getElementById('activeModal');
+  if(m){
+    m.classList.add('closing');
+    document.body.classList.remove('modal-open');
+    document.documentElement.classList.remove('modal-open');
+    // Remove DOM after fade-out completes (~180ms)
+    setTimeout(()=>{ if(m.parentNode) m.remove(); }, 200);
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║ UNIVERSAL STICKY HEADER ENFORCER                                 ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// Παρακολουθεί το DOM για ΟΠΟΙΟΔΗΠΟΤΕ νέο .modal element
+// (ακόμα και αν δημιουργείται έξω από το openModal) και εφαρμόζει
+// inline styles ώστε το header να μένει σταθερά πάνω.
+// Inline styles έχουν την υψηλότερη CSS specificity — αδύνατο να ακυρωθούν.
+function _enforceModalLayout(modalEl){
+  if(!modalEl || modalEl._stickyApplied) return;
+  modalEl._stickyApplied = true;
+
+  // 1) Modal: flex container
+  Object.assign(modalEl.style, {
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    minHeight: '0'
+  });
+
+  // 2) Find or create body wrapper
+  const head = modalEl.querySelector(':scope > .modal-head');
+  let body = modalEl.querySelector(':scope > .modal-body');
+  if(head && !body){
+    const bodyContent = [];
+    let next = head.nextSibling;
+    while(next){
+      const cur = next;
+      next = next.nextSibling;
+      bodyContent.push(cur);
+    }
+    if(bodyContent.length > 0){
+      body = document.createElement('div');
+      body.className = 'modal-body';
+      bodyContent.forEach(n => body.appendChild(n));
+      modalEl.appendChild(body);
+    }
+  }
+
+  // 3) Header: σταθερό στο top
+  if(head){
+    Object.assign(head.style, {
+      flex: '0 0 auto',
+      flexShrink: '0',
+      position: 'relative',
+      zIndex: '10',
+      background: 'var(--bg-1)'
+    });
+  }
+
+  // 4) Body: μόνο αυτό scrolls
+  if(body){
+    Object.assign(body.style, {
+      flex: '1 1 auto',
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      minHeight: '0'
+    });
+    body.style.setProperty('-webkit-overflow-scrolling', 'touch');
+    body.style.setProperty('overscroll-behavior', 'contain');
+  }
+}
+
+// Custom confirm dialog — αντικαθιστά το native confirm() που μπλοκάρει σε iOS Safari
+function showConfirm(msg, onOk, onCancel){
+  const id = 'confirmModal_'+Date.now();
+  const m = document.createElement('div');
+  m.className = 'modal-overlay';
+  m.id = id;
+  m.style.cssText = 'z-index:200';
+  m.innerHTML = `<div class="modal" style="max-width:400px;padding:0">
+    <div class="modal-body" style="padding:24px">
+      <div class="text-sm" style="line-height:1.6;white-space:pre-wrap">${msg}</div>
+      <div class="flex gap-2 mt-4" style="justify-content:flex-end">
+        <button class="btn btn-ghost" id="${id}_cancel">Ακύρωση</button>
+        <button class="btn btn-primary" id="${id}_ok">OK</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('modalHost').appendChild(m);
+  document.body.classList.add('modal-open');
+  const cleanup = ()=>{ m.remove(); document.body.classList.remove('modal-open'); };
+  document.getElementById(`${id}_ok`).onclick = ()=>{ cleanup(); if(onOk) onOk(); };
+  document.getElementById(`${id}_cancel`).onclick = ()=>{ cleanup(); if(onCancel) onCancel(); };
+  lucide.createIcons();
+}
