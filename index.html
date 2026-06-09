@@ -410,7 +410,7 @@ if(window.navigator && window.navigator.share){
     .hamburger{display:none !important}
     /* Collapsed sidebar */
     .app.sidebar-collapsed{grid-template-columns:56px 1fr}
-    .app.sidebar-collapsed .sidebar{width:56px;min-width:56px;overflow:visible;padding:12px 0}
+    .app.sidebar-collapsed .sidebar{width:56px;min-width:56px;overflow-y:auto;overflow-x:hidden;padding:12px 0}
     .app.sidebar-collapsed .logo,.app.sidebar-collapsed .nav-section,.app.sidebar-collapsed .nav-section-title,.app.sidebar-collapsed .user-chip .user-name,.app.sidebar-collapsed .user-chip .user-role{display:none !important}
     .app.sidebar-collapsed .nav-item{justify-content:center;padding:12px 0;font-size:0}
     .app.sidebar-collapsed .nav-item i,.app.sidebar-collapsed .nav-item [data-lucide]{margin:0;font-size:18px}
@@ -427,6 +427,10 @@ if(window.navigator && window.navigator.share){
     .search-box{position:relative}
   }
   .sidebar{background:linear-gradient(180deg,#0d1220 0%,#0a0f1c 100%);border-right:1px solid var(--border);padding:16px 0;position:sticky;top:0;height:100vh;overflow-y:auto;overflow-x:hidden}
+  .sidebar::-webkit-scrollbar{width:4px}
+  .sidebar::-webkit-scrollbar-track{background:transparent}
+  .sidebar::-webkit-scrollbar-thumb{background:rgba(99,130,220,0.25);border-radius:4px}
+  .sidebar::-webkit-scrollbar-thumb:hover{background:rgba(0,212,168,0.4)}
   .sidebar::after{content:'';position:absolute;top:0;right:0;width:1px;height:100%;background:linear-gradient(180deg,transparent,rgba(99,130,220,0.15) 30%,rgba(0,212,168,0.1) 70%,transparent)}
   .logo{padding:0 16px 20px;border-bottom:1px solid var(--border);margin-bottom:8px}
   .logo-mark{display:flex;align-items:center;gap:10px}
@@ -2619,6 +2623,11 @@ window.onerror = function(msg, src, line, col, err) {
 <div class="app hidden" id="appWrap">
 <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 <aside class="sidebar" id="sidebar">
+  <!-- Collapse toggle — desktop only, top of sidebar -->
+  <button id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Minimize / Expand sidebar"
+    style="display:none;margin:8px auto 4px;width:32px;height:32px;background:#1a3a2a;border:1px solid #00d4a8;border-radius:50%;cursor:pointer;align-items:center;justify-content:center;color:#00d4a8;transition:transform 0.2s,background 0.2s,border-color 0.2s,color 0.2s;flex-shrink:0">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
   <div class="logo">
     <div class="logo-mark">
       <div class="logo-square"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5c-.4 0-.76.2-.98.54C9.5 5.2 5 11.8 5 15.5 5 19.64 8.13 23 12 23s7-3.36 7-7.5c0-3.7-4.5-10.3-6.02-12.46A1.17 1.17 0 0 0 12 2.5Zm-3.2 13.4c-.4 0-.72-.34-.7-.74.08-1.4.78-2.72 1.88-3.72.3-.28.77-.24 1.04.06.28.3.24.77-.06 1.04-.84.76-1.36 1.72-1.42 2.72-.02.38-.34.68-.74.64Z"/></svg></div>
@@ -2707,12 +2716,6 @@ window.onerror = function(msg, src, line, col, err) {
   </div>
 
   <div class="nav-item" onclick="logout()" style="margin:8px 8px 4px"><i data-lucide="log-out" size="18"></i> Αποσύνδεση</div>
-  <!-- Collapse toggle — desktop only, pinned to bottom -->
-  <button id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Minimize sidebar"
-    style="display:none;margin:8px auto 8px;width:32px;height:32px;background:var(--bg-2);border:1px solid var(--border);border-radius:50%;cursor:pointer;align-items:center;justify-content:center;color:var(--text-2);transition:transform 0.2s,color 0.2s;flex-shrink:0"
-    onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-2)'">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-  </button>
 </aside>
 
 <main class="main">
@@ -23855,19 +23858,35 @@ function closeSidebar(){
 }
 
 // ── Sidebar collapse (desktop) ────────────────────────────────
+function _updateCollapseBtn(collapsed){
+  var btn = document.getElementById('sidebarCollapseBtn');
+  if(!btn) return;
+  if(collapsed){
+    btn.style.background = '#3a1a1a';
+    btn.style.borderColor = '#ff4757';
+    btn.style.color = '#ff4757';
+  } else {
+    btn.style.background = '#1a3a2a';
+    btn.style.borderColor = '#00d4a8';
+    btn.style.color = '#00d4a8';
+  }
+}
 function toggleSidebarCollapse(){
   var app = document.getElementById('appWrap');
   if(!app) return;
   app.classList.toggle('sidebar-collapsed');
-  try { localStorage.setItem('sidebarCollapsed', app.classList.contains('sidebar-collapsed') ? '1' : '0'); } catch(_){}
+  var isCollapsed = app.classList.contains('sidebar-collapsed');
+  try { localStorage.setItem('sidebarCollapsed', isCollapsed ? '1' : '0'); } catch(_){}
+  _updateCollapseBtn(isCollapsed);
 }
 function _initSidebarCollapse(){
-  // Show collapse button only on desktop
   if(window.innerWidth < 901) return;
   var btn = document.getElementById('sidebarCollapseBtn');
   if(btn) btn.style.display = 'flex';
-  // Restore saved state
-  try { if(localStorage.getItem('sidebarCollapsed') === '1') document.getElementById('appWrap')?.classList.add('sidebar-collapsed'); } catch(_){}
+  var collapsed = false;
+  try { collapsed = localStorage.getItem('sidebarCollapsed') === '1'; } catch(_){}
+  if(collapsed) document.getElementById('appWrap')?.classList.add('sidebar-collapsed');
+  _updateCollapseBtn(collapsed);
 }
 
 // ── Global search ────────────────────────────────────────────
