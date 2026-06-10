@@ -22760,6 +22760,7 @@ function renderSiteBuilder(){
       '<button class="btn btn-primary" id="zbSyncBtn" style="min-height:40px"><i data-lucide="refresh-cw" size="15"></i> Συγχρονισμός προϊόντων</button>'+
       '<span id="zbSyncStatus" style="font-size:12px;color:var(--text-2)"></span>'+
     '</div>'+
+    '<style>#zbHost .zbui-mobiletabs{padding-bottom:calc(60px + env(safe-area-inset-bottom,0px)) !important}</style>'+
     '<div id="zbHost" style="height:calc(100vh - 120px);min-height:480px;border-radius:12px;overflow:hidden"></div>';
   try{
     ZBUI.demoProducts = function(){
