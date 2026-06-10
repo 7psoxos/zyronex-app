@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="el">
 <head>
+<script>try{if(localStorage.getItem('katastimaTheme')==='light'){document.documentElement.style.setProperty('--bg-0','#f5f7fa');}}catch(e){}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>ZyroNex — Operate Everything</title>
@@ -27998,16 +27999,16 @@ async function init(){
   loadLogoFromSupabase().then(()=>{
     applyCustomLogoToElements();
   });
-  renderLogin();
-  lucide.createIcons();
+
+  // Auto-login αν υπάρχει valid session — ΠΡΙΝ το renderLogin ώστε να μη φαίνεται το login screen
+  var savedSession = getSavedSession();
+  var _autoUser = savedSession ? USERS.find(function(x){return x.id===savedSession.userId;}) : null;
+  if(!_autoUser){ renderLogin(); lucide.createIcons(); }
   // Note: initReservations() καλείται post-login (στο applySession) ώστε να
   // έχουμε CURRENT_USER + SHOP_ID διαθέσιμα για το morning notification.
 
-  // Auto-login αν υπάρχει valid session
-  const savedSession = getSavedSession();
-  if(savedSession){
-    const u = USERS.find(x=>x.id===savedSession.userId);
-    if(u){
+  if(_autoUser){
+    const u = _autoUser;
       CURRENT_USER = u;
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('appWrap').classList.remove('hidden');
@@ -28047,11 +28048,10 @@ async function init(){
       // ── Per-plugin subscriptions (authoritative billing state) ──
       try { await loadPluginSubscriptions(); } catch(_){}
       try { _handlePluginPurchaseReturn(); } catch(_){}
-    }else{
+    } else if(savedSession && !_autoUser){
       // Ο χρήστης δεν υπάρχει πλέον — καθάρισε το session
       clearSession();
     }
-  }
 
   // Έλεγχος για προγραμματιζόμενες αναφορές (κάθε ώρα)
   setTimeout(checkScheduledReports, 3000);
