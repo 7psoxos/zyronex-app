@@ -43824,6 +43824,13 @@ async function dypaDelete(id){
 }
 </script>
 
+<script>
+// Exchange boot calls
+// Check exchange notifications every 2 minutes
+setInterval(_exchCheckNotifications, 120000);
+// Also check on load
+setTimeout(_exchCheckNotifications, 5000);
+</script>
 
 <script>
 // ═══════════════════════════════════════════════════════════

@@ -22671,11 +22671,6 @@ async function _exchCheckNotifications() {
   } catch(e) { console.warn('Exchange notif check failed:', e); }
 }
 
-// Check exchange notifications every 2 minutes
-setInterval(_exchCheckNotifications, 120000);
-// Also check on load
-setTimeout(_exchCheckNotifications, 5000);
-
 // === SITE-BUILDER MODULE ===
 function renderSiteBuilder(){
   var c = document.getElementById('content');
