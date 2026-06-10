@@ -24336,16 +24336,16 @@ function renderPOS(){
   const html=`
   <div class="page-head">
     <div><div class="page-title">Ταμείο</div><div class="page-sub">Γρήγορη πώληση με barcode scan ή tap</div></div>
-    <div class="flex gap-2" style="flex-wrap:wrap;align-items:center">
-      ${offlineQueue.length>0?`<button class="btn btn-warn" onclick="syncOfflineQueue()" title="Συγχρονισμός offline πωλήσεων"><i data-lucide="cloud-upload" size="18"></i> Sync (<span id="offlineBadge">${offlineQueue.length}</span>)</button>`:''}
-      <button class="btn btn-ghost" onclick="openReservationModal()" title="Νέα κράτηση" style="color:#9b59ff;border-color:rgba(155,89,255,0.3)">
+    <div class="flex gap-2" style="flex-wrap:nowrap;align-items:center;min-width:0">
+      ${offlineQueue.length>0?`<button class="btn btn-warn" onclick="syncOfflineQueue()" title="Συγχρονισμός offline πωλήσεων" style="flex:0 0 auto;white-space:nowrap"><i data-lucide="cloud-upload" size="18"></i> Sync (<span id="offlineBadge">${offlineQueue.length}</span>)</button>`:''}
+      <button class="btn btn-ghost" onclick="openReservationModal()" title="Νέα κράτηση" style="color:#9b59ff;border-color:rgba(155,89,255,0.3);flex:0 0 auto;white-space:nowrap">
         <i data-lucide="bookmark-plus" size="18"></i>
       </button>
-      <button class="btn btn-ghost" onclick="openReservationsView()" style="position:relative">
+      <button class="btn btn-ghost" onclick="openReservationsView()" style="position:relative;flex:0 0 auto;white-space:nowrap">
         <i data-lucide="bookmark" size="18"></i> Κρατήσεις
         <span id="reservationBadge" style="position:absolute;top:-4px;right:-4px;background:#9b59ff;color:#fff;border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700"></span>
       </button>
-      <button class="btn btn-ghost" onclick="openCustomerPicker()"><i data-lucide="user" size="18"></i> <span id="cartCustomer">Χωρίς πελάτη</span></button>
+      <button class="btn btn-ghost" onclick="openCustomerPicker()" style="flex:0 1 auto;min-width:0;overflow:hidden"><i data-lucide="user" size="18"></i> <span id="cartCustomer" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">Χωρίς πελάτη</span></button>
     </div>
   </div>
   ${modeToggle}
@@ -26256,7 +26256,7 @@ async function _doCheckout(){
     window._pendingCreditUsed=0;
     window._pendingPaymentMethod=null;
     const custBtn = document.getElementById('cartCustomer');
-    if(custBtn) custBtn.textContent='Χωρίς πελάτη';
+    if(custBtn){custBtn.textContent='Χωρίς πελάτη';custBtn.style.color='';custBtn.title='';}
     renderCart();renderPOSGrid();
     _refreshLiveStats();
 
@@ -26358,7 +26358,7 @@ function saveToOfflineQueue(){
     window._pendingCreditUsed = 0;
 
     const custBtn = document.getElementById('cartCustomer');
-    if(custBtn) custBtn.textContent = 'Χωρίς πελάτη';
+    if(custBtn){custBtn.textContent='Χωρίς πελάτη';custBtn.style.color='';custBtn.title='';}
     renderCart();
     if(typeof renderPOSGrid === 'function') renderPOSGrid();
 
@@ -26759,7 +26759,14 @@ function openCustomerPicker(){
 
 function pickCustomer(id,name){
   window.SELECTED_CUSTOMER_ID=id;
+  var _TIER_COLORS = {bronze:'#d98c4e',silver:'#9fb3c8',gold:'#f5c84b',platinum:'#5fd4e6'};
   document.getElementById('cartCustomer').textContent=name;
+  var _cc = document.getElementById('cartCustomer');
+  var c = CUSTOMERS.find(x=>x.id===id);
+  if(_cc){
+    _cc.style.color = _TIER_COLORS[(c && c.loyaltyTier) || 'bronze'] || '';
+    _cc.title = name;
+  }
   // Refresh tabs για personalized tab
   if(typeof renderPOSTabs==='function') renderPOSTabs();
   // Αν είμαστε σε Top, μεταβαίνουμε σε personalized
@@ -26769,7 +26776,6 @@ function pickCustomer(id,name){
     renderPOSGrid();
   }
   // Αυτόματη έκπτωση βάσει loyalty tier
-  const c = CUSTOMERS.find(x=>x.id===id);
   if(c){
     const tierDisc = {bronze:0,silver:3,gold:5,platinum:10}[c.loyaltyTier||'bronze'];
     const tierEmoji = {bronze:'🥉',silver:'🥈',gold:'🥇',platinum:'💎'}[c.loyaltyTier||'bronze'];
