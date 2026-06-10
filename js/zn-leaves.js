@@ -26155,7 +26155,7 @@ async function _doCheckout(){
         newTier = tier;
         const oldTier = c.loyaltyTier || 'bronze';
 
-        await _dbInvalidate('customers_'); sb.from('customers').update({
+        await _dbInvalidate('customers_'); await sb.from('customers').update({
           total_spent:c.totalSpent+subtotal,
           visits:c.visits+1,
           last_visit:addDays(0),
