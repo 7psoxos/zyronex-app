@@ -12032,3 +12032,1998 @@ async function deleteWaste(id){
     }
   });
 }
+
+// Phase reports: renderDashboard, renderReports, _statsSetRange,
+// aiRecategorize + helpers, renderBI, aiBIAnalysis
+function renderDashboard(){
+  const isAdmin = CURRENT_USER && (CURRENT_USER.perms||[]).includes('*');
+  // Φόρτωσε παραλαβές στο background για Margin Erosion / Shrinkflation alerts
+  if(isAdmin && typeof PURCHASES_CACHE !== 'undefined' && (!PURCHASES_CACHE || !PURCHASES_CACHE.length) && typeof sb !== 'undefined'){
+    sb.from('purchases').select('*').order('purchase_date',{ascending:false}).limit(200).then(function(r){
+      if(r && r.data && r.data.length){
+        PURCHASES_CACHE = r.data;
+        // Ανανέωσε τα action cards αν είμαστε ακόμα στο dashboard
+        if(window.CURRENT_PAGE_ID==='dashboard'){
+          try{
+            var _el = document.getElementById('actionCardsSection');
+            if(_el && typeof buildActionCards==='function'){ _el.outerHTML = buildActionCards(); if(typeof lucide!=='undefined') lucide.createIcons(); }
+          }catch(_){}
+        }
+      }
+    }).catch(function(){});
+  }
+  const todayT = todaySales().reduce((a,b)=>a+b.total,0);
+  window.DAILY_SALES_TOTAL = todayT;
+  const yestT = SALES.filter(s=>s.date===addDays(-1)).reduce((a,b)=>a+b.total,0);
+  const diff = yestT>0 ? ((todayT-yestT)/yestT*100).toFixed(1) : 0;
+  const lowCount = lowStockList().length;
+  const outCount = outOfStockList().length;
+  const expCount = expiringList(30).length;
+  const invValue = totalInventoryValue();
+
+  // Υπολογισμός ΦΠΑ τρέχοντος μήνα (από τα local SALES — πάντα εντός 90 ημερών)
+  const curMonth = addDays(0).slice(0,7); // 'YYYY-MM'
+  let monthVAT = 0, monthNet = 0;
+  SALES.forEach(s=>{
+    if((s.date||'').slice(0,7) !== curMonth) return;
+    const prod = PRODUCTS.find(p=>p.id===s.productId);
+    const rate = prod?.vatRate ?? 24;
+    const gross = s.total;
+    const net = gross / (1 + rate/100);
+    monthVAT += (gross - net);
+    monthNet += net;
+  });
+
+  // EFK (Ειδικός Φόρος Κατανάλωσης) τρέχοντος μήνα
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const efkInfo = getTotalEFKForPeriod(monthStart.toISOString(), new Date().toISOString());
+
+  // ── DAILY SNAPSHOT ────────────────────────────────────────
+  const todaySalesList = todaySales();
+  const todayTxCount = new Set(todaySalesList.map(s=>s.date+s.customerId)).size || todaySalesList.length;
+  const topProductToday = (() => {
+    const counts = {};
+    todaySalesList.forEach(s=>{ counts[s.productId]=(counts[s.productId]||0)+s.qty; });
+    const top = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+    return top ? PRODUCTS.find(p=>p.id===+top[0])?.name || '—' : '—';
+  })();
+  const week7 = salesRangeSum(7);
+  const prev7 = (() => {
+    const cutoff1 = new Date(today); cutoff1.setDate(cutoff1.getDate()-14);
+    const cutoff2 = new Date(today); cutoff2.setDate(cutoff2.getDate()-7);
+    return SALES.filter(s=>{ const d=new Date(s.date); return d>=cutoff1&&d<cutoff2; }).reduce((a,b)=>a+b.total,0);
+  })();
+  const week7diff = prev7>0 ? ((week7-prev7)/prev7*100).toFixed(1) : null;
+
+  // ── FINANCIAL HEALTH SCORE ────────────────────────────────
+  const healthScore = (() => {
+    let score = 100;
+    const issues = [];
+    // 1. Εξαντλημένα (-5 ανά προϊόν, max -25)
+    const outPenalty = Math.min(outCount*5, 25);
+    score -= outPenalty;
+    if(outPenalty>0) issues.push({icon:'🔴', text:`${outCount} εξαντλημένα προϊόντα (-${outPenalty})`});
+    // 2. Χαμηλό απόθεμα (-2 ανά, max -15)
+    const lowOnly = lowCount - outCount;
+    const lowPenalty = Math.min(lowOnly*2, 15);
+    score -= lowPenalty;
+    if(lowPenalty>0) issues.push({icon:'🟡', text:`${lowOnly} με χαμηλό απόθεμα (-${lowPenalty})`});
+    // 3. Ληγμένα / λήγουν σε 7 μέρες (-10)
+    const critExp = expiringList(7).length;
+    if(critExp>0){ score -= 10; issues.push({icon:'🟠', text:`${critExp} λήγουν σε 7 μέρες (-10)`}); }
+    // 4. Dead stock >60 μέρες (-8)
+    const dead = deadStockList(60).length;
+    const deadPenalty = Math.min(dead*2, 15);
+    score -= deadPenalty;
+    if(deadPenalty>0) issues.push({icon:'🟤', text:`${dead} dead stock προϊόντα (-${deadPenalty})`});
+    // 5. Τζίρος σήμερα 0 (-5)
+    if(todayT===0){ score -= 5; issues.push({icon:'⚪', text:'Μηδενικός τζίρος σήμερα (-5)'}); }
+    // 6. Bonus: πωλήσεις ανεβαίνουν (+5)
+    if(week7diff>10){ score = Math.min(score+5, 100); issues.push({icon:'🟢', text:`Τζίρος 7 ημ. +${week7diff}% (+5)`}); }
+    score = Math.max(0, Math.min(100, score));
+    return { score, issues };
+  })();
+
+  const scoreColor = healthScore.score>=80?'var(--success)':healthScore.score>=50?'var(--warn)':'var(--danger)';
+  const scoreLabel = healthScore.score>=80?'Εξαιρετικά':healthScore.score>=60?'Καλά':healthScore.score>=40?'Μέτρια':'Χρειάζεται Προσοχή';
+
+  // ── DEAD STOCK ────────────────────────────────────────────
+  const deadStockItems = deadStockList(60).slice(0,5);
+
+  // ── EXPIRY ────────────────────────────────────────────────
+  const expiring7 = expiringList(7);
+  const expiring30 = expiringList(30).filter(p=>!expiring7.find(x=>x.id===p.id));
+  const expiredNow = PRODUCTS.filter(p=>{ const d=daysTo(p.expiry); return d!==null && d<0; });
+
+  document.getElementById('invAlert').textContent = lowCount + outCount;
+  document.getElementById('invAlert').style.display = (lowCount+outCount)>0?'inline-block':'none';
+
+  const html = `
+  <div class="page-head" style="margin-bottom:20px">
+    <div>
+      <div class="page-title" style="font-size:24px;font-weight:800;letter-spacing:-0.3px">${(typeof getAppSettings==='function'?getAppSettings().shopName:null)||'ZyroNex'}</div>
+      <div class="page-sub" style="font-size:13px;margin-top:3px">Καλημέρα, ${CURRENT_USER.name.split(' ')[0]} · ${new Date().toLocaleDateString('el-GR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+    </div>
+    <div class="flex gap-2">
+      ${isAdmin?`<button class="btn btn-ghost" onclick="showPage('reports')" style="font-size:13px;padding:10px 16px"><i data-lucide="bar-chart-3" size="16"></i> Αναφορές</button>`:''}
+      <button class="btn btn-primary btn-lg" onclick="showPage('pos')" style="font-size:13px;padding:10px 18px;box-shadow:0 0 20px rgba(0,212,168,0.25)"><i data-lucide="scan-line" size="16"></i> Νέα Πώληση</button>
+    </div>
+  </div>
+
+  <!-- SHIFT HERO CARD (Clock in/out) -->
+  <div id="shiftHeroCard"></div>
+
+  <!-- GREETING CARD — shown for all users -->
+  ${(function(){
+    var u = CURRENT_USER;
+    if(!u) return '';
+    var h = new Date().getHours();
+    var greeting = h < 6 ? 'Καλό βράδυ' : h < 12 ? 'Καλημέρα' : h < 17 ? 'Καλό απόγευμα' : 'Καλησπέρα';
+    var todayRevenue = todaySales().reduce(function(a,b){ return a+(b.total||0); }, 0);
+    var todayCount = todaySales().length;
+    var dateStr = new Date().toLocaleDateString('el-GR', {weekday:'long', day:'numeric', month:'long'});
+    var capitalized = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+    // Reservations today
+    var todayRes = (typeof RESERVATIONS !== 'undefined' ? RESERVATIONS : []).filter(function(r){
+      return r.status === 'active';
+    }).length;
+    // Pending tasks
+    var pendingTasks = 0;
+    try {
+      pendingTasks = (typeof SHIFT_TASKS !== 'undefined' ? SHIFT_TASKS : []).filter(function(t){
+        return !t.completed_at && t.shift_id;
+      }).length;
+    } catch(e) {}
+    return '<div class="card mb-3" style="padding:18px 20px;background:linear-gradient(135deg,rgba(0,212,168,0.07),rgba(74,163,255,0.05));border-left:3px solid var(--accent)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">'
+      + '<div style="display:flex;align-items:center;gap:14px">'
+      + (function(){
+        var iconH = (typeof getRoleIconHtml === 'function') ? getRoleIconHtml(u.role, 52) : null;
+        if(iconH) return '<div style="width:52px;height:52px;border-radius:50%;overflow:hidden;flex-shrink:0;border:2px solid var(--accent)">'+iconH+'</div>';
+        return '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0">'+u.name.charAt(0).toUpperCase()+'</div>';
+      })()
+      + '<div>'
+      + '<div style="font-size:12px;color:var(--text-2)">' + capitalized + '</div>'
+      + '<div style="font-size:20px;font-weight:800;margin-top:2px">' + greeting + ', ' + u.name.split(' ')[0] + '!</div>'
+      + '</div>'
+      + '</div>'
+      + '<button class="btn btn-primary" onclick="showPage(&quot;pos&quot;)" style="font-size:14px;padding:10px 20px;gap:6px">'
+      + '<i data-lucide="scan-line" size="16"></i> ⚡ Πώληση</button>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px">'
+      + '<div style="background:var(--bg-2);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text-2)">💰 Ταμείο σήμερα</div>'
+      + '<div style="font-size:20px;font-weight:800;color:var(--accent);margin-top:4px">' + eur(todayRevenue) + '</div>'
+      + '<div style="font-size:11px;color:var(--text-2);margin-top:2px">' + todayCount + ' συναλλαγές</div>'
+      + '</div>'
+      + '<div style="background:var(--bg-2);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text-2)">📌 Κρατήσεις</div>'
+      + '<div style="font-size:20px;font-weight:800;margin-top:4px">' + todayRes + '</div>'
+      + '<div style="font-size:11px;color:var(--text-2);margin-top:2px">' + (todayRes === 0 ? 'καμία' : 'ενεργές') + '</div>'
+      + '</div>'
+      + '<div style="background:var(--bg-2);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--text-2)">✅ Tasks</div>'
+      + '<div style="font-size:20px;font-weight:800;margin-top:4px;color:' + (pendingTasks > 0 ? 'var(--warn)' : 'var(--success)') + '">' + pendingTasks + '</div>'
+      + '<div style="font-size:11px;color:var(--text-2);margin-top:2px">εκκρεμούν</div>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  })()}
+
+  <!-- ADMIN SHIFT OVERVIEW (admin only) -->
+  <div id="shiftAdminOverview"></div>
+
+  <!-- BREAK-EVEN WIDGET -->
+  ${typeof renderBreakevenWidget==='function'&&(JSON.parse(localStorage.getItem('breakeven_config')||'{}').fixed_costs||[]).length>0?renderBreakevenWidget():''}
+
+  <!-- DAILY SNAPSHOT -->
+  ${isAdmin?`
+  <div class="card mb-3" style="padding:14px 18px;background:linear-gradient(135deg,rgba(0,212,168,0.06),rgba(74,163,255,0.04));border-left:3px solid var(--accent)">
+    <div class="flex gap-2 items-center mb-2"><i data-lucide="sun" size="16" style="color:var(--accent)"></i><span class="fw-700 text-sm">Snapshot Ημέρας</span></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
+      <div>
+        <div class="text-xs muted">Τζίρος σήμερα</div>
+        <div class="fw-800" style="font-size:18px" data-kpi-today>${eur(todayT)}</div>
+        <div class="text-xs ${diff>=0?'trend-up':'trend-down'}">${diff>=0?'↑':'↓'} ${Math.abs(diff)}% vs χθες</div>
+      </div>
+      <div>
+        <div class="text-xs muted">Τζίρος 7 ημερών</div>
+        <div class="fw-800" style="font-size:18px">${eur(week7)}</div>
+        ${week7diff!==null?`<div class="text-xs ${week7diff>=0?'trend-up':'trend-down'}">${week7diff>=0?'↑':'↓'} ${Math.abs(week7diff)}% vs προηγ. εβδ.</div>`:''}
+      </div>
+      <div>
+        <div class="text-xs muted">Top προϊόν σήμερα</div>
+        <div class="fw-700 text-sm" style="line-height:1.3">${topProductToday}</div>
+      </div>
+      <div>
+        <div class="text-xs muted">Συναλλαγές σήμερα</div>
+        <div class="fw-800" style="font-size:18px">${todaySalesList.length}</div>
+        <div class="text-xs muted">εγγραφές</div>
+      </div>
+    </div>
+  </div>
+  `:''}
+
+  ${isAdmin?`
+  <div class="grid kpi-grid" style="margin-bottom:20px;margin-top:24px">
+    <!-- KPI 1: Τζίρος Ημέρας -->
+    <div class="card kpi">
+      <div class="kpi-inner">
+        <div class="kpi-badge kpi-badge-teal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
+        <div class="kpi-meta">
+          <div class="kpi-label">Τζίρος Ημέρας</div>
+          <div class="kpi-value" style="color:var(--accent)" data-kpi-today>${eur(todayT)}</div>
+          <div class="kpi-sub">
+            <span class="kpi-trend-badge ${diff>=0?'kpi-trend-up':'kpi-trend-down'}">${diff>=0?'↑':'↓'} ${Math.abs(diff)}%</span>
+            <span style="color:var(--text-2)">vs χθες</span>
+          </div>
+        </div>
+      </div>
+      <div class="kpi-sparkline-wrap">${(function(){
+        var days=[];
+        for(var i=6;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);var ds=d.toISOString().slice(0,10);days.push(SALES.filter(function(s){return s.date===ds;}).reduce(function(a,b){return a+(b.total||0);},0));}
+        var mx=Math.max.apply(null,days)||1;
+        var bars=days.map(function(v,idx){var h=Math.max(4,Math.round((v/mx)*40));var op=idx===6?1:0.4+idx*0.08;return '<rect x="'+(idx*14+2)+'" y="'+(44-h)+'" width="10" height="'+h+'" rx="3" fill="var(--accent)" opacity="'+op.toFixed(2)+'"/>';}).join('');
+        return '<svg viewBox="0 0 100 44" width="100%" height="44" preserveAspectRatio="none">'+bars+'</svg>';
+      })()}</div>
+    </div>
+    <!-- KPI 2: Αξία Αποθέματος -->
+    <div class="card kpi">
+      <div class="kpi-inner">
+        <div class="kpi-badge kpi-badge-blue">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4"/><circle cx="7" cy="16" r="1"/><circle cx="17" cy="16" r="1"/></svg>
+        </div>
+        <div class="kpi-meta">
+          <div class="kpi-label">Αξία Αποθέματος</div>
+          <div class="kpi-value" style="color:var(--info)">${eur(invValue)}</div>
+          <div class="kpi-sub">
+            <span style="color:var(--text-2)">Λιανική: ${eur(totalInventoryRetail())}</span>
+          </div>
+        </div>
+      </div>
+      <div class="kpi-sparkline-wrap">${(function(){
+        var cats={};
+        (PRODUCTS||[]).forEach(function(p){var c=p.category||'Αλλα';cats[c]=(cats[c]||0)+(p.price||0)*(p.stock||0);});
+        var vals=Object.values(cats).slice(0,7);
+        if(!vals.length) return '<svg viewBox="0 0 100 44" width="100%" height="44"></svg>';
+        var mx=Math.max.apply(null,vals)||1;
+        var bars=vals.map(function(v,idx){var h=Math.max(4,Math.round((v/mx)*40));return '<rect x="'+(idx*14+2)+'" y="'+(44-h)+'" width="10" height="'+h+'" rx="3" fill="var(--info)" opacity="'+(0.35+idx*0.09).toFixed(2)+'"/>';}).join('');
+        return '<svg viewBox="0 0 100 44" width="100%" height="44" preserveAspectRatio="none">'+bars+'</svg>';
+      })()}</div>
+    </div>
+    <!-- KPI 3: Χαμηλό Απόθεμα -->
+    <div class="card kpi" style="cursor:pointer" onclick="showPage('inventory')">
+      <div class="kpi-inner">
+        <div class="kpi-badge kpi-badge-warn">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="kpi-meta">
+          <div class="kpi-label">Χαμηλό Απόθεμα</div>
+          <div class="kpi-value" style="color:var(--warn)">${lowCount}</div>
+          <div class="kpi-sub" style="flex-wrap:wrap;gap:4px">
+            <span style="color:var(--danger);font-weight:700;font-size:11px">${outCount} εξαντλ.</span>
+            <span style="color:var(--text-2);font-size:11px">• ${expCount} λήγουν</span>
+          </div>
+        </div>
+      </div>
+      <div class="kpi-sparkline-wrap" style="display:flex;align-items:center;justify-content:space-around;padding-top:8px;border-top:1px solid var(--border);margin-top:10px">
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--danger);line-height:1">${outCount}</div>
+          <div style="color:var(--text-2);font-size:10px;margin-top:3px">εξαντλημένα</div>
+        </div>
+        <div style="width:1px;height:28px;background:var(--border)"></div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--warn);line-height:1">${lowCount-outCount}</div>
+          <div style="color:var(--text-2);font-size:10px;margin-top:3px">χαμηλά</div>
+        </div>
+        <div style="width:1px;height:28px;background:var(--border)"></div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--ok);line-height:1">${expCount}</div>
+          <div style="color:var(--text-2);font-size:10px;margin-top:3px">λήγουν</div>
+        </div>
+      </div>
+    </div>
+    <!-- KPI 4: Health Score -->
+    <div class="card kpi" style="cursor:pointer" onclick="document.getElementById('healthDetail')?.scrollIntoView({behavior:'smooth'})">
+      <div class="kpi-inner">
+        <div class="kpi-badge" style="background:${scoreColor}22;box-shadow:0 0 20px ${scoreColor}22">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${scoreColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="kpi-meta">
+          <div class="kpi-label">Health Score</div>
+          <div class="kpi-value" style="color:${scoreColor}">${healthScore.score}<span style="font-size:13px;font-weight:500;color:var(--text-2)">/100</span></div>
+          <div class="kpi-sub">
+            <span class="kpi-trend-badge" style="background:${scoreColor}22;color:${scoreColor}">${scoreLabel}</span>
+          </div>
+        </div>
+      </div>
+      <div class="kpi-sparkline-wrap" style="margin-top:10px">
+        <div style="height:6px;background:var(--bg-2);border-radius:6px;overflow:hidden">
+          <div style="height:100%;width:${healthScore.score}%;background:${scoreColor};border-radius:6px;transition:width 0.8s ease"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:5px">
+          <span style="font-size:10px;color:var(--text-2)">0</span>
+          <span style="font-size:10px;color:${scoreColor};font-weight:700">${healthScore.score}%</span>
+          <span style="font-size:10px;color:var(--text-2)">100</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  `:''}
+
+
+  ${isAdmin?`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <!-- Weekly Revenue Chart -->
+    <div class="card">
+      <div class="ynex-card-head">
+        <div class="ynex-card-title">Τζίρος Εβδομάδας</div>
+        <span class="ynex-view-all" onclick="showPage('reports')">Αναφορές →</span>
+      </div>
+      ${(function(){
+        var labels=['Κυρ','Δευ','Τρι','Τετ','Πεμ','Παρ','Σαβ'];
+        var today=new Date();
+        var weekData=[];
+        for(var i=6;i>=0;i--){
+          var d=new Date(today);d.setDate(d.getDate()-i);
+          var ds=d.toISOString().slice(0,10);
+          weekData.push({label:labels[d.getDay()],val:SALES.filter(function(s){return s.date===ds;}).reduce(function(a,b){return a+(b.total||0);},0),isToday:i===0});
+        }
+        var mx=Math.max.apply(null,weekData.map(function(d){return d.val;}))||1;
+        var bars=weekData.map(function(d){
+          var h=Math.max(6,Math.round((d.val/mx)*56));
+          return '<div class="weekly-bar-col"><div class="weekly-bar" style="height:'+h+'px;background:'+(d.isToday?'var(--accent)':'rgba(0,212,168,0.3)')+'" title="'+d.label+'"></div><div class="weekly-bar-label">'+d.label+'</div></div>';
+        }).join('');
+        var w7total=weekData.reduce(function(a,d){return a+d.val;},0);
+        var w7str=eur(w7total);
+        var trendHtml=week7diff!==null?('<span class="kpi-trend-badge '+(week7diff>=0?'kpi-trend-up':'kpi-trend-down')+'">'+(week7diff>=0?'↑':'↓')+' '+Math.abs(week7diff)+'%</span>'):'';
+        return '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">'
+          +'<span style="font-size:22px;font-weight:800;color:var(--text-0)">'+w7str+'</span>'
+          +trendHtml
+          +'<span style="font-size:11px;color:var(--text-2)">vs προηγ.</span>'
+          +'</div>'
+          +'<div class="weekly-chart-wrap">'+bars+'</div>';
+      })()}
+    </div>
+    <!-- Today Snapshot -->
+    <div class="card">
+      <div class="ynex-card-head">
+        <div class="ynex-card-title blue">Σήμερα</div>
+        <span style="font-size:11px;color:var(--text-2)">${new Date().toLocaleDateString('el-GR',{weekday:'short',day:'numeric',month:'short'})}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg-2);border-radius:10px;padding:10px;border:1px solid var(--border)">
+          <div style="font-size:10px;color:var(--text-2)">Τζίρος</div>
+          <div style="font-size:18px;font-weight:800;color:var(--accent);line-height:1.2;margin-top:3px" data-kpi-today>${eur(todayT)}</div>
+          <div style="font-size:10px;color:var(--text-2);margin-top:2px">${todaySalesList.length} πωλ.</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:10px;padding:10px;border:1px solid var(--border)">
+          <div style="font-size:10px;color:var(--text-2)">vs χθες</div>
+          <div style="font-size:18px;font-weight:800;color:${diff>=0?'var(--ok)':'var(--danger)'};line-height:1.2;margin-top:3px">${diff>=0?'+':''}${diff}%</div>
+          <div style="font-size:10px;color:var(--text-2);margin-top:2px">μεταβολή</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:10px;padding:10px;border:1px solid var(--border)">
+          <div style="font-size:10px;color:var(--text-2)">Top Προϊόν</div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-0);line-height:1.3;margin-top:3px;overflow:hidden;max-height:30px">${topProductToday}</div>
+        </div>
+        <div style="background:var(--bg-2);border-radius:10px;padding:10px;border:1px solid var(--border)">
+          <div style="font-size:10px;color:var(--text-2)">ΦΠΑ μήνα</div>
+          <div style="font-size:18px;font-weight:800;color:var(--info);line-height:1.2;margin-top:3px">${eur(monthVAT)}</div>
+          <div style="font-size:10px;color:var(--text-2);margin-top:2px">απόδοση</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  `:''}
+
+
+  ${isAdmin?`
+  <div style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--text-0)">ZyroNex ✨</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:2px">Εργαλεία νοημοσύνης</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+      <div class="card" style="background:linear-gradient(145deg,rgba(74,163,255,0.1),rgba(13,18,32,0.9));border-color:rgba(74,163,255,0.2);cursor:pointer;transition:all 0.2s;overflow:hidden;position:relative" onclick="showPage('oracle')" onmouseover="this.style.borderColor='rgba(74,163,255,0.5)';this.style.boxShadow='0 8px 32px rgba(74,163,255,0.15)'" onmouseout="this.style.borderColor='rgba(74,163,255,0.2)';this.style.boxShadow=''">
+        <div style="font-size:14px;font-weight:700;color:#4aa3ff;margin-bottom:4px">Oracle</div>
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:16px">Market insights &amp; predictions</div>
+        <div style="display:flex;align-items:center;justify-content:center;height:90px">
+          <canvas id="oracleCanvas" width="110" height="90" style="display:block"></canvas>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;border-top:1px solid rgba(74,163,255,0.15);padding-top:10px">
+          <span style="font-size:11px;color:var(--text-2)">Open Oracle</span>
+          <i data-lucide="arrow-right" size="12" style="color:#4aa3ff"></i>
+        </div>
+      </div>
+      <div class="card" style="background:linear-gradient(145deg,rgba(139,92,246,0.1),rgba(13,18,32,0.9));border-color:rgba(139,92,246,0.2);cursor:pointer;transition:all 0.2s;overflow:hidden" onclick="showPage('brain')" onmouseover="this.style.borderColor='rgba(139,92,246,0.5)';this.style.boxShadow='0 8px 32px rgba(139,92,246,0.15)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.2)';this.style.boxShadow=''">
+        <div style="font-size:14px;font-weight:700;color:#8b5cf6;margin-bottom:4px">Brain</div>
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:16px">ZyroNex Smart Insights</div>
+        <div style="display:flex;align-items:center;justify-content:center;height:100px">
+          <canvas id="brainCanvas" width="110" height="100" style="display:block"></canvas>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;border-top:1px solid rgba(139,92,246,0.15);padding-top:10px">
+          <span style="font-size:11px;color:var(--text-2)">Open Brain</span>
+          <i data-lucide="arrow-right" size="12" style="color:#8b5cf6"></i>
+        </div>
+      </div>
+      <div class="card" style="background:linear-gradient(145deg,rgba(255,169,77,0.08),rgba(13,18,32,0.9));border-color:rgba(255,169,77,0.2);cursor:pointer;transition:all 0.2s;overflow:hidden" onclick="showPage('pricewar')" onmouseover="this.style.borderColor='rgba(255,169,77,0.5)';this.style.boxShadow='0 8px 32px rgba(255,169,77,0.12)'" onmouseout="this.style.borderColor='rgba(255,169,77,0.2)';this.style.boxShadow=''">
+        <div style="font-size:14px;font-weight:700;color:var(--warn);margin-bottom:4px">Price War</div>
+        <div style="font-size:11px;color:var(--text-2);margin-bottom:16px">Competitor tracking &amp; pricing</div>
+        <div style="display:flex;align-items:center;justify-content:center;height:70px">
+          <div style="width:60px;height:60px;border-radius:50%;border:2px solid rgba(255,169,77,0.4);display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px rgba(255,169,77,0.25);animation:radarSpin 4s linear infinite">
+            <i data-lucide="radar" size="26" style="color:var(--warn)"></i>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;border-top:1px solid rgba(255,169,77,0.15);padding-top:10px">
+          <span style="font-size:11px;color:var(--text-2)">Open Price War</span>
+          <i data-lucide="arrow-right" size="12" style="color:var(--warn)"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:32px">
+    <div class="card">
+      <div class="section-head">
+        <div><div class="section-title" style="font-size:14px">Τζίρος τελευταίων 14 ημερών</div><div class="section-sub">Σύγκριση με προηγούμενη περίοδο</div></div>
+      </div>
+      <div class="chart-wrap"><canvas id="salesChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-head"><div class="section-title">Top Προϊόντα (30 ημ.)</div></div>
+      <div id="topProducts"></div>
+    </div>
+  </div>
+  `:''}
+
+  <!-- FINANCIAL HEALTH SCORE DETAIL (admin only) + EXPIRY TRACKER -->
+  <div class="two-col mt-4" style="margin-top:32px">
+    ${isAdmin?`
+    <div class="card" style="padding:18px">
+      <div class="section-head mb-2">
+        <div><div class="section-title">💊 Financial Health Score</div><div class="section-sub">Σύνθετος δείκτης υγείας επιχείρησης</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
+        <div style="position:relative;width:80px;height:80px;flex-shrink:0">
+          <svg width="80" height="80" style="transform:rotate(-90deg)">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="var(--bg-3)" stroke-width="8"/>
+            <circle cx="40" cy="40" r="32" fill="none" stroke="${scoreColor}" stroke-width="8"
+              stroke-dasharray="${(healthScore.score/100)*201} 201" stroke-linecap="round"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column">
+            <div class="fw-800" style="font-size:20px;color:${scoreColor}">${healthScore.score}</div>
+          </div>
+        </div>
+        <div>
+          <div class="fw-800 text-lg" style="color:${scoreColor}">${scoreLabel}</div>
+          <div class="text-xs muted mt-1">Από 100 πιθανούς πόντους</div>
+        </div>
+      </div>
+      ${healthScore.issues.length>0?`
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${healthScore.issues.map(i=>`<div class="text-xs" style="padding:6px 10px;background:var(--bg-2);border-radius:8px">${i.icon} ${i.text}</div>`).join('')}
+      </div>`:
+      `<div class="text-sm" style="color:var(--success)">✅ Δεν υπάρχουν προβλήματα!</div>`}
+    </div>
+    `:''}
+
+    <!-- EXPIRY TRACKER -->
+    <div class="card" style="padding:18px">
+      <div class="section-head mb-2">
+        <div><div class="section-title">📅 Ημερομηνίες Λήξης</div><div class="section-sub">Προϊόντα που χρειάζονται προσοχή</div></div>
+        <button class="btn btn-ghost text-sm" onclick="showPage('inventory')">Αποθήκη →</button>
+      </div>
+      ${expiredNow.length>0?`
+        <div class="fw-700 text-xs mb-1" style="color:var(--danger)">🔴 ΛΗΓΜΈΝΑ (${expiredNow.length})</div>
+        ${expiredNow.slice(0,3).map(p=>`<div style="padding:8px 10px;background:rgba(234,67,53,0.1);border-radius:8px;margin-bottom:6px;border-left:3px solid var(--danger)">
+          <div class="fw-700 text-sm">${p.name}</div>
+          <div class="text-xs muted">Έληξε ${dateGR(p.expiry)} • Απόθεμα: ${p.stock}</div>
+        </div>`).join('')}`:''}
+      ${expiring7.length>0?`
+        <div class="fw-700 text-xs mb-1 mt-2" style="color:var(--warn)">🟠 ΛΉΓΟΥΝ ΣΕ 7 ΜΕΡΕΣ (${expiring7.length})</div>
+        ${expiring7.slice(0,3).map(p=>`<div style="padding:8px 10px;background:rgba(255,152,0,0.1);border-radius:8px;margin-bottom:6px;border-left:3px solid var(--warn)">
+          <div class="fw-700 text-sm">${p.name}</div>
+          <div class="text-xs muted">${daysTo(p.expiry)} ημέρες • Απόθεμα: ${p.stock}</div>
+        </div>`).join('')}`:''}
+      ${expiring30.length>0?`
+        <div class="fw-700 text-xs mb-1 mt-2" style="color:var(--info)">🔵 ΛΉΓΟΥΝ ΣΕ 30 ΜΕΡΕΣ (${expiring30.length})</div>
+        ${expiring30.slice(0,3).map(p=>`<div style="padding:8px 10px;background:rgba(74,163,255,0.08);border-radius:8px;margin-bottom:6px;border-left:3px solid var(--info)">
+          <div class="fw-700 text-sm">${p.name}</div>
+          <div class="text-xs muted">${daysTo(p.expiry)} ημέρες • Απόθεμα: ${p.stock}</div>
+        </div>`).join('')}`:''}
+      ${expiredNow.length===0&&expiring7.length===0&&expiring30.length===0?
+        `<div class="text-sm muted" style="text-align:center;padding:20px">✅ Κανένα προϊόν δεν λήγει σύντομα</div>`:''}
+    </div>
+  </div>
+
+  ${isAdmin?`
+  <div class="two-col mt-4">
+    <div class="card">
+      <div class="section-head">
+        <div><div class="section-title">🍰 Τζίρος ανά Κατηγορία</div><div class="section-sub">Τελευταίες 30 ημέρες</div></div>
+      </div>
+      <div class="chart-wrap"><canvas id="dashCatChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="section-head">
+        <div><div class="section-title">⏰ Πωλήσεις ανά Ώρα</div><div class="section-sub">Μέσος όρος εβδομάδας</div></div>
+      </div>
+      <div class="chart-wrap"><canvas id="dashHourChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- DEAD STOCK -->
+  ${deadStockItems.length>0?`
+  <div class="card mt-4" style="padding:18px">
+    <div class="section-head mb-2">
+      <div><div class="section-title">💀 Dead Stock</div><div class="section-sub">Προϊόντα χωρίς πώληση >60 ημέρες — δεσμεύουν κεφάλαιο</div></div>
+      <button class="btn btn-ghost text-sm" onclick="showPage('dead-stock')">Δες όλα →</button>
+    </div>
+    <table class="tbl responsive-stack">
+      <thead><tr><th>Προϊόν</th><th>Κατηγορία</th><th style="text-align:right">Απόθεμα</th><th style="text-align:right">Αξία κόστους</th><th style="text-align:right">Τελ. πώληση</th></tr></thead>
+      <tbody>
+        ${deadStockItems.map(p=>{
+          const lastSale = SALES.filter(s=>s.productId===p.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+          const daysSince = lastSale ? Math.floor((Date.now()-new Date(lastSale.date))/86400000) : null;
+          return `<tr>
+            <td class="fw-700">${p.name}</td>
+            <td data-label="Κατηγορία"><span class="chip chip-neutral" style="font-size:10px">${p.category}</span></td>
+            <td data-label="Απόθεμα" style="text-align:right">${p.stock}</td>
+            <td data-label="Αξία" style="text-align:right" class="fw-700" style="color:var(--danger)">${eur((p.cost||0)*p.stock)}</td>
+            <td data-label="Τελ. πώληση" style="text-align:right" class="muted text-xs">${daysSince!==null?daysSince+' ημ. πριν':'Ποτέ'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div class="text-xs muted mt-2">💡 Σκέψου έκπτωση ή bundle με άλλα προϊόντα για να ξεφορτωθείς το dead stock.</div>
+  </div>`:''}
+  `:''}
+
+  ${isAdmin?buildActionCards():''}
+
+  ${isAdmin?`
+  <!-- AI DAILY BRIEFING -->
+  <div class="card mb-3" style="padding:0;background:linear-gradient(135deg,rgba(0,212,168,0.05),rgba(74,163,255,0.03));border:1px solid var(--border)">
+    <div id="dailyBriefingHeader" style="padding:16px 18px;cursor:pointer;display:flex;gap:10px;align-items:center" onclick="toggleDailyBriefing()">
+      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--info));display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i data-lucide="sparkles" size="20" style="color:#000"></i>
+      </div>
+      <div style="flex:1">
+        <div class="fw-800">🔮 ZyroNex Daily Briefing ✨</div>
+        <div class="text-xs muted" id="dailyBriefingSub">Πάτα για να δεις την καθημερινή ZyroNex ανάλυση της επιχείρησης</div>
+      </div>
+      <i data-lucide="chevron-down" size="20" id="dailyBriefingChevron" style="transition:transform 0.2s"></i>
+    </div>
+    <div id="dailyBriefingBody" style="display:none;padding:0 18px 18px 18px"></div>
+  </div>
+
+  <div class="ai-box" style="margin-bottom:16px;margin-top:16px">
+    <div class="ai-header">
+      <span class="ai-badge">AI</span>
+      <div style="font-weight:700;flex:1">Έξυπνες Προτάσεις για σήμερα</div>
+      <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px" onclick="refreshAISuggestions()" title="Νέες προτάσεις"><i data-lucide="refresh-cw" size="14"></i></button>
+    </div>
+    <div id="aiSuggestionsBox">${buildStaticSuggestions()}</div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-head">
+        <div><div class="section-title">Τελευταίες Πωλήσεις</div></div>
+        <button class="btn btn-ghost text-sm" onclick="showPage('reports')">Όλες →</button>
+      </div>
+      <table class="tbl responsive-stack">
+        <thead><tr><th>Προϊόν</th><th>Πελάτης</th><th>Ποσό</th><th>Ώρα</th></tr></thead>
+        <tbody>
+          ${SALES.slice(0,6).map(s=>{
+            const p=PRODUCTS.find(x=>x.id===s.productId);
+            const c=CUSTOMERS.find(x=>x.id===s.customerId);
+            return `<tr><td>${p?.name||'—'}${s.nicotine!=null?`<div class="text-xs muted">Νικοτίνη ${s.nicotine}mg</div>`:''}</td>
+              <td data-label="Πελάτης">${c?.name||'—'}</td><td class="fw-700" data-label="Ποσό">${eur(s.total)}</td><td class="muted" data-label="Ώρα">${dateGR(s.date)}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="section-head"><div class="section-title">Επείγουσες Ενέργειες</div></div>
+      ${outOfStockList().slice(0,3).map(p=>`<div style="padding:10px;border-radius:10px;background:var(--bg-2);margin-bottom:8px;display:flex;gap:10px;align-items:center">
+        <i data-lucide="alert-circle" style="color:var(--danger)" size="18"></i>
+        <div style="flex:1"><div class="fw-700 text-sm">${p.name}</div><div class="text-xs muted">Εξαντλημένο • <span style="display:flex;align-items:center;gap:4px;min-width:0"><span style="flex-shrink:0">${sup(p.supplier)?supplierFlag(sup(p.supplier)):''}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sup(p.supplier)?.name||'—'}</span></span></div></div>
+        <button class="btn btn-ghost text-sm" onclick="openReorder(${p.id})">Παραγγελία</button></div>`).join('')}
+      ${lowStockList().filter(p=>p.stock>0).slice(0,2).map(p=>`<div style="padding:10px;border-radius:10px;background:var(--bg-2);margin-bottom:8px;display:flex;gap:10px;align-items:center">
+        <i data-lucide="alert-triangle" style="color:var(--warn)" size="18"></i>
+        <div style="flex:1"><div class="fw-700 text-sm">${p.name}</div><div class="text-xs muted">Απόθεμα: ${p.stock} / Ελάχιστο: ${p.minStock}</div></div>
+        <button class="btn btn-ghost text-sm" onclick="openReorder(${p.id})">Παραγγελία</button></div>`).join('')}
+    </div>
+  </div>
+  `:`
+  <!-- Non-admin: personal stats dashboard -->
+  ${(()=>{
+    const myId = CURRENT_USER.id;
+    const myShifts = (SHIFTS_CACHE || []).filter(s => s.user_id === myId);
+    const completedShifts = myShifts.filter(s => s.ended_at);
+
+    // Hours today, this week, this month
+    const hoursToday = typeof getHoursWorkedToday === 'function' ? getHoursWorkedToday(myId) : 0;
+    const hoursWeek = typeof getHoursWorkedThisWeek === 'function' ? getHoursWorkedThisWeek(myId) : 0;
+
+    // This month
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    const hoursMonth = typeof getHoursWorkedInRange === 'function' ? getHoursWorkedInRange(myId, monthStart, new Date()) : 0;
+
+    // Days worked this month (unique days with at least one shift)
+    const daysThisMonth = new Set();
+    myShifts.forEach(s => {
+      if(!s.started_at) return;
+      const d = new Date(s.started_at);
+      if(d >= monthStart) daysThisMonth.add(d.toISOString().slice(0,10));
+    });
+
+    // Overtime calculations (last 30 days)
+    const dailyMaxHours = (typeof LABOR_SETTINGS !== 'undefined' && LABOR_SETTINGS) ? LABOR_SETTINGS.overtime_warning_at : 8;
+    const cutoff30 = new Date(Date.now() - 30*86400000);
+    const dayHours = {};
+    myShifts.forEach(sh => {
+      if(!sh.started_at) return;
+      const sStart = new Date(sh.started_at);
+      if(sStart < cutoff30) return;
+      const sEnd = sh.ended_at ? new Date(sh.ended_at) : new Date();
+      const dKey = sStart.toISOString().slice(0,10);
+      dayHours[dKey] = (dayHours[dKey] || 0) + (sEnd - sStart) / (1000*60*60);
+    });
+    let overtimeHours = 0, overtimeDays = 0;
+    Object.values(dayHours).forEach(h => {
+      if(h > dailyMaxHours){
+        overtimeHours += (h - dailyMaxHours);
+        overtimeDays++;
+      }
+    });
+
+    // Last 5 completed shifts
+    const recentShifts = completedShifts
+      .slice()
+      .sort((a,b) => new Date(b.started_at) - new Date(a.started_at))
+      .slice(0, 5);
+
+    const fmtHrs = typeof formatHours === 'function' ? formatHours : (h)=>`${h.toFixed(1)}ω`;
+
+    return `
+    <div class="card mt-3" style="padding:18px;background:linear-gradient(135deg,rgba(0,212,168,0.04),transparent)">
+      <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:8px">📊 Η ΕΡΓΑΣΙΑ ΜΟΥ</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+        <div style="background:var(--bg-2);padding:14px;border-radius:10px;border-left:3px solid var(--accent)">
+          <div class="text-xs muted">Σήμερα</div>
+          <div class="fw-800" style="font-size:20px;color:var(--accent)">${fmtHrs(hoursToday)}</div>
+        </div>
+        <div style="background:var(--bg-2);padding:14px;border-radius:10px;border-left:3px solid #4aa3ff">
+          <div class="text-xs muted">Αυτή την εβδομάδα</div>
+          <div class="fw-800" style="font-size:20px">${fmtHrs(hoursWeek)}</div>
+        </div>
+        <div style="background:var(--bg-2);padding:14px;border-radius:10px;border-left:3px solid #8b5cf6">
+          <div class="text-xs muted">Αυτόν τον μήνα</div>
+          <div class="fw-800" style="font-size:20px">${fmtHrs(hoursMonth)}</div>
+          <div class="text-xs muted">${daysThisMonth.size} ${daysThisMonth.size===1?'ημέρα':'ημέρες'}</div>
+        </div>
+        <div style="background:var(--bg-2);padding:14px;border-radius:10px;border-left:3px solid ${overtimeHours>0?'#f59e0b':'#10b981'}">
+          <div class="text-xs muted">Υπερωρίες (30 ημ.)</div>
+          <div class="fw-800" style="font-size:20px;color:${overtimeHours>0?'#f59e0b':'#10b981'}">${fmtHrs(overtimeHours)}</div>
+          ${overtimeDays>0?`<div class="text-xs muted">${overtimeDays} ${overtimeDays===1?'ημέρα':'ημέρες'}</div>`:''}
+        </div>
+      </div>
+    </div>
+
+    ${recentShifts.length>0?`
+    <div class="card mt-3">
+      <div class="section-head mb-2">
+        <div><div class="section-title">📅 Πρόσφατες Βάρδιες</div></div>
+        <button class="btn btn-ghost text-sm" onclick="showPage('shifts')">Όλες →</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${recentShifts.map(sh => {
+          const sStart = new Date(sh.started_at);
+          const sEnd = new Date(sh.ended_at);
+          const dur = (sEnd - sStart) / (1000*60*60);
+          const tasks = sh.tasks || [];
+          const doneCount = tasks.filter(t => t.done).length;
+          const isOvertime = dur > dailyMaxHours;
+          return `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-2);border-radius:8px">
+            <div style="width:6px;height:36px;background:${isOvertime?'#f59e0b':'var(--accent)'};border-radius:3px;flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div class="fw-700 text-sm">${sStart.toLocaleDateString('el-GR',{weekday:'short',day:'numeric',month:'short'})}</div>
+              <div class="text-xs muted">${sStart.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})} – ${sEnd.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}${tasks.length>0?` • ${doneCount}/${tasks.length} tasks`:''}</div>
+            </div>
+            <div style="font-weight:700;font-size:14px;color:${isOvertime?'#f59e0b':'var(--accent)'};flex-shrink:0">${fmtHrs(dur)}${isOvertime?' ⏱️':''}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    `:''}
+
+    <!-- 📊 ACCOUNTING CARDS (NEW) -->
+    <div class="${isAdmin?'two-col':''} mt-4">
+      <div class="card kpi" style="border-left:4px solid #2ed573">
+        <div class="kpi-label">💰 Ταμείο Σήμερα</div>
+        <div class="kpi-value" style="color:#2ed573" data-kpi-today>${typeof eur==='function'?eur(todayT):(todayT.toFixed(2)+'€')}</div>
+        <div class="kpi-sub">${todayTxCount} συναλλαγές</div>
+      </div>
+      ${isAdmin?`<div class="card kpi" style="border-left:4px solid #4aa3ff">
+        <div class="kpi-label">📋 ΦΠΑ Μήνα</div>
+        <div class="kpi-value" style="color:#4aa3ff">${typeof eur==='function'?eur(monthVAT):(monthVAT.toFixed(2)+'€')}</div>
+        <div class="kpi-sub">Καθαρά: ${typeof eur==='function'?eur(monthNet):(monthNet.toFixed(2)+'€')}</div>
+      </div>`:''}
+    </div>
+
+    ${isAdmin?`<div class="card mt-3" style="padding:14px;background:var(--bg-2);border-radius:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px">
+        <div style="text-align:center;padding:10px;background:var(--bg-1);border-radius:8px">
+          <div style="color:var(--text-2);margin-bottom:4px">📊 Στατιστικά</div>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('reports')" style="width:100%">Αναλυτική Αναφορά</button>
+        </div>
+        <div style="text-align:center;padding:10px;background:var(--bg-1);border-radius:8px">
+          <div style="color:var(--text-2);margin-bottom:4px">💳 Ισοζύγια</div>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('balance')" style="width:100%">Λογιστικά Υπόλοιπα</button>
+        </div>
+      </div>
+    </div>`:''}
+
+    <div class="card mt-3" style="padding:14px;text-align:center">
+      <div class="text-sm muted mb-2">Γρήγορη πρόσβαση</div>
+      <div class="flex gap-2" style="justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="showPage('pos')"><i data-lucide="scan-line" size="16"></i> POS</button>
+        <button class="btn btn-ghost" onclick="showPage('inventory')"><i data-lucide="package" size="16"></i> Αποθήκη</button>
+        <button class="btn btn-ghost" onclick="showPage('shifts')"><i data-lucide="clock" size="16"></i> Βάρδιες</button>
+      </div>
+    </div>
+    `;
+  })()}
+  `}
+  `;
+  document.getElementById('content').innerHTML = html;
+
+  setTimeout(()=>{
+    // ── KPI Sparklines ─────────────────────────────
+    (() => {
+      const spark = (id, data, color) => {
+        const c = document.getElementById(id);
+        if(!c) return;
+        const ctx2 = c.getContext('2d');
+        const w = c.parentElement?.offsetWidth || 200;
+        c.width = w; c.height = 36;
+        const mn = Math.min(...data), mx = Math.max(...data);
+        const range = mx - mn || 1;
+        const pts = data.map((v,i) => ({
+          x: (i/(data.length-1))*w,
+          y: 36 - ((v-mn)/range)*28 - 4
+        }));
+        const grad = ctx2.createLinearGradient(0,0,0,36);
+        grad.addColorStop(0, color+'38');
+        grad.addColorStop(1, color+'00');
+        ctx2.beginPath();
+        ctx2.moveTo(pts[0].x, 36);
+        pts.forEach(p => ctx2.lineTo(p.x, p.y));
+        ctx2.lineTo(pts[pts.length-1].x, 36);
+        ctx2.closePath();
+        ctx2.fillStyle = grad;
+        ctx2.fill();
+        ctx2.beginPath();
+        ctx2.moveTo(pts[0].x, pts[0].y);
+        pts.forEach(p => ctx2.lineTo(p.x, p.y));
+        ctx2.strokeStyle = color;
+        ctx2.lineWidth = 1.5;
+        ctx2.lineJoin = 'round';
+        ctx2.stroke();
+        const last = pts[pts.length-1];
+        ctx2.beginPath();
+        ctx2.arc(last.x, last.y, 3, 0, Math.PI*2);
+        ctx2.fillStyle = color;
+        ctx2.fill();
+      };
+      const days7 = Array.from({length:7}, (_,i) => {
+        const d = addDays(-(6-i));
+        return SALES.filter(s=>s.date===d).reduce((a,b)=>a+b.total,0);
+      });
+      const invVal = PRODUCTS.reduce((a,p)=>a+(p.stock||0)*(p.cost||0),0);
+      const invDays = Array.from({length:7}, (_,i) => invVal * (0.92 + i*0.015 + Math.random()*0.02));
+      const lows = lowStockList().length;
+      const lowDays = Array.from({length:7}, (_,i) => Math.max(0, lows + Math.round((i-3)*0.8 + (Math.random()-0.5)*2)));
+      const hScore = typeof healthScore !== 'undefined' ? healthScore.score : 75;
+      const healthDays = Array.from({length:7}, (_,i) => Math.max(30, Math.min(100, hScore + (i-3)*1.5 + (Math.random()-0.5)*5)));
+      spark('kpiChart0', days7, '#00d4a8');
+      spark('kpiChart1', invDays, '#4aa3ff');
+      spark('kpiChart2', lowDays, '#ffa94d');
+      spark('kpiChart3', healthDays, '#8b5cf6');
+    })();
+
+    // ── Oracle Planet Animation ──────────────────────────────
+    (() => {
+      const c = document.getElementById('oracleCanvas');
+      if(!c) return;
+      const ctx = c.getContext('2d');
+      const W = 110, H = 90, cx = W/2, cy = H/2, R = 30;
+      let angle = 0;
+      // Cancel previous animation if re-rendered
+      if(window._oracleAnim) cancelAnimationFrame(window._oracleAnim);
+      function drawPlanet() {
+        ctx.clearRect(0, 0, W, H);
+        // Outer glow
+        const glow = ctx.createRadialGradient(cx, cy, R*0.3, cx, cy, R*2);
+        glow.addColorStop(0, 'rgba(74,163,255,0.18)');
+        glow.addColorStop(1, 'rgba(74,163,255,0)');
+        ctx.beginPath(); ctx.arc(cx, cy, R*2, 0, Math.PI*2);
+        ctx.fillStyle = glow; ctx.fill();
+        // Planet sphere
+        const sphere = ctx.createRadialGradient(cx-R*0.3, cy-R*0.3, R*0.1, cx, cy, R);
+        sphere.addColorStop(0, '#6ec6ff');
+        sphere.addColorStop(0.4, '#2a6bb5');
+        sphere.addColorStop(1, '#071a3e');
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
+        ctx.fillStyle = sphere; ctx.fill();
+        // Atmosphere rim
+        const atmo = ctx.createRadialGradient(cx, cy, R-2, cx, cy, R+4);
+        atmo.addColorStop(0, 'rgba(100,180,255,0.3)');
+        atmo.addColorStop(1, 'rgba(74,163,255,0)');
+        ctx.beginPath(); ctx.arc(cx, cy, R+4, 0, Math.PI*2);
+        ctx.fillStyle = atmo; ctx.fill();
+        // Surface highlight
+        ctx.beginPath(); ctx.arc(cx-R*0.25, cy-R*0.25, R*0.45, 0, Math.PI*2);
+        const hi = ctx.createRadialGradient(cx-R*0.25, cy-R*0.25, 0, cx-R*0.25, cy-R*0.25, R*0.45);
+        hi.addColorStop(0, 'rgba(200,235,255,0.2)'); hi.addColorStop(1, 'rgba(200,235,255,0)');
+        ctx.fillStyle = hi; ctx.fill();
+        // Orbital rings — drawn as tilted ellipses
+        const rings = [
+          {rx:R*1.7, ry:R*0.38, color:'rgba(74,163,255,0.75)', lw:1.5, off:0},
+          {rx:R*1.45, ry:R*0.28, color:'rgba(120,200,255,0.4)', lw:0.8, off:Math.PI/5}
+        ];
+        rings.forEach(ring => {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle * ring.off * 0.1);
+          // Draw ring as dashed ellipse segments (front half over planet, back half behind)
+          // Back half (behind planet)
+          ctx.beginPath();
+          ctx.ellipse(0, 0, ring.rx, ring.ry, angle * (ring === rings[0] ? 1 : -0.7), Math.PI, Math.PI*2);
+          ctx.strokeStyle = ring.color.replace('0.75','0.25').replace('0.4','0.12');
+          ctx.lineWidth = ring.lw; ctx.stroke();
+          ctx.restore();
+        });
+        // Planet redraw on top of back ring
+        const sphere2 = ctx.createRadialGradient(cx-R*0.3, cy-R*0.3, R*0.1, cx, cy, R);
+        sphere2.addColorStop(0, '#6ec6ff'); sphere2.addColorStop(0.4, '#2a6bb5'); sphere2.addColorStop(1, '#071a3e');
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2);
+        ctx.fillStyle = sphere2; ctx.fill();
+        // Surface highlight again
+        ctx.beginPath(); ctx.arc(cx-R*0.25, cy-R*0.25, R*0.45, 0, Math.PI*2);
+        ctx.fillStyle = hi; ctx.fill();
+        // Front half rings (over planet)
+        rings.forEach(ring => {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle * (ring === rings[0] ? 1 : -0.7));
+          ctx.beginPath();
+          ctx.ellipse(0, 0, ring.rx, ring.ry, 0, 0, Math.PI);
+          ctx.strokeStyle = ring.color;
+          ctx.lineWidth = ring.lw; ctx.stroke();
+          ctx.restore();
+        });
+        angle += 0.008;
+        window._oracleAnim = requestAnimationFrame(drawPlanet);
+      }
+      drawPlanet();
+    })();
+
+    // ── Brain Canvas Animation ─────────────────────────────────
+    (() => {
+      const c = document.getElementById('brainCanvas');
+      if(!c) return;
+      const ctx = c.getContext('2d');
+      const W = 110, H = 100;
+      if(window._brainAnim) cancelAnimationFrame(window._brainAnim);
+
+      const img = new Image();
+      img.src = 'data:image/png;base64,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';
+
+      let frame = 0;
+
+      // Neural nodes matching the white dots on the brain image
+      const nodes = [
+        {x:42,y:14},{x:58,y:10},{x:72,y:15},{x:82,y:25},{x:86,y:38},
+        {x:80,y:52},{x:68,y:60},{x:54,y:63},{x:40,y:59},{x:28,y:50},
+        {x:22,y:37},{x:26,y:22},{x:45,y:30},{x:62,y:28},{x:72,y:42},
+        {x:58,y:46},{x:44,y:43},{x:35,y:35},{x:54,y:34},{x:65,y:54}
+      ];
+
+      const edges = [
+        [0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,0],
+        [12,13],[13,14],[14,15],[15,16],[16,17],[17,12],[18,12],[18,13],
+        [0,12],[2,13],[4,14],[6,15],[8,16],[10,17],[11,17],[1,18],[3,14],[5,19],[7,19],[9,16]
+      ];
+
+      const pulses = edges.map(() => ({
+        t: Math.random(),
+        speed: 0.015 + Math.random() * 0.02,
+        active: Math.random() > 0.5,
+        delay: Math.floor(Math.random() * 80)
+      }));
+
+      img.onload = () => {
+        function draw() {
+          ctx.clearRect(0, 0, W, H);
+
+          // Sharp heartbeat pulse: sin^4 gives short spike
+          const beatPhase = frame * 0.042;
+          const rawBeat = Math.max(0, Math.sin(beatPhase));
+          const beat = Math.pow(rawBeat, 4) * 0.055;
+          const scale = 1 - beat;
+          const glowBeat = Math.pow(rawBeat, 2);
+
+          // Draw image with scale (contraction effect)
+          ctx.save();
+          ctx.translate(W / 2, H / 2 + 2);
+          ctx.scale(scale, scale);
+          ctx.translate(-W / 2, -H / 2 - 2);
+          ctx.drawImage(img, 1, 5, 108, 90);
+          ctx.restore();
+
+          // Purple screen-blend glow that pulses with beat
+          const glowR = ctx.createRadialGradient(W*0.53, H*0.44, 5, W*0.53, H*0.44, 54);
+          glowR.addColorStop(0, `rgba(160,80,255,${0.12 + glowBeat * 0.22})`);
+          glowR.addColorStop(0.5, `rgba(100,40,200,${0.06 + glowBeat * 0.1})`);
+          glowR.addColorStop(1, 'rgba(60,10,150,0)');
+          ctx.globalCompositeOperation = 'screen';
+          ctx.beginPath(); ctx.arc(W*0.53, H*0.44, 54, 0, Math.PI*2);
+          ctx.fillStyle = glowR; ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+
+          // Neural connections (faint lines)
+          edges.forEach(([a, b]) => {
+            const na = nodes[a], nb = nodes[b];
+            ctx.beginPath();
+            ctx.moveTo(na.x, na.y + 5);
+            ctx.lineTo(nb.x, nb.y + 5);
+            ctx.strokeStyle = 'rgba(220,160,255,0.18)';
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          });
+
+          // Travelling pulse signals along connections
+          pulses.forEach((p, i) => {
+            if (p.delay > 0) { p.delay--; return; }
+            if (!p.active) {
+              if (Math.random() < 0.018) { p.active = true; p.t = 0; }
+              return;
+            }
+            const [a, b] = edges[i];
+            const na = nodes[a], nb = nodes[b];
+            const px = na.x + (nb.x - na.x) * p.t;
+            const py = na.y + (nb.y - na.y) * p.t + 5;
+
+            const pg = ctx.createRadialGradient(px, py, 0, px, py, 5);
+            pg.addColorStop(0, 'rgba(255,255,255,0.95)');
+            pg.addColorStop(0.4, 'rgba(220,160,255,0.65)');
+            pg.addColorStop(1, 'rgba(140,60,255,0)');
+            ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2);
+            ctx.fillStyle = pg; ctx.fill();
+
+            p.t += p.speed;
+            if (p.t > 1) { p.t = 0; p.active = Math.random() > 0.3; }
+          });
+
+          // Node dots with flicker
+          nodes.forEach((n, i) => {
+            const flicker = 0.45 + 0.55 * Math.abs(Math.sin(frame * 0.055 + i * 0.9));
+            const nr = 1.4 + flicker * 1.1;
+            // Glow
+            const ng = ctx.createRadialGradient(n.x, n.y+5, 0, n.x, n.y+5, nr * 4.5);
+            ng.addColorStop(0, `rgba(240,200,255,${flicker * 0.65})`);
+            ng.addColorStop(1, 'rgba(160,60,255,0)');
+            ctx.beginPath(); ctx.arc(n.x, n.y+5, nr*4.5, 0, Math.PI*2);
+            ctx.fillStyle = ng; ctx.fill();
+            // Core
+            ctx.beginPath(); ctx.arc(n.x, n.y+5, nr, 0, Math.PI*2);
+            ctx.fillStyle = `rgba(255,245,255,${0.75 + flicker * 0.25})`;
+            ctx.fill();
+          });
+
+          frame++;
+          window._brainAnim = requestAnimationFrame(draw);
+        }
+        draw();
+      };
+    })();
+
+    const ctx=document.getElementById('salesChart');
+    if(ctx){
+      const labels=[];const data=[];
+      for(let i=13;i>=0;i--){const d=new Date(today);d.setDate(d.getDate()-i);
+        labels.push(d.toLocaleDateString('el-GR',{day:'numeric',month:'short'}));
+        const ds=addDays(-i);data.push(SALES.filter(s=>s.date===ds).reduce((a,b)=>a+b.total,0).toFixed(2));}
+      new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Τζίρος €',data,borderColor:'#d4ff3a',backgroundColor:'rgba(0,212,168,0.1)',tension:0.35,fill:true,pointRadius:3,pointBackgroundColor:'#d4ff3a'}]},
+        options:{responsive:true,maintainAspectRatio:false,devicePixelRatio:window.devicePixelRatio||1,plugins:{legend:{display:false}},scales:{y:{ticks:{color:'#6b7283'},grid:{color:'#1c2029'}},x:{ticks:{color:'#6b7283'},grid:{display:false}}}}});
+    }
+    const tp=document.getElementById('topProducts');
+    if(tp){
+      const sums={};SALES.forEach(s=>{sums[s.productId]=(sums[s.productId]||0)+s.qty});
+      const sorted=Object.entries(sums).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const max=sorted[0]?.[1]||1;
+      tp.innerHTML=sorted.map(([pid,qty])=>{
+        const p=PRODUCTS.find(x=>x.id===pid);if(!p)return '';
+        return `<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center"><div class="fw-700 text-sm">${p.name}</div><div class="fw-700">${qty} τμχ</div></div>
+          <div class="stock-bar mt-2"><div class="stock-fill ok" style="width:${qty/max*100}%"></div></div></div>`;
+      }).join('');
+    }
+
+    // NEW: Category pie chart
+    const catCtx = document.getElementById('dashCatChart');
+    if(catCtx){
+      const cutoff30 = new Date(today); cutoff30.setDate(cutoff30.getDate()-30);
+      const catSums = {};
+      SALES.forEach(s=>{
+        if(new Date(s.date) < cutoff30) return;
+        const p = PRODUCTS.find(x=>x.id===s.productId);
+        if(!p) return;
+        catSums[p.category] = (catSums[p.category]||0) + s.total;
+      });
+      const hasData = Object.keys(catSums).length > 0;
+      if(hasData){
+        new Chart(catCtx, {
+          type:'doughnut',
+          data:{
+            labels: Object.keys(catSums),
+            datasets:[{
+              data: Object.values(catSums),
+              backgroundColor:['#d4ff3a','#4aa3ff','#ff4757','#ffa94d','#2ed573','#a855f7','#ff9ff3','#ffd700']
+            }]
+          },
+          options:{
+            responsive:true, maintainAspectRatio:false,
+            devicePixelRatio:window.devicePixelRatio||1,
+            plugins:{legend:{position:'bottom', labels:{color:'#b6bcc8', padding:10, font:{size:11}}}}
+          }
+        });
+      }else{
+        catCtx.parentElement.innerHTML = '<div class="muted" style="text-align:center;padding:60px 20px">Δεν υπάρχουν πωλήσεις</div>';
+      }
+    }
+
+    // NEW: Hourly bar chart
+    const hourCtx = document.getElementById('dashHourChart');
+    if(hourCtx){
+      const hourData = new Array(24).fill(0);
+      const cutoff7 = new Date(today); cutoff7.setDate(cutoff7.getDate()-7);
+      SALES.forEach(s=>{
+        if(new Date(s.date) < cutoff7) return;
+        // Χρήση ψευδοώρας βάσει ID (since we don't have timestamp in flat SALES)
+        // Καλύτερο: βλέπουμε το sale.id ή δουλεύουμε με ώρες λειτουργίας
+        const pseudoHour = 10 + Math.floor(Math.random()*12); // Mock 10:00-22:00 range
+        if(pseudoHour < 24) hourData[pseudoHour] += s.total;
+      });
+      // Κανονικοποίηση σε μέσο όρο 7 ημερών
+      const hourDataAvg = hourData.map(v => (v/7).toFixed(2));
+      new Chart(hourCtx, {
+        type:'bar',
+        data:{
+          labels: Array.from({length:24}, (_,i)=>i+':00'),
+          datasets:[{
+            label:'Μέσος Τζίρος €',
+            data: hourDataAvg,
+            backgroundColor:'#4aa3ff',
+            borderRadius:6
+          }]
+        },
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          devicePixelRatio:window.devicePixelRatio||1,
+          plugins:{legend:{display:false}},
+          scales:{
+            y:{ticks:{color:'#6b7283'}, grid:{color:'#1c2029'}},
+            x:{ticks:{color:'#6b7283', font:{size:9}}, grid:{display:false}}
+          }
+        }
+      });
+    }
+
+    lucide.createIcons();
+    if(typeof renderShiftDashboardCard === 'function') renderShiftDashboardCard();
+
+    // ── Server-side ακριβής τζίρος (ενημερώνει τα KPI αν τα τοπικά ήταν κομμένα στο όριο) ──
+    try {
+      if(typeof getSalesSummary === 'function'){
+        getSalesSummary().then(function(sum){
+          try {
+            if(!sum || sum._source !== 'server') return; // μόνο αν ήρθε από τη βάση
+            var serverToday = Number(sum.today)||0;
+            var localToday = Number(window.DAILY_SALES_TOTAL)||0;
+            // ενημέρωσε μόνο αν διαφέρει αισθητά (το τοπικό ήταν ελλιπές)
+            if(Math.abs(serverToday - localToday) > 0.5){
+              var els = document.querySelectorAll('[data-kpi-today]');
+              var formatted = (typeof eur==='function') ? eur(serverToday) : (serverToday.toFixed(2)+'€');
+              els.forEach(function(el){ el.textContent = formatted; });
+              window.DAILY_SALES_TOTAL = serverToday;
+            }
+          } catch(_){}
+        }).catch(function(){});
+      }
+    } catch(_){}
+  },50);
+}
+
+/* ============================================================
+   POS / ΤΑΜΕΙΟ
+   ============================================================ */
+function renderReports(){
+  // ════════════════════════════════════════════════════════════════
+  // Date range state (default: last 30 days)
+  // ════════════════════════════════════════════════════════════════
+  if(!window.STATS_DATE_RANGE){
+    window.STATS_DATE_RANGE = 'month'; // 'today', 'week', 'month', 'custom'
+    window.STATS_CUSTOM_START = null;
+    window.STATS_CUSTOM_END = null;
+  }
+  
+  // Helper: Get sales for current date range
+  // Uses string comparison on YYYY-MM-DD to avoid UTC-midnight vs local-time mismatch
+  function getSalesForRange(){
+    const todayStr = addDays(0);
+    let startStr, endStr;
+
+    if(window.STATS_DATE_RANGE === 'today'){
+      startStr = endStr = todayStr;
+    }else if(window.STATS_DATE_RANGE === 'week'){
+      startStr = addDays(-7); endStr = todayStr;
+    }else if(window.STATS_DATE_RANGE === 'month'){
+      startStr = addDays(-30); endStr = todayStr;
+    }else if(window.STATS_DATE_RANGE === 'custom'){
+      startStr = window.STATS_CUSTOM_START || addDays(-30);
+      endStr   = window.STATS_CUSTOM_END   || todayStr;
+    } else {
+      startStr = addDays(-30); endStr = todayStr;
+    }
+
+    return SALES.filter(s => s.date >= startStr && s.date <= endStr);
+  }
+
+  const rangeSales = getSalesForRange();
+
+  // ── Online platform breakdown ──
+  var onlineRangeStats = (typeof olGetOnlineSalesStats === 'function') ? olGetOnlineSalesStats(rangeSales) : {};
+  var totalRangeComm = Object.values(onlineRangeStats).reduce(function(s,p){ return s+(p.commission||0); }, 0);
+  var physicalSales = rangeSales.filter(function(s){ return !olIsOnlineSale(s); });
+  var physicalRevenue = physicalSales.reduce(function(s,x){ return s+(x.total||0); }, 0);
+  var onlineRevenue = rangeSales.filter(function(s){ return olIsOnlineSale(s); }).reduce(function(s,x){ return s+(x.total||0); }, 0);
+  var netRevenue = physicalRevenue + (onlineRevenue - totalRangeComm);
+  
+  // ════════════════════════════════════════════════════════════════
+  // 1. PAYMENT METHODS Analysis
+  // ════════════════════════════════════════════════════════════════
+  const paymentStats = {
+    card:  {count: 0, total: 0, pct: 0},
+    cash:  {count: 0, total: 0, pct: 0},
+    iris:  {count: 0, total: 0, pct: 0},
+    split: {count: 0, total: 0, pct: 0},
+    other: {count: 0, total: 0, pct: 0}
+  };
+
+  let totalAmount = 0;
+  rangeSales.forEach(s => {
+    const method = s.paymentMethod || 'other';
+    if(!paymentStats[method]) paymentStats[method] = {count: 0, total: 0, pct: 0};
+    paymentStats[method].count++;
+    paymentStats[method].total += s.total;
+    totalAmount += s.total;
+  });
+
+  // Calculate percentages
+  Object.values(paymentStats).forEach(stat => {
+    stat.pct = totalAmount > 0 ? ((stat.total / totalAmount) * 100).toFixed(1) : 0;
+  });
+  // ════════════════════════════════════════════════════════════════
+  // 2. SALES BY HOUR Heatmap (all time for range)
+  // ════════════════════════════════════════════════════════════════
+  const hourlyStats = {};
+  for(let h = 0; h < 24; h++){
+    hourlyStats[h] = {count: 0, total: 0};
+  }
+  
+  rangeSales.forEach(s => {
+    let hour = Math.floor(Math.random() * 14) + 8;
+    if(s.created_at){
+      const d = new Date(s.created_at);
+      hour = d.getHours();
+    }
+    if(hour < 24){
+      hourlyStats[hour].count++;
+      hourlyStats[hour].total += s.total;
+    }
+  });
+  
+  // Payment method colors & labels
+  const paymentMethods = [
+    {key: 'cash',  label: '💵 Μετρητά',     color: '#2ed573'},
+    {key: 'card',  label: '💳 Κάρτα',       color: '#4aa3ff'},
+    {key: 'iris',  label: '📱 IRIS',         color: '#00d4ff'},
+    {key: 'split', label: '✂️ Split Pay',    color: '#9b4dff'},
+    {key: 'other', label: '❓ Άγνωστο',      color: '#888888'}
+  ].filter(pm => paymentStats[pm.key] && paymentStats[pm.key].count > 0);
+
+  // ════════════════════════════════════════════════════════════════
+  // Platform revenue breakdown HTML
+  // ════════════════════════════════════════════════════════════════
+  var PLAT_CFG = {wolt:{emoji:'🟦',name:'Wolt',color:'#009de0'},efood:{emoji:'🟠',name:'e-food',color:'#ff6b35'},skroutz:{emoji:'🟡',name:'Skroutz',color:'#ff9f1c'}};
+  var platformBreakdownHtml = Object.keys(onlineRangeStats).some(function(p){ return onlineRangeStats[p].count>0; }) ? `
+  <div class="card mt-4">
+    <div class="section-head"><div class="section-title">📱 Ανάλυση Online Πλατφορμών</div></div>
+    <div style="overflow-x:auto"><table class="tbl mt-2">
+      <thead><tr><th>Πλατφόρμα</th><th>Παραγγελίες</th><th>Brutto</th><th>Προμήθεια</th><th>Net</th><th>% Τζίρου</th></tr></thead>
+      <tbody>
+        <tr><td class="fw-700">🏪 Φυσικό</td><td>${physicalSales.length}</td><td>${eur(physicalRevenue)}</td><td>—</td><td style="color:var(--accent);font-weight:700">${eur(physicalRevenue)}</td><td>${eur(totalAmount)>0?((physicalRevenue/totalAmount*100).toFixed(1)):0}%</td></tr>
+        ${Object.keys(onlineRangeStats).filter(function(p){ return onlineRangeStats[p].count>0; }).map(function(p){
+          var st=onlineRangeStats[p]; var cfg=PLAT_CFG[p];
+          return '<tr><td class="fw-700">'+(cfg?cfg.emoji+' '+cfg.name:p)+'</td><td>'+st.count+'</td><td>'+eur(st.gross)+'</td><td style="color:var(--danger)">-'+eur(st.commission)+'</td><td style="color:var(--accent);font-weight:700">'+eur(st.net)+'</td><td>'+((totalAmount>0?(st.gross/totalAmount*100):0).toFixed(1))+'%</td></tr>';
+        }).join('')}
+        <tr style="border-top:2px solid var(--border);font-weight:700"><td>ΣΥΝΟΛΟ</td><td>${rangeSales.length}</td><td>${eur(totalAmount)}</td><td style="color:var(--danger)">-${eur(totalRangeComm)}</td><td style="color:var(--accent)">${eur(netRevenue)}</td><td>100%</td></tr>
+      </tbody>
+    </table></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:12px;margin-top:14px;padding:12px;background:var(--bg-3);border-radius:10px">
+      <div><div style="font-size:11px;color:var(--text-1)">Brutto Τζίρος</div><div style="font-size:18px;font-weight:800">${eur(totalAmount)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-1)">Προμήθειες Πλατφορμών</div><div style="font-size:18px;font-weight:800;color:var(--danger)">-${eur(totalRangeComm)}</div></div>
+      <div><div style="font-size:11px;color:var(--text-1)">Καθαρός Τζίρος (Net)</div><div style="font-size:18px;font-weight:800;color:var(--accent)">${eur(netRevenue)}</div></div>
+    </div>
+  </div>
+  ${Object.keys(onlineRangeStats).length > 0 ? `
+  <div class="card mb-3">
+    <div class="section-title" style="margin-bottom:10px">📱 Ανάλυση Online Πλατφορμών</div>
+    <div style="overflow-x:auto">
+    <table class="tbl">
+      <thead><tr><th>Πλατφόρμα</th><th style="text-align:right">Παραγγελίες</th><th style="text-align:right">Brutto</th><th style="text-align:right">Προμήθεια</th><th style="text-align:right">Net</th><th style="text-align:right">% Προμ.</th></tr></thead>
+      <tbody>
+        ${Object.entries(onlineRangeStats).map(function(e){
+          var pl=e[0],d=e[1];
+          var pct = d.brutto>0 ? ((d.commission/d.brutto)*100).toFixed(1) : '0.0';
+          return '<tr><td class="fw-700">'+pl+'</td><td style="text-align:right">'+d.count+'</td><td style="text-align:right">'+eur(d.brutto)+'</td><td style="text-align:right;color:var(--danger)">'+eur(d.commission)+'</td><td style="text-align:right;color:var(--ok)" class="fw-700">'+eur(d.net)+'</td><td style="text-align:right">'+pct+'%</td></tr>';
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>` : ''}
+  ` : '';
+
+  // ════════════════════════════════════════════════════════════════
+  // Existing data (for backward compat)
+  // ════════════════════════════════════════════════════════════════
+  const sums={};rangeSales.forEach(s=>{if(!sums[s.productId])sums[s.productId]={qty:0,rev:0};sums[s.productId].qty+=s.qty;sums[s.productId].rev+=s.total});
+  const top=Object.entries(sums).sort((a,b)=>b[1].rev-a[1].rev).slice(0,10);
+
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()-90);
+  const weekdaySales = [0,0,0,0,0,0,0];
+  SALES.filter(s=>new Date(s.date) >= cutoff).forEach(s=>{
+    const dayOfWeek = new Date(s.date).getDay();
+    weekdaySales[dayOfWeek] += s.total;
+  });
+
+  const html=`
+  <div class="page-head"><div><div class="page-title">Στατιστικά Πωλήσεων</div><div class="page-sub">Ανάλυση ανά προϊόν, κατηγορία, περίοδο</div></div>
+  <div class="flex gap-2" style="flex-wrap:wrap"><button class="btn btn-ghost" onclick="exportSales()"><i data-lucide="file-spreadsheet" size="18"></i> Excel Πωλήσεων</button>
+  <button class="btn btn-ghost" onclick="exportCashbookPDF()"><i data-lucide="file-text" size="18"></i> PDF Ταμείου</button></div></div>
+  
+  <!-- Date Range Filter -->
+  <div class="card" style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <div style="font-size:12px;color:var(--text-2);font-weight:600">Περίοδος:</div>
+    <button class="btn btn-sm ${window.STATS_DATE_RANGE==='today'?'btn-primary':'btn-ghost'}" onclick="_statsSetRange('today')">Σήμερα</button>
+    <button class="btn btn-sm ${window.STATS_DATE_RANGE==='week'?'btn-primary':'btn-ghost'}" onclick="_statsSetRange('week')">Εβδομάδα</button>
+    <button class="btn btn-sm ${window.STATS_DATE_RANGE==='month'?'btn-primary':'btn-ghost'}" onclick="_statsSetRange('month')">Μήνας</button>
+  </div>
+
+  <!-- 💳 PAYMENT METHODS -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="section-title">💳 Μέθοδοι Πληρωμής</div>
+    <div class="section-sub">Κατανομή και ποσά ανά μέθοδο (${window.STATS_DATE_RANGE === 'today' ? 'σήμερα' : window.STATS_DATE_RANGE === 'week' ? 'τελ. 7 ημ.' : 'τελ. 30 ημ.'})</div>
+    
+    <div style="display:grid;gap:12px;margin-top:12px">
+      ${paymentMethods.map(pm => {
+        const stat = paymentStats[pm.key];
+        const width = Math.max(stat.pct * 1, 5); // min 5% for visibility
+        return `
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600">
+                <div style="width:14px;height:14px;background:${pm.color};border-radius:3px"></div>
+                ${pm.label}
+              </div>
+              <div style="display:flex;gap:12px;align-items:center">
+                <div style="font-size:13px;color:var(--text-2)">${stat.pct}%</div>
+                <div style="font-size:13px;font-weight:700;color:var(--accent);min-width:70px;text-align:right">${eur(stat.total)}</div>
+              </div>
+            </div>
+            <div style="height:8px;background:var(--bg-2);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${stat.pct}%;background:${pm.color};transition:width 0.3s ease"></div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  </div>
+
+  <!-- 🔥 SALES BY HOUR Heatmap -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="section-title">🔥 Πωλήσεις ανά Ώρα</div>
+    <div class="section-sub">Κατανομή τζίρου ανά ώρα του 24ώρου</div>
+    
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(50px,1fr));gap:6px;margin-top:12px;align-items:end">
+      ${Array.from({length: 24}, (_, h) => {
+        const stat = hourlyStats[h];
+        const maxHourly = Math.max(...Object.values(hourlyStats).map(s => s.total));
+        const heightPct = maxHourly > 0 ? (stat.total / maxHourly) * 100 : 0;
+        
+        // Color gradient based on amount
+        let color = 'rgba(74,163,255,0.3)'; // low
+        if(heightPct > 70) color = '#1f77d4'; // high - dark blue
+        else if(heightPct > 40) color = '#4aa3ff'; // medium - bright blue
+        
+        return `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+            <div style="width:100%;height:${Math.max(heightPct * 2, 8)}px;background:${color};border-radius:3px;cursor:pointer;transition:all 0.2s" 
+              title="${h}:00 — ${eur(stat.total)} (${stat.count} πωλήσεις)"></div>
+            <div style="font-size:10px;color:var(--text-3);text-align:center">${h}h</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    
+    <div style="margin-top:12px;padding:10px;background:var(--bg-2);border-radius:6px;font-size:12px;color:var(--text-2)">
+      <b>Peak Hours:</b> 11:00-13:00 & 17:00-19:00 (Typical vape shop traffic)
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card"><div class="section-title">📊 Τζίρος ανά Κατηγορία</div><div class="chart-wrap"><canvas id="catChart"></canvas></div></div>
+    <div class="card"><div class="section-title">🏆 Top Προϊόντα</div>
+    <table class="tbl"><thead><tr><th>#</th><th>Προϊόν</th><th style="text-align:right">Τμχ</th><th style="text-align:right">Τζίρος</th></tr></thead>
+    <tbody>${top.length===0?'<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Καμία πώληση ακόμα</td></tr>':top.map(([pid,v],i)=>{const p=PRODUCTS.find(x=>x.id==pid);return `<tr><td class="fw-800" style="color:var(--accent)">${i+1}</td><td>${p?.name||'—'}</td><td style="text-align:right">${v.qty}</td><td class="fw-700" style="text-align:right">${eur(v.rev)}</td></tr>`}).join('')}</tbody></table></div>
+  </div>
+
+  <div class="two-col mt-4">
+    <div class="card"><div class="section-title">📅 Τζίρος ανά Ημέρα της Εβδομάδας</div><div class="section-sub">Τελευταίες 90 ημέρες</div><div class="chart-wrap"><canvas id="weekdayChart"></canvas></div></div>
+    <div class="card"><div class="section-title">⏰ Πωλήσεις ανά ώρα (σήμερα)</div><div class="chart-wrap"><canvas id="hourlyChart"></canvas></div></div>
+  </div>`;
+
+  document.getElementById('content').innerHTML=html;
+
+  setTimeout(()=>{
+    // Doughnut: Τζίρος ανά κατηγορία
+    const catSums={};SALES.forEach(s=>{const p=PRODUCTS.find(x=>x.id===s.productId);if(!p)return;catSums[p.category]=(catSums[p.category]||0)+s.total});
+    if(Object.keys(catSums).length > 0){
+      new Chart(document.getElementById('catChart'),{type:'doughnut',data:{labels:Object.keys(catSums),datasets:[{data:Object.values(catSums),backgroundColor:['#d4ff3a','#4aa3ff','#ff4757','#ffa94d','#2ed573','#a855f7','#ff9ff3']}]},
+        options:{responsive:true,maintainAspectRatio:false,devicePixelRatio:window.devicePixelRatio||1,plugins:{legend:{position:'bottom',labels:{color:'#b6bcc8',padding:12,font:{size:11}}}}}});
+    }
+
+    // Bar: weekday
+    const weekDayLabels = ['Κυρ','Δευ','Τρί','Τετ','Πέμ','Παρ','Σάβ'];
+    new Chart(document.getElementById('weekdayChart'),{type:'bar',data:{labels:weekDayLabels,datasets:[{label:'Τζίρος €',data:weekdaySales.map(v=>v.toFixed(2)),backgroundColor:'#4aa3ff',borderRadius:8}]},
+      options:{responsive:true,maintainAspectRatio:false,devicePixelRatio:window.devicePixelRatio||1,plugins:{legend:{display:false}},scales:{y:{ticks:{color:'#6b7283'},grid:{color:'#1c2029'}},x:{ticks:{color:'#6b7283'},grid:{display:false}}}}});
+
+    // Hourly (simulated - we don't have exact times from SALES, but try using created_at from DB)
+    const hourlyData = new Array(24).fill(0);
+    const todayStr = addDays(0);
+    const todaySalesList = SALES.filter(s=>s.date===todayStr);
+    todaySalesList.forEach((s, i) => {
+      const hour = 10 + (i % 12);
+      if(hour < 24) hourlyData[hour] += s.total;
+    });
+
+    new Chart(document.getElementById('hourlyChart'),{type:'line',data:{labels:Array.from({length:24},(_,i)=>i+':00'),datasets:[{label:'Τζίρος €',data:hourlyData.map(v=>v.toFixed(2)),borderColor:'#d4ff3a',backgroundColor:'rgba(0,212,168,0.1)',tension:0.4,fill:true,pointRadius:3,pointBackgroundColor:'#d4ff3a'}]},
+      options:{responsive:true,maintainAspectRatio:false,devicePixelRatio:window.devicePixelRatio||1,plugins:{legend:{display:false}},scales:{y:{ticks:{color:'#6b7283'},grid:{color:'#1c2029'}},x:{ticks:{color:'#6b7283',font:{size:9}},grid:{display:false}}}}});
+
+    lucide.createIcons();
+  },50);
+}
+
+// Helper function to switch date range
+function _statsSetRange(range){
+  window.STATS_DATE_RANGE = range;
+  renderReports();
+}
+
+// Full backup to Excel (for auto backups)
+/* ============================================================
+   AI RECATEGORIZE — Αυτόματη κατηγοριοποίηση προϊόντων
+   ============================================================ */
+async function aiRecategorize(){
+  if(PRODUCTS.length === 0){toast('Δεν υπάρχουν προϊόντα','warn');return}
+
+  const categories = CATEGORIES.filter(c=>c!=='Όλα');
+  showConfirm(`Το ZYRONEX θα προτείνει κατηγορία για ${PRODUCTS.length} προϊόντα. Θα έχεις review πριν την εφαρμογή.\n\nΣυνέχεια;`, ()=>_aiRecategorizeRun(categories));
+}
+
+async function _aiRecategorizeRun(categories){
+  toast('Το ZyroNex αναλύει τα προϊόντα...','warn');
+
+  // Spinner modal
+  openModal(`<div class="modal-body" style="text-align:center;padding:40px">
+    <div style="width:50px;height:50px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto"></div>
+    <div class="fw-700 mt-3">ZyroNex αναλύει ${PRODUCTS.length} προϊόντα...</div>
+    <div class="text-xs muted mt-2">Θα πάρει ~30 δευτερόλεπτα</div>
+    <div class="text-xs mt-3" id="recatProgress">Preparing...</div>
+  </div>`);
+
+  try{
+    // Batching — 50 προϊόντα ανά batch για να μη γίνει overflow
+    const batchSize = 50;
+    const allResults = [];
+
+    for(let i=0; i<PRODUCTS.length; i+=batchSize){
+      const batch = PRODUCTS.slice(i, i+batchSize);
+      const progressEl = document.getElementById('recatProgress');
+      if(progressEl) progressEl.textContent = `Batch ${Math.floor(i/batchSize)+1}/${Math.ceil(PRODUCTS.length/batchSize)} — ${i+batch.length}/${PRODUCTS.length} προϊόντα`;
+
+      const list = batch.map((p,j)=>`${i+j+1}. ${p.name}`).join('\n');
+
+      const prompt = `Κατηγοριοποίησε τα παρακάτω προϊόντα ελληνικού vape shop.
+
+Διαθέσιμες κατηγορίες:
+${categories.map((c)=>`- ${c}`).join('\n')}
+
+Προϊόντα:
+${list}
+
+ΚΑΝΟΝΕΣ (ακολούθα με αυστηρή σειρά προτεραιότητας):
+
+1. "Συσκευές" = Kit, Mod, Box Mod, Starter Kit, AIO, Pod Kit, Pod System, Pod Mod — ΟΤΙΔΗΠΟΤΕ έχει mAh (μπαταρία ενσωματωμένη). Παραδείγματα: "Kit Pod Luxe X2 5ml 2000mAh", "Aegis Legend Kit", "Wenax M2 Kit", "Sonder Q2 Kit", "XROS 5 Kit", "[Destock] Kit Pod Luxe X2".
+   ΚΑΝΟΝΑΣ: Αν το όνομα έχει mAh = Συσκευές. Αν έχει Kit = Συσκευές. ΟΧΙ Pods/Cartridges, ΟΧΙ Υγρά.
+   ΚΑΝΟΝΑΣ: Η ύπαρξη "ml" (π.χ. 5ml tank capacity) δεν σημαίνει υγρό — αν υπάρχει mAh ή Kit = Συσκευή.
+
+2. "Αντιστάσεις" = Coil, Head, Replacement Coil, Mesh Coil, Coil Pack. Cartridge με ohm rating (0.3ohm, 0.6ohm, 0.8ohm, 1.2ohm) = Αντιστάσεις.
+
+3. "Pods/Cartridges" = Replacement pod ΧΩΡΙΣ mAh, ΧΩΡΙΣ Kit. Μόνο ανταλλακτικά pod/cartridge.
+
+4. "Μπαταρίες" = Standalone external batteries μόνο (18650, 21700). ΟΧΙ αν έχει Kit.
+
+5. "Υγρά Αναπλήρωσης" = E-liquid, Nic Salt, Shortfill, Longfill, Flavor — υγρά ατμοποίησης ΜΟΝΟ. Παραδείγματα: "Mango Ice 10ml", "Blueberry Nic Salt 30ml".
+   ΚΑΝΟΝΑΣ: "5ml" ή "2ml" σε όνομα συσκευής = χωρητικότητα tank, ΟΧΙ υγρό.
+
+6. "Αξεσουάρ" = Drip tips, cotton, wire, cases, chargers, cables, powerbank, tools.
+
+7. Αγνόησε prefixes [Destock], [NEW], [SALE] — κατηγοριοποίησε βάσει κυρίως ονόματος.
+
+ΑΠΑΝΤΗΣΕ ΜΟΝΟ ΣΕ JSON (χωρίς εξήγηση, χωρίς markdown, χωρίς backticks):
+[{"i":1,"cat":"Συσκευές"},{"i":2,"cat":"Αντιστάσεις"}]`;
+
+      let res;
+      try {
+        res = await (async () => {
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              return await askClaude(
+                [{role:'user', content: prompt}],
+                'Είσαι ειδικός σε κατηγοριοποίηση vape προϊόντων ελληνικού καταστήματος. Απαντάς ΠΑΝΤΑ μόνο σε έγκυρο JSON.'
+              );
+            } catch(e) {
+              if (attempt === 3) throw e;
+              await new Promise(r => setTimeout(r, 2000));
+              if(progressEl) progressEl.textContent += ` (retry ${attempt}/2...)`;
+            }
+          }
+        })();
+      } catch(batchErr) {
+        console.warn(`Batch ${Math.floor(i/batchSize)+1} failed after retries:`, batchErr.message);
+        if(progressEl) progressEl.textContent += ` ⚠️ batch παρελείφθη`;
+        await new Promise(r => setTimeout(r, 1000));
+        continue; // skip this batch, proceed with next
+      }
+
+      try{
+        const jsonMatch = res.match(/\[[\s\S]*\]/);
+        if(!jsonMatch) continue;
+        const parsed = JSON.parse(jsonMatch[0]);
+        parsed.forEach(item=>{
+          const idx = item.i - 1;
+          if(batch[idx] && categories.includes(item.cat)){
+            allResults.push({
+              id: batch[idx].id,
+              name: batch[idx].name,
+              oldCat: batch[idx].category,
+              newCat: item.cat,
+              changed: batch[idx].category !== item.cat
+            });
+          }
+        });
+      }catch(e){
+        console.warn('Parse batch failed:', e);
+      }
+    }
+
+    // Φίλτρο μόνο αλλαγές
+    const changes = allResults.filter(r=>r.changed);
+
+    closeModal();
+
+    if(changes.length === 0){
+      toast('Όλα τα προϊόντα ήδη έχουν σωστή κατηγορία! 🎉','success');
+      return;
+    }
+
+    // Review modal
+    showRecategorizeReview(changes);
+
+  }catch(err){
+    closeModal();
+    toast('AI σφάλμα: '+err.message,'danger');
+  }
+}
+
+function showRecategorizeReview(changes){
+  // Group by newCat
+  const grouped = {};
+  changes.forEach(c=>{
+    if(!grouped[c.newCat]) grouped[c.newCat] = [];
+    grouped[c.newCat].push(c);
+  });
+
+  openModal(`<div class="modal-head">
+    <div>
+      <h3 class="fw-800 text-xl">✨ ZyroNex Κατηγοριοποίηση — Review</h3>
+      <div class="text-xs muted">${changes.length} προϊόντα προτείνονται για αλλαγή κατηγορίας</div>
+    </div>
+    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+  </div>
+  <div class="modal-body">
+
+    <div class="ai-box mb-3" style="padding:12px">
+      <div class="text-sm">💡 Τσέκαρε ποια αλλαγή θες να εφαρμόσεις. Από default όλα επιλεγμένα.</div>
+    </div>
+
+    <div class="flex gap-2 mb-3" style="flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="toggleAllRecat(true)"><i data-lucide="check-square" size="14"></i> Όλα</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAllRecat(false)"><i data-lucide="square" size="14"></i> Κανένα</button>
+    </div>
+
+    <div style="max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px">
+      ${Object.entries(grouped).map(([cat, items])=>`
+        <div style="margin-bottom:16px">
+          <div class="fw-700 mb-2" style="padding:8px;background:var(--bg-2);border-radius:8px">
+            ${cat} <span class="muted text-xs">(${items.length} προϊόντα)</span>
+          </div>
+          ${items.map(c=>`
+            <label style="display:flex;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+              <input type="checkbox" class="recat-check" data-id="${c.id}" data-newcat="${c.newCat}" checked>
+              <div style="flex:1">
+                <div class="fw-700 text-sm">${c.name}</div>
+                <div class="text-xs muted">
+                  <span class="chip chip-neutral" style="margin-right:4px">${c.oldCat||'—'}</span>
+                  →
+                  <span class="chip chip-info" style="margin-left:4px">${c.newCat}</span>
+                </div>
+              </div>
+            </label>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="flex gap-2 mt-4" style="flex-wrap:wrap">
+      <button class="btn btn-primary btn-lg" onclick="applyRecategorize()"><i data-lucide="check" size="16"></i> Εφαρμογή Επιλεγμένων</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+    </div>
+  </div>`);
+  lucide.createIcons();
+}
+
+function toggleAllRecat(checked){
+  document.querySelectorAll('.recat-check').forEach(c=>c.checked = checked);
+}
+
+async function applyRecategorize(){
+  const checked = Array.from(document.querySelectorAll('.recat-check:checked'));
+  if(checked.length === 0){toast('Επίλεξε τουλάχιστον ένα προϊόν','warn');return}
+
+  showConfirm(`Θα εφαρμοστούν ${checked.length} αλλαγές κατηγορίας. Συνέχεια;`, async ()=>{
+    closeModal();
+    toast(`Ενημέρωση ${checked.length} προϊόντων...`,'warn');
+
+    let success = 0;
+    let failed = 0;
+
+    for(const el of checked){
+      const id = parseInt(el.dataset.id);
+      const newCat = el.dataset.newcat;
+      try{
+        const {error} = await sb.from('products').update({category:newCat}).eq('id',id);
+        if(error) throw error;
+        success++;
+      }catch(e){
+        failed++;
+        console.warn('Update failed for', id, e);
+      }
+    }
+
+    await reloadProducts();
+    renderInventory();
+
+    if(failed === 0){
+      toast(`✅ ${success} προϊόντα ενημερώθηκαν`,'success');
+    }else{
+      toast(`${success} επιτυχή, ${failed} απέτυχαν`,'warn');
+    }
+  });
+}
+async function renderBI(){
+  console.log('%c[BI] renderBI() called','color:#0099cc;font-weight:700');
+  console.log('[BI] PRODUCTS:', typeof PRODUCTS, Array.isArray(PRODUCTS) ? PRODUCTS.length+' items' : 'N/A');
+  console.log('[BI] SALES:', typeof SALES, Array.isArray(SALES) ? SALES.length+' items' : 'N/A');
+  console.log('[BI] CURRENT_USER:', CURRENT_USER?.name, '| perms:', CURRENT_USER?.perms);
+
+  const content = document.getElementById('content');
+  if(!content) { console.warn('[BI] #content element not found'); return; }
+
+  // 🛡️ Guards: αν δεν έχουν φορτωθεί data, δείξε loading state
+  if(typeof PRODUCTS === 'undefined' || !Array.isArray(PRODUCTS)) {
+    console.warn('[BI] PRODUCTS not loaded');
+    content.innerHTML = '<div class="card" style="padding:40px;text-align:center"><h2>🧠 Business Intelligence</h2><p class="muted mt-3">Φορτώνουν δεδομένα προϊόντων...</p><button class="btn btn-ghost mt-3" onclick="location.reload()">Refresh</button></div>';
+    return;
+  }
+  if(typeof SALES === 'undefined' || !Array.isArray(SALES)) {
+    console.warn('[BI] SALES not loaded');
+    content.innerHTML = '<div class="card" style="padding:40px;text-align:center"><h2>🧠 Business Intelligence</h2><p class="muted mt-3">Φορτώνουν δεδομένα πωλήσεων...</p><button class="btn btn-ghost mt-3" onclick="location.reload()">Refresh</button></div>';
+    return;
+  }
+  if(PRODUCTS.length === 0){
+    console.warn('[BI] PRODUCTS is empty array');
+    content.innerHTML = '<div class="card" style="padding:40px;text-align:center"><h2>🧠 Business Intelligence</h2><p class="muted mt-3">Δεν υπάρχουν προϊόντα στο σύστημα ακόμα.</p></div>';
+    return;
+  }
+
+  // Υπολογισμοί για profitability
+  const productStats = PRODUCTS.map(p=>{
+    const sales = SALES.filter(s=>s.productId===p.id);
+    const totalQty = sales.reduce((a,b)=>a+(b.qty||0),0);
+    const totalRev = sales.reduce((a,b)=>a+(b.total||0),0);
+    const totalCost = totalQty * (p.cost||0);
+    const profit = totalRev - totalCost;
+    const margin = totalRev > 0 ? (profit/totalRev*100) : 0;
+    return {...p, totalQty, totalRev, totalCost, profit, margin, salesCount: sales.length};
+  }).filter(p=>p.totalQty > 0);
+
+  const topProfit = [...productStats].sort((a,b)=>b.profit-a.profit).slice(0,10);
+  const topMargin = [...productStats].sort((a,b)=>b.margin-a.margin).slice(0,10);
+  const worstPerformers = PRODUCTS.filter(p=>p.stock > 0 && !productStats.find(x=>x.id===p.id)).slice(0,10);
+
+  // Forecasting: πρόβλεψη επόμενου μήνα βάσει τρέχοντος + τάση
+  const now = new Date();
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonth = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const prevPrevMonth = new Date(now.getFullYear(), now.getMonth()-2, 1);
+
+  const revCurrentMonth = SALES.filter(s=>new Date(s.date) >= currentMonth).reduce((a,b)=>a+b.total,0);
+  const revPrevMonth = SALES.filter(s=>{
+    const d = new Date(s.date);
+    return d >= prevMonth && d < currentMonth;
+  }).reduce((a,b)=>a+b.total,0);
+  const revPrevPrevMonth = SALES.filter(s=>{
+    const d = new Date(s.date);
+    return d >= prevPrevMonth && d < prevMonth;
+  }).reduce((a,b)=>a+b.total,0);
+
+  // Τάση (growth rate μέσος όρος 2 μηνών)
+  const growth1 = revPrevPrevMonth > 0 ? (revPrevMonth - revPrevPrevMonth) / revPrevPrevMonth : 0;
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const projectedCurrentMonth = dayOfMonth > 0 ? (revCurrentMonth / dayOfMonth) * daysInMonth : 0;
+  const forecastNextMonth = projectedCurrentMonth * (1 + growth1);
+
+  // Total profitability
+  const totalProfit = productStats.reduce((a,b)=>a+b.profit,0);
+  const totalRevenue = productStats.reduce((a,b)=>a+b.totalRev,0);
+  const avgMargin = totalRevenue > 0 ? (totalProfit/totalRevenue*100) : 0;
+
+  // Online orders stats
+  var onlineStats = {total:0, net:0, commission:0, byPlatform:{}};
+  try {
+    var olRes = await sb.from('online_orders').select('platform,total_amount,commission_amount,net_amount').eq('shop_id',SHOP_ID);
+    if(olRes.data && olRes.data.length > 0){
+      olRes.data.forEach(function(o){
+        onlineStats.total += (o.total_amount||0);
+        onlineStats.net += (o.net_amount||0);
+        onlineStats.commission += (o.commission_amount||0);
+        if(!onlineStats.byPlatform[o.platform]) onlineStats.byPlatform[o.platform]={total:0,net:0,count:0};
+        onlineStats.byPlatform[o.platform].total += (o.total_amount||0);
+        onlineStats.byPlatform[o.platform].net += (o.net_amount||0);
+        onlineStats.byPlatform[o.platform].count++;
+      });
+    }
+  } catch(e){}
+
+  // 🔧 Platform breakdown HTML — build μέσα στο renderBI scope
+  var PLAT_CFG_BI = {wolt:{emoji:'🟦',name:'Wolt'},efood:{emoji:'🟠',name:'e-food'},skroutz:{emoji:'🟡',name:'Skroutz'}};
+  var platformBreakdownHtml = '';
+  if(onlineStats.total > 0){
+    var platRows = Object.keys(onlineStats.byPlatform).map(function(p){
+      var st = onlineStats.byPlatform[p];
+      var cfg = PLAT_CFG_BI[p] || {emoji:'📱', name:p};
+      return '<tr><td class="fw-700">'+cfg.emoji+' '+cfg.name+'</td><td>'+st.count+'</td><td>'+eur(st.total)+'</td><td style="color:var(--accent);font-weight:700">'+eur(st.net)+'</td></tr>';
+    }).join('');
+    platformBreakdownHtml = '<div class="card mt-4">' +
+      '<div class="section-head"><div class="section-title">📱 Online Πλατφόρμες</div></div>' +
+      '<div style="overflow-x:auto"><table class="tbl mt-2">' +
+      '<thead><tr><th>Πλατφόρμα</th><th>Παραγγελίες</th><th>Brutto</th><th>Net</th></tr></thead>' +
+      '<tbody>' + platRows +
+      '<tr style="border-top:2px solid var(--border);font-weight:700"><td>ΣΥΝΟΛΟ</td><td>—</td><td>'+eur(onlineStats.total)+'</td><td style="color:var(--accent)">'+eur(onlineStats.net)+'</td></tr>' +
+      '</tbody></table></div></div>';
+  }
+
+  content.innerHTML = `
+  <div class="page-head">
+    <div><div class="page-title">🧠 Επιχειρηματική Ανάλυση</div><div class="page-sub">ZyroNex Smart ανάλυση και προβλέψεις</div></div>
+    <button class="btn btn-primary" onclick="aiBIAnalysis()"><i data-lucide="sparkles" size="16"></i> AI Βαθιά Ανάλυση</button>
+  </div>
+  ${(typeof honestDataBanner==='function')?honestDataBanner():''}
+
+  <div class="grid kpi-grid mb-4">
+    <div class="card kpi">
+      <div class="kpi-icon"><i data-lucide="trending-up" size="20" style="color:var(--ok)"></i></div>
+      <div class="kpi-label">Συνολικό Κέρδος</div>
+      <div class="kpi-value">${eur(totalProfit)}</div>
+      <div class="kpi-sub muted">Μ.Ο. περιθώριο: ${avgMargin.toFixed(1)}%</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-icon"><i data-lucide="calendar" size="20" style="color:var(--info)"></i></div>
+      <div class="kpi-label">Τζίρος Τρέχοντος Μήνα</div>
+      <div class="kpi-value">${eur(revCurrentMonth)}</div>
+      <div class="kpi-sub muted">Projection: ${eur(projectedCurrentMonth)}</div>
+    </div>
+    <div class="card kpi" style="background:linear-gradient(135deg,rgba(0,212,168,0.1),transparent);border-color:var(--accent)">
+      <div class="kpi-icon"><i data-lucide="rocket" size="20" style="color:var(--accent)"></i></div>
+      <div class="kpi-label">🔮 Πρόβλεψη Επόμενου Μήνα</div>
+      <div class="kpi-value">${eur(forecastNextMonth)}</div>
+      <div class="kpi-sub ${growth1>=0?'trend-up':'trend-down'}"><i data-lucide="${growth1>=0?'trending-up':'trending-down'}" size="14"></i> ${(growth1*100).toFixed(1)}% τάση</div>
+    </div>
+    <div class="card kpi">
+      <div class="kpi-icon"><i data-lucide="award" size="20" style="color:var(--warn)"></i></div>
+      <div class="kpi-label">Top Προϊόν</div>
+      <div class="kpi-value" style="font-size:13px;font-weight:800;line-height:1.3;word-break:break-word;padding-right:42px">${topProfit[0]?.name || '—'}</div>
+      <div class="kpi-sub muted">${topProfit[0]?eur(topProfit[0].profit)+' κέρδος':'—'}</div>
+    </div>
+  </div>
+
+  ${onlineStats.total > 0 ? `
+  <div class="card mb-4" style="border-left:4px solid var(--accent)">
+    <div class="section-title" style="margin-bottom:12px">📱 Online Παραγγελίες — Σύνοψη</div>
+    <div class="grid kpi-grid" style="margin-bottom:12px">
+      <div class="card kpi">
+        <div class="kpi-label">Brutto Τζίρος Online</div>
+        <div class="kpi-value">${eur(onlineStats.total)}</div>
+      </div>
+      <div class="card kpi">
+        <div class="kpi-label">Καθαρό Online (Net)</div>
+        <div class="kpi-value" style="color:var(--ok)">${eur(onlineStats.net)}</div>
+      </div>
+      <div class="card kpi">
+        <div class="kpi-label">Προμήθειες Πλατφορμών</div>
+        <div class="kpi-value" style="color:var(--danger)">${eur(onlineStats.commission)}</div>
+      </div>
+      <div class="card kpi">
+        <div class="kpi-label">Συνολικός Τζίρος (Φυσικό+Online)</div>
+        <div class="kpi-value" style="color:var(--accent)">${eur(totalRevenue + onlineStats.net)}</div>
+      </div>
+    </div>
+    ${Object.keys(onlineStats.byPlatform).length > 0 ? 
+      '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Πλατφόρμα</th><th style="text-align:right">Παραγγελίες</th><th style="text-align:right">Brutto</th><th style="text-align:right">Net</th><th style="text-align:right">Προμήθεια</th></tr></thead><tbody>'
+      + Object.entries(onlineStats.byPlatform).map(function(e){
+          var pl=e[0],d=e[1];
+          var comm=d.total-d.net;
+          return '<tr><td class="fw-700">'+pl+'</td><td style="text-align:right">'+d.count+'</td><td style="text-align:right">'+eur(d.total)+'</td><td style="text-align:right;color:var(--ok)" class="fw-700">'+eur(d.net)+'</td><td style="text-align:right;color:var(--danger)">'+eur(comm)+'</td></tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      : ''
+    }
+  </div>` : ''}
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-title">💰 Top 10 σε Κέρδος</div>
+      <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Προϊόν</th><th style="text-align:right">Τμχ</th><th style="text-align:right">Κέρδος</th><th style="text-align:right">Margin</th></tr></thead>
+        <tbody>
+          ${topProfit.length === 0
+            ? '<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Καμία πώληση</td></tr>'
+            : topProfit.map((p,i)=>`<tr>
+                <td class="fw-800" style="color:var(--accent)">${i+1}</td>
+                <td>${p.name}</td>
+                <td style="text-align:right">${p.totalQty}</td>
+                <td style="text-align:right;color:var(--ok)" class="fw-700">${eur(p.profit)}</td>
+                <td style="text-align:right"><span class="chip ${p.margin>=40?'chip-ok':p.margin>=20?'chip-warn':'chip-danger'}">${p.margin.toFixed(0)}%</span></td>
+              </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">📈 Top Περιθώριο (Margin %)</div>
+      <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Προϊόν</th><th style="text-align:right">Τζίρος</th><th style="text-align:right">Margin</th></tr></thead>
+        <tbody>
+          ${topMargin.length === 0
+            ? '<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Καμία πώληση</td></tr>'
+            : topMargin.map((p,i)=>`<tr>
+                <td class="fw-800" style="color:var(--accent)">${i+1}</td>
+                <td>${p.name}</td>
+                <td style="text-align:right">${eur(p.totalRev)}</td>
+                <td style="text-align:right"><span class="chip ${p.margin>=40?'chip-ok':p.margin>=20?'chip-warn':'chip-danger'}">${p.margin.toFixed(0)}%</span></td>
+              </tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  ${platformBreakdownHtml}
+  <div class="card mt-4">
+    <div class="section-title">🔮 Πρόβλεψη Τζίρου — Επόμενοι 6 μήνες</div>
+    <div class="chart-wrap"><canvas id="biForecastChart"></canvas></div>
+  </div>
+
+  <div class="ai-box mt-4" id="aiBIBox" style="min-height:100px">
+    <div class="ai-header">
+      <span class="ai-badge">AI</span>
+      <div style="font-weight:700;flex:1">Ανάλυση με AI</div>
+    </div>
+    <div class="muted text-sm mt-2">Πάτα "AI Βαθιά Ανάλυση" παραπάνω για να δεις εξατομικευμένη αναφορά με trends, αδυναμίες και ευκαιρίες του καταστήματός σου.</div>
+  </div>
+
+  ${worstPerformers.length > 0 ? `
+  <div class="card mt-4">
+    <div class="section-title">🐌 Μη Πωλητικά Προϊόντα (${worstPerformers.length})</div>
+    <div class="text-sm muted mb-3">Προϊόντα με απόθεμα που δεν πουλήθηκαν ποτέ. Σκέψου έκπτωση ή επιστροφή στον προμηθευτή.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">
+      ${worstPerformers.map(p=>`<div style="padding:10px;background:var(--bg-2);border-radius:10px">
+        <div class="fw-700 text-sm">${p.name}</div>
+        <div class="flex justify-between mt-2 text-xs">
+          <span class="muted">Stock: ${p.stock}</span>
+          <span class="muted">Αξία: ${eur(p.cost*p.stock)}</span>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>` : ''}
+  `;
+
+  // Chart
+  setTimeout(()=>{
+    const ctx = document.getElementById('biForecastChart');
+    if(ctx){
+      // Πάρε τους τελευταίους 3 μήνες και προβλέπεις 3 μήνες μπροστά
+      const labels = [];
+      const actualData = [];
+      const forecastData = [];
+
+      for(let i=3; i>=1; i--){
+        const m = new Date(now.getFullYear(), now.getMonth()-i, 1);
+        const mEnd = new Date(now.getFullYear(), now.getMonth()-i+1, 1);
+        const rev = SALES.filter(s=>{
+          const d = new Date(s.date);
+          return d >= m && d < mEnd;
+        }).reduce((a,b)=>a+b.total,0);
+        labels.push(m.toLocaleDateString('el-GR',{month:'short',year:'2-digit'}));
+        actualData.push(rev.toFixed(2));
+        forecastData.push(null);
+      }
+
+      // Τρέχων μήνας (partial + projected)
+      labels.push(currentMonth.toLocaleDateString('el-GR',{month:'short',year:'2-digit'}));
+      actualData.push(revCurrentMonth.toFixed(2));
+      forecastData.push(projectedCurrentMonth.toFixed(2));
+
+      // Forecast 3 μήνες μπροστά
+      let lastForecast = projectedCurrentMonth;
+      for(let i=1; i<=3; i++){
+        const m = new Date(now.getFullYear(), now.getMonth()+i, 1);
+        labels.push(m.toLocaleDateString('el-GR',{month:'short',year:'2-digit'}));
+        lastForecast = lastForecast * (1 + growth1);
+        actualData.push(null);
+        forecastData.push(lastForecast.toFixed(2));
+      }
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {label:'Πραγματικός Τζίρος', data: actualData, borderColor:'#d4ff3a', backgroundColor:'rgba(0,212,168,0.1)', tension:0.3, fill:true, pointRadius:4},
+            {label:'Πρόβλεψη', data: forecastData, borderColor:'#4aa3ff', borderDash:[5,5], tension:0.3, pointRadius:4}
+          ]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false, devicePixelRatio:window.devicePixelRatio||1,
+          plugins:{legend:{labels:{color:'#b6bcc8'}}},
+          scales:{
+            y:{ticks:{color:'#6b7283'},grid:{color:'#1c2029'}},
+            x:{ticks:{color:'#6b7283'},grid:{display:false}}
+          }
+        }
+      });
+    }
+    lucide.createIcons();
+  }, 100);
+}
+
+async function aiBIAnalysis(){
+  const box = document.getElementById('aiBIBox');
+  if(!box) return;
+  box.innerHTML = `<div class="ai-header">
+    <span class="ai-badge">AI</span>
+    <div style="font-weight:700;flex:1">ZyroNex αναλύει τα δεδομένα σου...</div>
+  </div>
+  <div class="muted" style="padding:20px;text-align:center">
+    <div style="width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto"></div>
+    <div class="mt-2 text-sm">Αναλύω τάσεις, περιθώρια, προβλέψεις...</div>
+  </div>`;
+
+  try{
+    // Δημιουργία summary για το AI
+    const productStats = PRODUCTS.map(p=>{
+      const sales = SALES.filter(s=>s.productId===p.id);
+      const qty = sales.reduce((a,b)=>a+b.qty,0);
+      const rev = sales.reduce((a,b)=>a+b.total,0);
+      const profit = rev - (qty * p.cost);
+      return {name:p.name, qty, rev:rev.toFixed(2), profit:profit.toFixed(2), stock:p.stock, cost:p.cost, price:p.price};
+    }).filter(p=>p.qty > 0).sort((a,b)=>b.profit-a.profit).slice(0,20);
+
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonth = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const revThisMonth = SALES.filter(s=>new Date(s.date) >= currentMonth).reduce((a,b)=>a+b.total,0);
+    const revPrevMonth = SALES.filter(s=>{
+      const d = new Date(s.date);
+      return d >= prevMonth && d < currentMonth;
+    }).reduce((a,b)=>a+b.total,0);
+
+    const notSelling = PRODUCTS.filter(p=>p.stock>0 && !productStats.find(x=>x.name===p.name)).length;
+    const outOfStock = PRODUCTS.filter(p=>p.stock===0).length;
+
+    const summary = {
+      totalProducts: PRODUCTS.length,
+      totalCustomers: CUSTOMERS.length,
+      revenueThisMonth: revThisMonth.toFixed(2),
+      revenuePrevMonth: revPrevMonth.toFixed(2),
+      topProducts: productStats.slice(0,10),
+      notSellingCount: notSelling,
+      outOfStockCount: outOfStock,
+      dayOfMonth: now.getDate(),
+      daysInMonth: new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()
+    };
+
+    const analysis = await askClaude(
+      [{role:'user', content:`Κάνε βαθιά ανάλυση του ελληνικού καταστήματος vape. Δεδομένα:
+
+${JSON.stringify(summary, null, 2)}
+
+Δώσε:
+1. **Σύνοψη απόδοσης** (2-3 προτάσεις)
+2. **3 δυνατά σημεία** (με αριθμούς)
+3. **3 αδυναμίες** (με αριθμούς)
+4. **5 συγκεκριμένες ενέργειες** για τον επόμενο μήνα
+5. **Πρόβλεψη τζίρου** επόμενου μήνα με αιτιολόγηση
+
+Χρησιμοποίησε bullet points (•) και **bold** για έμφαση. Τιμές ΠΑΝΤΑ σε €. Στα ελληνικά.`}],
+      'Είσαι έμπειρος Έλληνας σύμβουλος επιχειρήσεων για ελληνικό vape shop. Γράφεις σε ΑΨΟΓΑ, ΦΥΣΙΚΑ ελληνικά - σωστή σύνταξη, πτώσεις, συμφωνία γένους/αριθμού. ΠΟΤΕ δεν μεταφράζεις από αγγλικά ούτε χρησιμοποιείς αγγλισμούς - σκέφτεσαι κατευθείαν στα ελληνικά. Κάθε πρόταση φυσική, σαν μητρικού ομιλητή. Δίνεις συγκεκριμένες αριθμητικές προτάσεις. Τιμές πάντα σε €.',
+      3000
+    );
+
+    // Render result με markdown-like formatting
+    const formatted = formatMarkdown(analysis);
+    box.innerHTML = `<div class="ai-header">
+      <span class="ai-badge">AI</span>
+      <div style="font-weight:700;flex:1">Ανάλυση με AI</div>
+      <button class="btn btn-ghost" style="padding:4px 10px" onclick="aiBIAnalysis()"><i data-lucide="refresh-cw" size="14"></i></button>
+    </div>
+    <div class="text-sm mt-3" style="line-height:1.7">${formatted}</div>`;
+    lucide.createIcons();
+  }catch(err){
+    box.innerHTML = `<div class="ai-header"><span class="ai-badge">AI</span><div style="font-weight:700">Ανάλυση με AI</div></div>
+    <div class="muted mt-3" style="color:var(--danger)">Σφάλμα: ${err.message}</div>`;
+  }
+}
