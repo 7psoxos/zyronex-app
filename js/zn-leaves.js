@@ -26514,7 +26514,9 @@ function aiOfferSuggest(){
       '<div class="flex gap-2 mt-4" style="flex-wrap:wrap">'+
         '<button class="btn btn-primary" style="min-height:44px;font-size:16px;flex:1" onclick="applyDiscount(8)">✓ Εφαρμογή 8%</button>'+
         '<button class="btn btn-ghost" style="min-height:44px;font-size:16px" onclick="closeModal()">Όχι τώρα</button>'+
-      '</div></div>');
+      '</div>'+
+      '<div style="font-size:10px;color:var(--text-2);margin-top:8px;text-align:right">πηγή: στατικό</div>'+
+      '</div>');
     try{lucide.createIcons();}catch(_){}
   }
 
@@ -26543,21 +26545,27 @@ function aiOfferSuggest(){
   var systemPrompt = 'Είσαι σύστημα έξυπνων προσφορών για κατάστημα vape. Αναλύεις το καλάθι και τα στοιχεία πελάτη και επιστρέφεις ΑΠΟΚΛΕΙΣΤΙΚΑ raw JSON, χωρίς markdown, χωρίς εξήγηση, χωρίς κείμενο εκτός JSON. Σχήμα: {"discountPct":<ακέραιος 0-15>,"crossSellName":"<όνομα προϊόντος ή κενό>","reason":"<σύντομη αιτιολογία στα ελληνικά, max 15 λέξεις>"}. Κανόνες: discountPct έως 15%, ανάλογα αξίας/tier πελάτη. crossSellName μόνο αν έχει νόημα με αυτό το καλάθι, αλλιώς κενό string. Reason σύντομα.';
   var userMsg = 'Καλάθι: '+cartItems+'. Σύνολο: '+eur(subtotal)+'. Πελάτης: '+custCtx;
 
-  askClaude([{role:'user',content:userMsg}], systemPrompt, 300)
+  // Use claude-haiku-4-5-20251001 — valid model confirmed by _exchAICheck; default 'claude-sonnet-4-5' is stale
+  askClaude([{role:'user',content:userMsg}], systemPrompt, 300, 'claude-haiku-4-5-20251001')
     .then(function(raw){
+      console.log('[AI offer] raw response:', raw);
       // Check modal still open
       if(!document.getElementById('aiOfferModalBody')) return;
 
-      // Parse — strip code fences, extract JSON
-      var txt = (raw||'').trim().replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+      // Parse — strip code fences, then extract first JSON object
+      var txt = (raw||'').trim().replace(/^```[a-z]*\n?/i,'').replace(/```\s*$/,'').trim();
       var offer = null;
+      // Primary: direct parse
       try{ offer = JSON.parse(txt); }catch(_){}
+      // Secondary: extract first {...} block (handles leading/trailing prose)
       if(!offer || typeof offer.discountPct === 'undefined'){
-        // Try extracting first JSON object
         var m = txt.match(/\{[\s\S]*\}/);
         if(m){ try{ offer = JSON.parse(m[0]); }catch(_){} }
       }
-      if(!offer){ _staticFallback(); return; }
+      if(!offer || typeof offer.discountPct === 'undefined'){
+        console.warn('[AI offer] parse failed, txt was:', txt);
+        _staticFallback(); return;
+      }
 
       // Validate + clamp
       var discPct = Math.max(0, Math.min(15, Math.round(Number(offer.discountPct)||0)));
@@ -26580,7 +26588,8 @@ function aiOfferSuggest(){
             '<div class="text-sm muted mt-1">'+crossProduct.name+' — '+eur(crossProduct.price||0)+'</div></div></div>'
         : '';
 
-      var applyFn = 'window._aiOfferApply('+discPct+',' + (crossProduct?crossProduct.id:'null') + ')';
+      var crossArg = crossProduct ? (typeof crossProduct.id === 'string' ? JSON.stringify(crossProduct.id) : crossProduct.id) : 'null';
+      var applyFn = 'window._aiOfferApply('+discPct+','+crossArg+')';
 
       var html = '<div style="padding:20px;min-width:280px">'+
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
@@ -26601,12 +26610,16 @@ function aiOfferSuggest(){
           '<button class="btn btn-primary" style="min-height:44px;font-size:16px;flex:1" onclick="'+applyFn+'">✓ Εφαρμογή</button>'+
           '<button class="btn btn-ghost" style="min-height:44px;font-size:16px" onclick="closeModal()">Όχι τώρα</button>'+
         '</div>'+
+        '<div style="font-size:10px;color:var(--text-2);margin-top:8px;text-align:right">πηγή: AI</div>'+
         '</div>';
 
       openModal(html);
       try{lucide.createIcons();}catch(_){}
     })
-    .catch(function(){ if(document.getElementById('aiOfferModalBody')) _staticFallback(); });
+    .catch(function(err){
+      console.error('[AI offer] askClaude error:', err);
+      if(document.getElementById('aiOfferModalBody')) _staticFallback();
+    });
 }
 
 window._aiOfferApply = function(discPct, crossProductId){
