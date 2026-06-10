@@ -25597,7 +25597,7 @@ function _renderQuickMixModal(product, selectedNic){
           style="${allOk?'':'opacity:0.6'}"
           ${!allOk && selectedNic > 0 ? 'title="Ανεπαρκές stock"' : ''}>
           <i data-lucide="shopping-cart" style="width:18px;height:18px"></i>
-          ${selectedNic === 0 ? 'Πρόσθεσε στο καλάθι' : 'Πρόσθεσε + Αφαίρεσε Stock'}
+          Πρόσθεσε στο καλάθι
         </button>
         `}
       </div>
@@ -25607,6 +25607,9 @@ function _renderQuickMixModal(product, selectedNic){
 
 
 async function _quickMixConfirm(productId, nicotine, calc){
+  if(window._qmConfirmRunning) return;
+  window._qmConfirmRunning = true;
+  try {
   const p = PRODUCTS.find(x => x.id === productId);
   if(!p) return;
 
@@ -25622,6 +25625,8 @@ async function _quickMixConfirm(productId, nicotine, calc){
       return;
     }
   }
+
+  closeModal();
 
   // 1. Πρόσθεσε το κύριο προϊόν (shortfill/longfill) στο cart
   //    Καταγράφουμε τον επιλεγμένο τελικό όγκο + νικοτίνη για διαφάνεια & ΕΦΚ.
@@ -25701,7 +25706,6 @@ async function _quickMixConfirm(productId, nicotine, calc){
   CART.push({productId, qty:1, price:p.price, nicotine: nicotine || null,
              finalVolMl: _finalVol, mixNote: _mixNote, _mixConsumed});
 
-  closeModal();
   renderCart();
   // Nicotine memory: αποθήκευσε την επιλεγμένη νικοτίνη ως προτίμηση του επιλεγμένου πελάτη
   if(nicotine != null && !isNaN(nicotine)){
@@ -25716,6 +25720,9 @@ async function _quickMixConfirm(productId, nicotine, calc){
     toast(`✅ ${p.name} + ${calc.nicshotsNeeded}× ${boosterName}`, 'success', 3500);
   } else {
     toast(`✅ ${p.name} στο καλάθι`, 'success');
+  }
+  } finally {
+    window._qmConfirmRunning = false;
   }
 }
 
