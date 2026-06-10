@@ -15553,7 +15553,7 @@ async function submitPin(){
           if(typeof updateShiftTasksBanner === 'function') updateShiftTasksBanner();
         }
       }
-    });
+    }).catch(function(){ try{ hideBootLoader(); }catch(_){} });
     inspectorAutoScanOnLogin();
     cleanupBadgeUpdate();
     if(typeof complianceUpdateBadge === 'function') complianceUpdateBadge();
@@ -27966,7 +27966,7 @@ window._enforceModalLayout = _enforceModalLayout;
 async function init(){
   // Εφαρμογή αποθηκευμένου θέματος
   initTheme();
-
+  setTimeout(function(){ try{ hideBootLoader(); }catch(_){} }, 6000);
 
   const ok = await loadAllData();
   if(!ok){
