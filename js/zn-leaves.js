@@ -3407,9 +3407,11 @@ function custAvatarHTML(name, size, tierEmoji, tierColor){
   const s = size || 50;
   const gender = _detectGender(name);
   const src = gender === 'female' ? _AV_FEMALE : _AV_MALE;
-  return `<div class="zn-cust-av" style="width:${s}px;height:${s}px;position:relative;flex-shrink:0">
-    <img src="${src}" style="width:${s}px;height:${s}px;border-radius:50%;object-fit:cover;object-position:center 12%;display:block;flex-shrink:0">
-    ${tierEmoji ? `<span style="position:absolute;bottom:-2px;right:-2px;font-size:${Math.round(s*0.28)}px;background:var(--bg-1);border-radius:50%;padding:0 2px;line-height:1.4">${tierEmoji}</span>` : ''}
+  return `<div style="position:relative;flex-shrink:0;display:inline-block;width:${s}px;height:${s}px">
+    <div class="zn-cust-av" style="width:${s}px;height:${s}px">
+      <img src="${src}" style="width:${s}px;height:${s}px;border-radius:50%;object-fit:cover;object-position:center 12%;display:block;flex-shrink:0">
+    </div>
+    ${tierEmoji ? `<span style="position:absolute;bottom:-4px;right:-4px;font-size:${Math.round(s*0.28)}px;background:var(--bg-1);border-radius:50%;padding:0 2px;line-height:1.4;z-index:2">${tierEmoji}</span>` : ''}
   </div>`;
 }
 
