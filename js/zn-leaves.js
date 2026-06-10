@@ -14027,3 +14027,1977 @@ ${JSON.stringify(summary, null, 2)}
     <div class="muted mt-3" style="color:var(--danger)">Σφάλμα: ${err.message}</div>`;
   }
 }
+
+
+// ====================================================================
+// === SHIFTS MODULE ===
+// ====================================================================
+
+// ============================================================
+// SHIFTS / TIME TRACKING — extends old shifts/clockIn system
+// ============================================================
+// Old system uses: SHIFTS_CACHE (shifts table) + clockIn() + clockOut()
+// New additions: schedules, labor settings, warnings, hero card
+
+var SHIFT_SCHEDULES = [];   // { id, user_id, day_of_week, segment_index, start_time, end_time, active }
+// ============================================================
+
+
+var LABOR_SETTINGS = {
+  max_hours_per_day: 8,
+  max_hours_per_week: 40,
+  overtime_warning_at: 8,
+  absolute_max_per_day: 13,
+  absolute_max_per_week: 48,
+  weekly_rest_hours: 24,
+  break_minutes_after_hours: 6,
+  legal_disclaimer: ''
+};
+
+/* DAY_NAMES_GR, DAY_NAMES_GR_SHORT extracted to /js/zn-leaves.js */
+
+
+// Unified loader for hero card / topbar badge — loads SHIFTS_CACHE + extensions
+async function loadShiftsForUser(){
+  try{
+    if(typeof sb === 'undefined' || !sb) return;
+    // Load shifts (last 90 days for hero card calculations)
+    const cutoff = new Date(Date.now() - 90*24*60*60*1000).toISOString();
+    const {data} = await sb.from('shifts').select('*').gte('started_at', cutoff).order('started_at', {ascending: false});
+    if(data){
+      SHIFTS_CACHE = data;
+    }
+  }catch(e){
+    console.warn('[shifts] load failed:', e);
+  }
+  await loadShiftsExtensions();
+  window._SHIFTS_LOADED = true;
+}
+
+// Returns true if user has currently open shift in SHIFTS_CACHE
+function isUserClockedIn(userId){
+  return !!(SHIFTS_CACHE || []).find(s=>s.user_id===userId && !s.ended_at);
+}
+
+// Get hours worked today (sum of all shifts started today, including open one)
+function getHoursWorkedToday(userId){
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  return getHoursWorkedInRange(userId, dayStart, new Date());
+}
+
+// Get hours worked in date range from SHIFTS_CACHE
+function getHoursWorkedInRange(userId, startDate, endDate){
+  const userShifts = (SHIFTS_CACHE || []).filter(s => s.user_id === userId);
+  let totalMs = 0;
+  for(const sh of userShifts){
+    const sStart = new Date(sh.started_at);
+    const sEnd = sh.ended_at ? new Date(sh.ended_at) : new Date();
+    // Skip if shift outside range entirely
+    if(sEnd < startDate || sStart > endDate) continue;
+    const segStart = sStart < startDate ? startDate : sStart;
+    const segEnd = sEnd > endDate ? endDate : sEnd;
+    if(segEnd > segStart) totalMs += (segEnd - segStart);
+  }
+  return totalMs / (1000 * 60 * 60);
+}
+
+// Get hours worked this week (Monday-Sunday)
+function getHoursWorkedThisWeek(userId){
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  const offset = day === 0 ? 6 : day - 1;
+  monday.setDate(now.getDate() - offset);
+  monday.setHours(0,0,0,0);
+  return getHoursWorkedInRange(userId, monday, now);
+}
+
+// Returns 'normal', 'overtime', 'limit_warning', 'over_limit'
+function getShiftWarningLevel(userId){
+  const today = getHoursWorkedToday(userId);
+  const week = getHoursWorkedThisWeek(userId);
+  if(today >= LABOR_SETTINGS.absolute_max_per_day) return 'over_limit';
+  if(week >= LABOR_SETTINGS.absolute_max_per_week) return 'over_limit';
+  if(today >= LABOR_SETTINGS.absolute_max_per_day - 1 || week >= LABOR_SETTINGS.absolute_max_per_week - 2) return 'limit_warning';
+  if(today >= LABOR_SETTINGS.overtime_warning_at) return 'overtime';
+  return 'normal';
+}
+
+// Format hours as "Hh MMm" Greek style
+/* formatHours extracted to /js/zn-leaves.js */
+
+// Confirm dialog before clock in/out — calls old clockIn/clockOut after confirm
+function confirmClockAction(userId, action){
+  const u = USERS.find(x=>x.id===userId);
+  if(!u) return;
+  if(!CURRENT_USER || CURRENT_USER.id !== userId){
+    toast('Μπορείς να κάνεις προσέλευση/αποχώρηση μόνο στον δικό σου λογαριασμό','warn');
+    return;
+  }
+  const isIn = action === 'in';
+
+  // Clock-out: skip our confirm — old clockOut() already shows its own modal with tasks
+  if(!isIn){
+    if(typeof clockOut === 'function'){
+      clockOut().then(()=>refreshShiftDisplays()).catch(()=>{});
+    }
+    return;
+  }
+
+  // Clock-in: show our simple confirm
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('el-GR', {hour:'2-digit', minute:'2-digit'});
+  const dateStr = now.toLocaleDateString('el-GR', {weekday:'long', day:'numeric', month:'long'});
+  const week = getHoursWorkedThisWeek(userId);
+  let extraInfo = '';
+  if(week >= LABOR_SETTINGS.max_hours_per_week){
+    extraInfo = `<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:12px;border-radius:8px;margin-top:12px;color:#fcd34d;font-size:13px">
+      ⚠️ Έχεις ήδη ${formatHours(week)} αυτή την εβδομάδα. Πλησιάζεις/ξεπερνάς το νόμιμο όριο των ${LABOR_SETTINGS.max_hours_per_week}ω.
+    </div>`;
+  }
+
+  openModal(`<div class="modal-head">
+    <h3 class="fw-800 text-xl">Προσέλευση</h3>
+    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+  </div>
+  <div style="padding:20px 0">
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:14px;color:var(--text-2)">${dateStr}</div>
+      <div style="font-size:36px;font-weight:800;letter-spacing:1px;margin:8px 0">${timeStr}</div>
+      <div style="font-size:14px">Είσαι βέβαιος ότι θέλεις να γίνει καταγραφή προσέλευσης;</div>
+    </div>
+    ${extraInfo}
+  </div>
+  <div class="flex gap-2" style="justify-content:flex-end">
+    <button class="btn btn-ghost" onclick="closeModal()">Άκυρο</button>
+    <button class="btn btn-primary" onclick="closeModal();_doClockAction('in')">✓ Προσέλευση</button>
+  </div>`);
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// Wrapper that calls old clockIn after confirm
+async function _doClockAction(action){
+  if(action === 'in'){
+    if(typeof clockIn === 'function') await clockIn();
+  }else{
+    if(typeof clockOut === 'function') await clockOut();
+  }
+  refreshShiftDisplays();
+}
+
+// FORCE CLOCK-IN: Mandatory prompt for non-admin users when they log in.
+// Cannot be dismissed unless they clock in or logout.
+function checkAndPromptClockIn(){
+  if(!CURRENT_USER) return;
+  // Admin is exempt
+  if(CURRENT_USER.perms && CURRENT_USER.perms.includes('*')) return;
+  // Don't prompt if shifts haven't loaded yet — caller should retry after load
+  if(!window._SHIFTS_LOADED) return;
+  // Already clocked in - all good
+  if(isUserClockedIn(CURRENT_USER.id)) return;
+
+  // Show non-dismissable modal
+  const u = CURRENT_USER;
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('el-GR', {hour:'2-digit', minute:'2-digit'});
+  const dateStr = now.toLocaleDateString('el-GR', {weekday:'long', day:'numeric', month:'long'});
+
+  // Build using openModal but mark as non-dismissable (no X button, no backdrop close)
+  const iconHtml = getRoleIconHtml(u.role, 80);
+  const avatarHtml = iconHtml
+    ? `<div style="width:80px;height:80px;margin:0 auto 12px;border-radius:50%;overflow:hidden">${iconHtml}</div>`
+    : `<div class="avatar" style="width:80px;height:80px;font-size:32px;margin:0 auto 12px">${u.name[0]}</div>`;
+
+  // Last shift info if available
+  const allShiftsForUser = (SHIFTS_CACHE || []).filter(s=>s.user_id===u.id && s.ended_at).sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at));
+  const lastShift = allShiftsForUser[0];
+  let lastShiftInfo = '';
+  if(lastShift){
+    const lastEnd = new Date(lastShift.ended_at);
+    const hoursAgo = (Date.now() - lastEnd.getTime()) / (1000*60*60);
+    if(hoursAgo < 36){
+      lastShiftInfo = `<div class="text-xs muted mt-2">Τελευταία βάρδια: ${lastEnd.toLocaleString('el-GR',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</div>`;
+    }
+  }
+
+  // Weekly hours warning
+  const weekHours = getHoursWorkedThisWeek(u.id);
+  let weekWarning = '';
+  if(weekHours >= LABOR_SETTINGS.max_hours_per_week - 2){
+    weekWarning = `<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);padding:10px 12px;border-radius:8px;margin-top:12px;font-size:12px;color:#fcd34d;text-align:left">
+      ⚠️ Έχεις ήδη ${formatHours(weekHours)} αυτή την εβδομάδα. Πλησιάζεις/ξεπερνάς το νόμιμο όριο των ${LABOR_SETTINGS.max_hours_per_week}ω.
+    </div>`;
+  }
+
+  // Use direct DOM manipulation to create non-dismissable modal
+  const modalHost = document.getElementById('modalHost');
+  if(!modalHost) return;
+
+  modalHost.innerHTML = `
+    <div class="modal-backdrop force-clockin-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease-out">
+      <div class="modal force-clockin-modal" style="background:var(--bg-1);border:1px solid var(--border);border-radius:16px;padding:28px 24px;max-width:420px;width:100%;text-align:center;animation:slideUp 0.3s ease-out">
+        <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:8px">Καλωσόρισες</div>
+
+        ${avatarHtml}
+
+        <div style="font-size:22px;font-weight:800;margin-bottom:4px">${u.name}</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:16px">${formatRoleDisplay(u.role)}</div>
+
+        <div style="background:var(--bg-2);padding:14px;border-radius:12px;margin-bottom:16px">
+          <div style="font-size:12px;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${dateStr}</div>
+          <div style="font-size:32px;font-weight:800;letter-spacing:1px;color:var(--accent)">${timeStr}</div>
+          ${lastShiftInfo}
+        </div>
+
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">Πάτησε Προσέλευση για να ξεκινήσεις τη βάρδια</div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.5">Δεν μπορείς να χρησιμοποιήσεις την εφαρμογή χωρίς να καταχωρηθεί η προσέλευση.</div>
+
+        ${weekWarning}
+
+        <div class="flex gap-2 mt-3" style="flex-direction:column">
+          <button class="btn btn-primary btn-lg" id="forceClockInBtn" onclick="_doForceClockIn()" style="width:100%;font-size:16px;padding:14px"><i data-lucide="log-in" size="20"></i> ✓ Προσέλευση</button>
+          <button class="btn btn-ghost btn-sm" onclick="_forceClockInLogout()" style="width:100%;font-size:12px;color:var(--text-2)">Έκανα λάθος είσοδο — Logout</button>
+        </div>
+      </div>
+    </div>
+  `;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function _doForceClockIn(){
+  const btn = document.getElementById('forceClockInBtn');
+  if(btn){
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" size="18" style="animation:spin 1s linear infinite"></i> Καταχώρηση...';
+    if(typeof lucide !== 'undefined') lucide.createIcons();
+  }
+  try{
+    if(typeof clockIn === 'function'){
+      await clockIn();
+    }
+    // Close the force modal
+    const modalHost = document.getElementById('modalHost');
+    if(modalHost) modalHost.innerHTML = '';
+    refreshShiftDisplays();
+    // Show start phase tasks if any exist
+    setTimeout(()=>showStartPhaseTasksModal(), 300);
+  }catch(e){
+    toast('Σφάλμα: '+e.message,'danger');
+    if(btn){
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="log-in" size="20"></i> ✓ Προσέλευση';
+      if(typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  }
+}
+
+// Show "Έναρξη βάρδιας" tasks modal — MANDATORY tick all
+function showStartPhaseTasksModal(){
+  if(!CURRENT_USER) return;
+  const startTasks = getTasksForRolePhase(CURRENT_USER.role, 'start');
+  if(startTasks.length === 0){
+    // No start tasks — still redirect to role home page
+    setTimeout(()=>{ if(typeof _redirectToRoleHomePage === 'function') _redirectToRoleHomePage(); }, 300);
+    return;
+  }
+
+  const modalHost = document.getElementById('modalHost');
+  if(!modalHost) return;
+
+  modalHost.innerHTML = `
+    <div class="modal-backdrop force-tasks-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease-out">
+      <div class="modal force-tasks-modal" style="background:var(--bg-1);border:1px solid var(--border);border-radius:16px;padding:24px 22px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;animation:slideUp 0.3s ease-out;-webkit-overflow-scrolling:touch">
+        <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:6px">🌅 Έναρξη Βάρδιας</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:4px">Καθήκοντα έναρξης</div>
+        <div style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.5">Πρέπει να ολοκληρώσεις και να επιβεβαιώσεις όλα τα παρακάτω καθήκοντα πριν συνεχίσεις.</div>
+
+        <div id="startTasksList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          ${startTasks.map((t,i)=>`
+            <label class="start-task-item" data-idx="${i}" style="display:flex;gap:10px;align-items:flex-start;padding:12px;background:var(--bg-2);border:2px solid var(--border);border-radius:10px;cursor:pointer;transition:all 0.2s">
+              <input type="checkbox" class="start-task-check" data-idx="${i}" onchange="_updateStartTaskState()" style="margin-top:2px;width:20px;height:20px;flex-shrink:0;accent-color:var(--accent)">
+              <div style="flex:1;font-size:14px;font-weight:600;line-height:1.4">${t.text}</div>
+            </label>
+          `).join('')}
+        </div>
+
+        <div id="startTasksProgress" style="background:var(--bg-2);padding:8px 12px;border-radius:8px;margin-bottom:14px;font-size:13px;text-align:center">
+          <span id="startTasksProgressText" style="color:var(--text-2)">0 από ${startTasks.length} ολοκληρωμένα</span>
+        </div>
+
+        <button class="btn btn-primary btn-lg" id="startTasksConfirm" disabled onclick="_confirmStartTasks()" style="width:100%;font-size:16px;padding:14px;opacity:0.5"><i data-lucide="check-circle" size="20"></i> Επιβεβαίωση & Έναρξη</button>
+      </div>
+    </div>
+  `;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+  // Style update on tick
+  document.querySelectorAll('.start-task-item').forEach(item=>{
+    item.addEventListener('click', (e)=>{
+      // Toggle checkbox if click was on the label (not directly on checkbox)
+      if(e.target.tagName !== 'INPUT'){
+        const cb = item.querySelector('input[type=checkbox]');
+        if(cb){ cb.checked = !cb.checked; _updateStartTaskState(); }
+      }
+    });
+  });
+}
+
+function _updateStartTaskState(){
+  const checks = document.querySelectorAll('.start-task-check');
+  const total = checks.length;
+  let done = 0;
+  checks.forEach(cb=>{
+    const item = cb.closest('.start-task-item');
+    if(cb.checked){
+      done++;
+      if(item){
+        item.style.background = 'rgba(0,212,168,0.08)';
+        item.style.borderColor = 'rgba(0,212,168,0.4)';
+      }
+    }else{
+      if(item){
+        item.style.background = 'var(--bg-2)';
+        item.style.borderColor = 'var(--border)';
+      }
+    }
+  });
+  const txt = document.getElementById('startTasksProgressText');
+  if(txt){
+    txt.textContent = `${done} από ${total} ολοκληρωμένα`;
+    txt.style.color = done===total ? 'var(--accent)' : 'var(--text-2)';
+    txt.style.fontWeight = done===total ? '700' : '400';
+  }
+  const btn = document.getElementById('startTasksConfirm');
+  if(btn){
+    btn.disabled = done < total;
+    btn.style.opacity = done < total ? '0.5' : '1';
+  }
+}
+
+function _confirmStartTasks(){
+  // Save the completed start tasks to the active shift
+  const activeShift = (SHIFTS_CACHE || []).find(s=>s.user_id===CURRENT_USER.id && !s.ended_at);
+  if(activeShift && typeof sb !== 'undefined' && sb){
+    const startTasks = getTasksForRolePhase(CURRENT_USER.role, 'start');
+    const startTasksDone = startTasks.map(t=>({text:t.text, phase:'start', done:true, doneAt:new Date().toISOString()}));
+    // Merge with existing tasks (if any from old system)
+    const existing = activeShift.tasks || [];
+    const merged = [...startTasksDone, ...existing.filter(t => t.phase !== 'start')];
+    sb.from('shifts').update({tasks: merged}).eq('id', activeShift.id).then(({error})=>{
+      if(error) console.warn('save start tasks failed:', error);
+      else activeShift.tasks = merged;
+    });
+  }
+  // Close modal
+  const modalHost = document.getElementById('modalHost');
+  if(modalHost) modalHost.innerHTML = '';
+  toast('✓ Καλή βάρδια!','success');
+  // Schedule during-phase reminders
+  setTimeout(()=>scheduleDuringTaskReminders(), 1000);
+  // Auto-redirect to role-appropriate page
+  setTimeout(()=>_redirectToRoleHomePage(), 400);
+}
+
+// Auto-redirect user to the page that makes sense for their role
+function _redirectToRoleHomePage(){
+  if(!CURRENT_USER) return;
+  // Admin doesn't get redirected (stays where they were)
+  if((CURRENT_USER.perms||[]).includes('*')) return;
+  const role = (CURRENT_USER.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  // Cashier (Ταμίας) → POS
+  if(role.includes('ταμ') || role.includes('tam') || role.includes('cashier')){
+    if(typeof showPage === 'function') showPage('pos');
+    return;
+  }
+  // Warehouse (Αποθηκάριος) → Inventory
+  if(role.includes('αποθ') || role.includes('apoth') || role.includes('warehouse') || role.includes('stock')){
+    if(typeof showPage === 'function') showPage('inventory');
+    return;
+  }
+  // Other roles → stay on dashboard
+}
+
+// Track which during-tasks have been notified today (per user, per task)
+var _DURING_TASKS_NOTIFIED_KEY = null;
+
+function _getDuringNotifiedSet(){
+  if(!CURRENT_USER) return new Set();
+  const today = new Date().toISOString().slice(0,10);
+  _DURING_TASKS_NOTIFIED_KEY = `during_notified_${CURRENT_USER.id}_${today}`;
+  try{
+    const arr = JSON.parse(localStorage.getItem(_DURING_TASKS_NOTIFIED_KEY)||'[]');
+    return new Set(arr);
+  }catch(_){ return new Set(); }
+}
+
+function _markDuringNotified(taskText){
+  const set = _getDuringNotifiedSet();
+  set.add(taskText);
+  localStorage.setItem(_DURING_TASKS_NOTIFIED_KEY, JSON.stringify(Array.from(set)));
+}
+
+// Check every minute if there's a scheduled task that needs a reminder
+function checkScheduledTaskReminders(){
+  if(!CURRENT_USER) return;
+  if(!isUserClockedIn(CURRENT_USER.id)) return;
+  // Skip admin (does not have shifts)
+  if((CURRENT_USER.perms||[]).includes('*')) return;
+
+  const now = new Date();
+  const currentTime = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+  const duringTasks = getTasksForRolePhase(CURRENT_USER.role, 'during');
+  const notified = _getDuringNotifiedSet();
+
+  duringTasks.forEach(t => {
+    if(!t.scheduledTime) return;
+    if(notified.has(t.text)) return;
+    // Trigger if scheduled time matches current minute (or up to 1 min late on first check)
+    if(t.scheduledTime === currentTime){
+      _showTaskReminderToast(t);
+      _markDuringNotified(t.text);
+    }
+  });
+}
+
+// Show prominent toast for task reminder
+function _showTaskReminderToast(task){
+  const host = document.getElementById('toastHost');
+  if(!host) return;
+  const toastEl = document.createElement('div');
+  toastEl.className = 'task-reminder-toast';
+  toastEl.style.cssText = 'background:linear-gradient(135deg,rgba(245,158,11,0.95),rgba(217,119,6,0.95));color:#fff;padding:14px 18px;border-radius:12px;margin-bottom:10px;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-width:340px;animation:slideUp 0.4s ease-out;cursor:pointer';
+  toastEl.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0">⏰</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700;opacity:0.9;margin-bottom:2px">Υπενθύμιση Καθήκοντος</div>
+        <div style="font-size:15px;font-weight:700;line-height:1.3">${task.text}</div>
+        <div style="font-size:11px;opacity:0.85;margin-top:3px">Προγραμματισμένο για ${task.scheduledTime}</div>
+      </div>
+    </div>
+  `;
+  toastEl.onclick = ()=>{ toastEl.remove(); };
+  host.appendChild(toastEl);
+  // Auto-dismiss after 30 seconds (longer than regular toast)
+  setTimeout(()=>{
+    if(toastEl.parentNode){
+      toastEl.style.animation = 'fadeIn 0.3s reverse';
+      setTimeout(()=>toastEl.remove(), 300);
+    }
+  }, 30000);
+}
+
+// Initialize reminders for the current shift
+function scheduleDuringTaskReminders(){
+  // Already running? Skip
+  if(window._taskReminderInterval) return;
+  // Check every 30 seconds
+  window._taskReminderInterval = setInterval(()=>{
+    checkScheduledTaskReminders();
+    updateShiftTasksBanner();
+  }, 30000);
+  // Also check immediately
+  checkScheduledTaskReminders();
+  updateShiftTasksBanner();
+}
+
+// Persistent banner showing pending tasks at top of page
+function updateShiftTasksBanner(){
+  let banner = document.getElementById('shiftTasksBanner');
+
+  // Hide for admin or not logged in
+  if(!CURRENT_USER || (CURRENT_USER.perms||[]).includes('*')){
+    if(banner) banner.remove();
+    return;
+  }
+  if(!isUserClockedIn(CURRENT_USER.id)){
+    if(banner) banner.remove();
+    return;
+  }
+
+  const activeShift = (SHIFTS_CACHE || []).find(s=>s.user_id===CURRENT_USER.id && !s.ended_at);
+  if(!activeShift){
+    if(banner) banner.remove();
+    return;
+  }
+
+  const tasks = activeShift.tasks || [];
+  const pending = tasks.filter(t=>!t.done);
+
+  // Find tasks that are scheduled and overdue
+  const now = new Date();
+  const currentHHMM = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+  const overdue = pending.filter(t => t.scheduledTime && t.scheduledTime <= currentHHMM);
+
+  if(pending.length === 0){
+    if(banner) banner.remove();
+    return;
+  }
+
+  // 🔕 Respect dismiss cooldown — αν dismissed πρόσφατα, μην ξανα-εμφανίζεις για 1 ώρα
+  // (εκτός αν υπάρχουν NEW overdue tasks που χρειάζονται προσοχή)
+  try {
+    const dismissedAt = parseInt(sessionStorage.getItem('shiftTasksBannerDismissedAt')||'0', 10);
+    const ONE_HOUR = 60*60*1000;
+    if(dismissedAt && (Date.now() - dismissedAt < ONE_HOUR)){
+      // Αν δεν υπάρχουν overdue (urgent), σεβάσου το dismiss
+      if(overdue.length === 0){
+        if(banner) banner.remove();
+        return;
+      }
+      // Αν υπάρχουν overdue, clear το dismissal και δείξε ξανά (urgent override)
+      sessionStorage.removeItem('shiftTasksBannerDismissedAt');
+    }
+  } catch(_){}
+
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'shiftTasksBanner';
+    banner.className = 'shift-tasks-banner';
+    // Insert AFTER topbar but BEFORE content (so it doesn't overlap the logo/header)
+    const topbar = document.querySelector('.topbar');
+    const content = document.getElementById('content');
+    if(topbar && topbar.parentNode && content){
+      topbar.parentNode.insertBefore(banner, content);
+    }else{
+      const main = document.querySelector('.main') || document.querySelector('main') || document.body;
+      if(main) main.insertBefore(banner, main.firstChild);
+    }
+  }
+
+  const isUrgent = overdue.length > 0;
+  const color = isUrgent ? '#ef4444' : '#f59e0b';
+  const bgColor = isUrgent ? 'rgba(239,68,68,0.10)' : 'rgba(245,158,11,0.08)';
+  const next = overdue[0] || pending[0];
+
+  banner.innerHTML = `
+    <div style="background:${bgColor};border-bottom:2px solid ${color};padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:13px;flex-wrap:wrap">
+      <i data-lucide="${isUrgent?'alert-circle':'clock'}" size="16" style="color:${color};flex-shrink:0"></i>
+      <div style="flex:1;min-width:160px">
+        <strong style="color:${color}">${isUrgent?`${overdue.length} εκπρόθεσμα tasks!`:`${pending.length} εκκρεμή tasks`}</strong>
+        <span style="color:var(--text-2);margin-left:6px">Επόμενο: ${next.text}${next.scheduledTime?` (${next.scheduledTime})`:''}</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('shifts')" style="font-size:12px;padding:4px 10px">Δες όλα</button>
+      <button onclick="dismissShiftTasksBanner()" aria-label="Κλείσιμο" title="Κλείσιμο" style="background:transparent;border:1px solid ${color};color:${color};border-radius:6px;width:28px;height:28px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;-webkit-tap-highlight-color:transparent">✕</button>
+    </div>
+  `;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// 🔕 Dismiss shift tasks banner — μένει κρυμμένο για 1 ώρα ή μέχρι αλλαγή στα tasks
+function dismissShiftTasksBanner(){
+  const banner = document.getElementById('shiftTasksBanner');
+  if(banner) banner.remove();
+  try {
+    sessionStorage.setItem('shiftTasksBannerDismissedAt', Date.now().toString());
+  } catch(_){}
+}
+
+// Restart ticker on page visibility change
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && CURRENT_USER && !((CURRENT_USER.perms||[]).includes('*'))){
+    if(typeof isUserClockedIn === 'function' && isUserClockedIn(CURRENT_USER.id)){
+      scheduleDuringTaskReminders();
+      updateShiftTasksBanner();
+    }
+  }
+});
+
+function _forceClockInLogout(){
+  if(!confirm('Σίγουρα θες να αποσυνδεθείς χωρίς προσέλευση;')) return;
+  // Close modal first
+  const modalHost = document.getElementById('modalHost');
+  if(modalHost) modalHost.innerHTML = '';
+  // Use _doLogout directly (we already confirmed, and there's no shift to close)
+  if(typeof _doLogout === 'function') _doLogout();
+}
+
+// Refresh all shift displays in the UI (dashboard card, topbar badge, shifts page)
+function refreshShiftDisplays(){
+  try{ if(typeof renderShiftDashboardCard === 'function') renderShiftDashboardCard(); }catch(_){}
+  try{ if(typeof renderShiftTopbarBadge === 'function') renderShiftTopbarBadge(); }catch(_){}
+  try{ if(typeof renderShiftAdminOverview === 'function') renderShiftAdminOverview(); }catch(_){}
+}
+
+// Auto-refresh shift displays every 60 seconds (so hours/minutes counters tick live)
+setInterval(()=>{
+  if(CURRENT_USER && document.visibilityState === 'visible'){
+    try{ refreshShiftDisplays(); }catch(_){}
+  }
+}, 60000);
+
+// Admin-only overview: shows current status of all staff at a glance
+function renderShiftAdminOverview(){
+  const container = document.getElementById('shiftAdminOverview');
+  if(!container || !CURRENT_USER) return;
+  const isAdmin = CURRENT_USER.perms && CURRENT_USER.perms.includes('*');
+  if(!isAdmin){ container.innerHTML = ''; return; }
+
+  // Find all clocked-in users (excluding self)
+  const others = USERS.filter(u => u.id !== CURRENT_USER.id);
+  const activeUsers = others.filter(u => isUserClockedIn(u.id));
+  const overtimeUsers = activeUsers.filter(u => getShiftWarningLevel(u.id) !== 'normal');
+  const limitUsers = activeUsers.filter(u => {
+    const lvl = getShiftWarningLevel(u.id);
+    return lvl === 'over_limit' || lvl === 'limit_warning';
+  });
+
+  if(others.length === 0){
+    container.innerHTML = '';
+    return;
+  }
+
+  const allStaffWithStatus = others.map(u => {
+    const isIn = isUserClockedIn(u.id);
+    const hoursToday = getHoursWorkedToday(u.id);
+    const hoursWeek = getHoursWorkedThisWeek(u.id);
+    const warningLevel = getShiftWarningLevel(u.id);
+    return { user: u, isIn, hoursToday, hoursWeek, warningLevel };
+  });
+
+  // Banner color based on highest severity
+  let borderColor = 'var(--accent)', bgGradient = 'linear-gradient(135deg, rgba(0,212,168,0.06), rgba(74,163,255,0.03))';
+  if(limitUsers.some(u => getShiftWarningLevel(u.id) === 'over_limit')){
+    borderColor = '#ef4444';
+    bgGradient = 'linear-gradient(135deg, rgba(239,68,68,0.10), rgba(239,68,68,0.03))';
+  } else if(overtimeUsers.length > 0){
+    borderColor = '#f59e0b';
+    bgGradient = 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))';
+  }
+
+  container.innerHTML = `
+    <div class="card mb-3" style="padding:16px 18px;background:${bgGradient};border-left:4px solid ${borderColor}">
+      <div class="flex gap-2 items-center mb-2" style="justify-content:space-between;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;font-weight:700">👥 Επισκόπηση Προσωπικού</div>
+          <div style="font-size:16px;font-weight:700;margin-top:2px">
+            ${activeUsers.length} σε βάρδια • ${overtimeUsers.length>0?`<span style="color:#f59e0b">${overtimeUsers.length} σε υπερωρίες</span> • `:''}${others.length-activeUsers.length} εκτός
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="showPage('shifts')"><i data-lucide="external-link" size="14"></i> Πλήρης σελίδα</button>
+      </div>
+
+      ${overtimeUsers.length>0 || limitUsers.length>0 ? `
+        <div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#fcd34d">
+          ⚠️ ${limitUsers.length>0?`<strong>${limitUsers.length} υπάλληλος/-οι κοντά στο νόμιμο όριο</strong>`:`${overtimeUsers.length} υπάλληλος/-οι σε υπερωρίες`}
+        </div>
+      `:''}
+
+      <div class="staff-status-grid">
+        ${allStaffWithStatus.map(s => {
+          const u = s.user;
+          const iconHtml = getRoleIconHtml(u.role, 32);
+          const dotColor = !s.isIn ? '#6b7283' :
+                          s.warningLevel === 'over_limit' ? '#ef4444' :
+                          (s.warningLevel === 'limit_warning' || s.warningLevel === 'overtime') ? '#f59e0b' :
+                          '#10b981';
+          return `
+          <div class="staff-status-item" style="border-color:${s.isIn?dotColor:'var(--border)'}">
+            <div class="staff-status-avatar">
+              ${iconHtml ? `<div style="width:32px;height:32px;border-radius:50%;overflow:hidden">${iconHtml}</div>` : `<div class="avatar" style="width:32px;height:32px;font-size:14px">${u.name[0]}</div>`}
+              <span style="position:absolute;bottom:-2px;right:-2px;width:10px;height:10px;background:${dotColor};border-radius:50%;border:2px solid var(--bg-1);${s.isIn?'animation:pulse 2s infinite':''}"></span>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.name}</div>
+              <div style="font-size:11px;color:var(--text-2)">${formatRoleDisplay(u.role)}</div>
+              ${s.isIn ? `<div style="font-size:11px;font-weight:600;color:${dotColor}">${formatHours(s.hoursToday)} σήμερα</div>` : `<div style="font-size:11px;color:var(--text-2)">Εκτός βάρδιας</div>`}
+            </div>
+          </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// Renders the prominent dashboard card with clock-in/out button
+function renderShiftDashboardCard(){
+  const container = document.getElementById('shiftHeroCard');
+  if(!container || !CURRENT_USER) return;
+
+  const userId = CURRENT_USER.id;
+  const isIn = isUserClockedIn(userId);
+  const hoursToday = getHoursWorkedToday(userId);
+  const hoursWeek = getHoursWorkedThisWeek(userId);
+  const warningLevel = getShiftWarningLevel(userId);
+
+  // Get current open shift for "since" timestamp
+  const activeShift = (SHIFTS_CACHE || []).find(s=>s.user_id===userId && !s.ended_at);
+  let sinceText = '';
+  if(isIn && activeShift){
+    const elapsed = (Date.now() - new Date(activeShift.started_at).getTime()) / (1000*60*60);
+    sinceText = `Από ${new Date(activeShift.started_at).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})} (${formatHours(elapsed)})`;
+  }
+
+  let bgGradient, statusText, statusColor, warningHtml = '';
+  if(!isIn){
+    bgGradient = 'linear-gradient(135deg, rgba(0,212,168,0.08), rgba(74,163,255,0.05))';
+    statusText = 'Εκτός βάρδιας';
+    statusColor = 'var(--text-2)';
+  }else if(warningLevel === 'over_limit'){
+    bgGradient = 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(239,68,68,0.08))';
+    statusText = '🚨 Υπέρβαση νόμιμου ορίου!';
+    statusColor = '#ef4444';
+    warningHtml = `<div style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;color:#fca5a5">
+      <strong>⚠️ Έχεις ξεπεράσει το απόλυτο όριο</strong> (${LABOR_SETTINGS.absolute_max_per_day}ω/ημέρα ή ${LABOR_SETTINGS.absolute_max_per_week}ω/εβδομάδα). Πρέπει να αποχωρήσεις άμεσα.
+    </div>`;
+  }else if(warningLevel === 'limit_warning'){
+    bgGradient = 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(245,158,11,0.08))';
+    statusText = '⚠️ Πλησιάζεις το όριο';
+    statusColor = '#f59e0b';
+    warningHtml = `<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;color:#fcd34d">
+      Είσαι κοντά στο νόμιμο ανώτατο όριο. Σχεδίασε αποχώρηση σύντομα.
+    </div>`;
+  }else if(warningLevel === 'overtime'){
+    bgGradient = 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))';
+    statusText = '⏱️ Σε υπερωρίες';
+    statusColor = '#f59e0b';
+    warningHtml = `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;margin-top:12px;font-size:13px;color:#fcd34d">
+      Έχεις περάσει το κανονικό ωράριο (${LABOR_SETTINGS.overtime_warning_at}ω). Οι ώρες πέρα από αυτό λογίζονται ως υπερωρίες.
+    </div>`;
+  }else{
+    bgGradient = 'linear-gradient(135deg, rgba(0,212,168,0.12), rgba(0,212,168,0.04))';
+    statusText = '✓ Σε βάρδια';
+    statusColor = 'var(--accent)';
+  }
+
+  container.innerHTML = `
+  <div class="card mb-3" style="padding:18px 22px;background:${bgGradient};border-left:4px solid ${statusColor}">
+    <div class="shift-hero-flex">
+      <div class="shift-hero-info">
+        <div style="font-size:13px;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;font-weight:700">Βάρδια</div>
+        <div style="font-size:22px;font-weight:800;margin-top:4px;color:${statusColor}">${statusText}</div>
+        ${sinceText?`<div style="font-size:13px;color:var(--text-2);margin-top:4px">${sinceText}</div>`:''}
+        <div class="flex gap-3 items-center" style="margin-top:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;color:var(--text-2)">Σήμερα</div>
+            <div style="font-size:18px;font-weight:700">${formatHours(hoursToday)}</div>
+          </div>
+          <div style="width:1px;height:30px;background:var(--border)"></div>
+          <div>
+            <div style="font-size:11px;color:var(--text-2)">Αυτή την εβδομάδα</div>
+            <div style="font-size:18px;font-weight:700">${formatHours(hoursWeek)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="shift-hero-action">
+        <button class="btn btn-lg ${isIn?'btn-warn':'btn-primary'}" onclick="confirmClockAction(${userId},'${isIn?'out':'in'}')" style="min-width:160px;font-size:16px">
+          <i data-lucide="${isIn?'log-out':'log-in'}" size="20"></i>
+          ${isIn?'Αποχώρηση':'Προσέλευση'}
+        </button>
+      </div>
+    </div>
+    ${warningHtml}
+  </div>`;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// Topbar mini badge - small clock indicator
+function renderShiftTopbarBadge(){
+  const container = document.getElementById('shiftTopbarBadge');
+  if(!container || !CURRENT_USER) return;
+  const userId = CURRENT_USER.id;
+  const isIn = isUserClockedIn(userId);
+  const hoursToday = getHoursWorkedToday(userId);
+  const warningLevel = getShiftWarningLevel(userId);
+
+  let dotColor = 'var(--text-2)';
+  if(isIn){
+    if(warningLevel === 'over_limit') dotColor = '#ef4444';
+    else if(warningLevel === 'limit_warning' || warningLevel === 'overtime') dotColor = '#f59e0b';
+    else dotColor = 'var(--accent)';
+  }
+
+  const title = isIn ? `Σε βάρδια — ${formatHours(hoursToday)} σήμερα — Πάτα για αποχώρηση` : 'Εκτός βάρδιας — Πάτα για προσέλευση';
+  container.innerHTML = `<button class="icon-btn shift-mini-badge" title="${title}" onclick="confirmClockAction(${userId},'${isIn?'out':'in'}')" style="position:relative">
+    <i data-lucide="clock" size="18"></i>
+    <span style="position:absolute;top:6px;right:6px;width:8px;height:8px;background:${dotColor};border-radius:50%;border:2px solid var(--bg-2);${isIn?'animation:pulse 2s infinite':''}"></span>
+  </button>`;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/* ============================================================
+   ⏰ SHIFTS — Βάρδιες & Ωράριο
+   ============================================================ */
+var SHIFTS_CACHE = [];
+var SHIFTS_VIEW = 'today'; // today | week | month | all
+var SHIFTS_FILTER_USER = '';
+
+// Track which tab is active in Shifts page
+var SHIFTS_TAB = 'history'; // 'history' | 'schedule' | 'settings' | 'overtime'
+
+async function renderShifts(){
+  document.getElementById('content').innerHTML = `<div class="page-head"><div class="page-title">Βάρδιες</div></div><div class="muted" style="padding:40px;text-align:center">Φόρτωση...</div>`;
+  try{
+    const {data, error} = await sb.from('shifts')
+      .select('*')
+      .order('started_at', {ascending: false})
+      .limit(300);
+    if(error) throw error;
+    SHIFTS_CACHE = data || [];
+  }catch(e){
+    SHIFTS_CACHE = [];
+    toast('Σφάλμα φόρτωσης βαρδιών: '+e.message,'danger');
+  }
+  // Also load schedules + labor settings
+  await loadShiftsExtensions();
+  _renderShiftsPageWithTabs();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   🏛️ ΕΡΓΑΝΗ Shift Reporting
+   ════════════════════════════════════════════════════════════════════
+   Υποβάλλει έναρξη/λήξη βάρδιας στο ΕΡΓΑΝΗ API μέσω Edge Function.
+   ════════════════════════════════════════════════════════════════════ */
+
+async function reportShiftToErgani(action, employeeId, employeeName){
+  try{
+    // Φόρτωση Edge Function URL
+    const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/ergani-shift`;
+    
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      },
+      body: JSON.stringify({
+        shop_id: SHOP_ID,
+        employee_id: employeeId,
+        employee_name: employeeName,
+        action: action, // "start" ή "end"
+        timestamp: new Date().toISOString(),
+        notes: `ZyroNex auto-report: ${action === 'start' ? 'Έναρξη' : 'Λήξη'} βάρδιας`
+      })
+    });
+    
+    const data = await response.json();
+    
+    if(!response.ok){
+      console.warn('[ΕΡΓΑΝΗ] Report failed:', data);
+      // Μη θανατηφόρο — κρατάμε τοπικό log αν χρειάζεται retry
+      toast(`⚠️ ΕΡΓΑΝΗ sync: ${data.error || 'Offline'}. Local save OK.`, 'warning', 3000);
+      return { ok: false, error: data.error, local: true };
+    }
+    
+    console.log('[ΕΡΓΑΝΗ] Report success:', data);
+    toast(`✅ ΕΡΓΑΝΗ: ${action === 'start' ? 'Έναρξη' : 'Λήξη'} καταγράφηκε`, 'success', 2000);
+    return { ok: true, ...data };
+  }catch(e){
+    console.error('[ΕΡΓΑΝΗ] Network error:', e);
+    // Offline ή error — local save OK
+    toast(`ℹ️ ΕΡΓΑΝΗ offline. Τοπική αποθήκευση ενεργή.`, 'info', 2000);
+    return { ok: false, error: e.message, offline: true, local: true };
+  }
+}
+
+// Helper: όταν ο χρήστης κάνει "Έναρξη Βάρδιας", καλούμε αυτό
+async function startShiftWithErgani(){
+  if(!CURRENT_USER) return;
+  const result = await reportShiftToErgani('start', CURRENT_USER.id, CURRENT_USER.name || 'Employee');
+  // Συνεχίζουμε και άσε τη normal flow — το result είναι informational
+}
+
+// Helper: όταν ο χρήστης κάνει "Αποχώρηση", καλούμε αυτό
+async function endShiftWithErgani(){
+  if(!CURRENT_USER) return;
+  const result = await reportShiftToErgani('end', CURRENT_USER.id, CURRENT_USER.name || 'Employee');
+  // Συνεχίζουμε
+}
+
+window.reportShiftToErgani = reportShiftToErgani;
+window.startShiftWithErgani = startShiftWithErgani;
+window.endShiftWithErgani = endShiftWithErgani;
+
+function _renderShiftsPageWithTabs(){
+  const isAdmin = CURRENT_USER && CURRENT_USER.perms && CURRENT_USER.perms.includes('*');
+  const tabs = [
+    {id:'history', label:'Ιστορικό', shortLabel:'Ιστορικό', icon:'history', show: true},
+    {id:'overtime', label:'Υπερωρίες', shortLabel:'Υπερωρίες', icon:'alert-triangle', show: true},
+    {id:'schedule', label:'Προγραμματισμός', shortLabel:'Πρόγρ/σμός', icon:'calendar', show: isAdmin},
+    {id:'settings', label:'Εργατική Νομοθεσία', shortLabel:'Νομοθεσία', icon:'gavel', show: isAdmin}
+  ].filter(t => t.show);
+  const isMobile = window.innerWidth <= 480;
+
+  const tabsHtml = tabs.map(t => `
+    <button class="shifts-tab ${SHIFTS_TAB===t.id?'active':''}" onclick="switchShiftsTab('${t.id}')">
+      <i data-lucide="${t.icon}" size="15"></i> ${isMobile ? t.shortLabel : t.label}
+    </button>
+  `).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="page-title">Χρήστες & Βάρδιες</div>
+        <div class="page-sub">Διαχείριση ωραρίου & υπερωριών</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
+      <button onclick="_usersSetTab('users')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:500;background:transparent;color:var(--text-1)">👨‍💼 Χρήστες</button>
+      <button onclick="_usersSetTab('shifts')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:700;background:var(--accent);color:#000">🕐 Βάρδιες</button>
+    </div>
+    <div class="shifts-tabs-bar">${tabsHtml}</div>
+    <div id="shiftsTabContent"></div>
+  `;
+  lucide.createIcons();
+  _renderShiftsTabContent();
+}
+
+function switchShiftsTab(tab){
+  SHIFTS_TAB = tab;
+  // Update active state
+  document.querySelectorAll('.shifts-tab').forEach(b => b.classList.remove('active'));
+  const btn = Array.from(document.querySelectorAll('.shifts-tab')).find(b => b.textContent.trim().toLowerCase().includes(
+    tab==='history'?'ιστορικό':tab==='overtime'?'υπερωρίες':tab==='schedule'?'προγραμματισμός':'νομοθεσία'
+  ));
+  if(btn) btn.classList.add('active');
+  _renderShiftsTabContent();
+  lucide.createIcons();
+}
+
+function _renderShiftsTabContent(){
+  const container = document.getElementById('shiftsTabContent');
+  if(!container) return;
+  switch(SHIFTS_TAB){
+    case 'overtime': container.innerHTML = _renderOvertimeTab(); break;
+    case 'schedule': container.innerHTML = _renderScheduleTab(); break;
+    case 'settings': container.innerHTML = _renderLaborSettingsTab(); break;
+    default: container.innerHTML = ''; renderShiftsHTML(); break;
+  }
+  setTimeout(()=>lucide.createIcons(), 50);
+}
+
+// ============== OVERTIME TAB ==============
+function _renderOvertimeTab(){
+  // Calculate overtime per user (hours worked beyond max_hours_per_day per day, summed)
+  const cutoff = new Date(Date.now() - 90*86400000);
+  const userMap = {};
+
+  // Build per-user, per-day worked hours from SHIFTS_CACHE
+  for(const sh of (SHIFTS_CACHE || [])){
+    if(!sh.started_at) continue;
+    const sStart = new Date(sh.started_at);
+    if(sStart < cutoff) continue;
+    const sEnd = sh.ended_at ? new Date(sh.ended_at) : new Date();
+    const userId = sh.user_id;
+    const dayKey = sStart.toISOString().slice(0,10);
+    if(!userMap[userId]) userMap[userId] = {};
+    if(!userMap[userId][dayKey]) userMap[userId][dayKey] = 0;
+    userMap[userId][dayKey] += (sEnd - sStart) / (1000*60*60);
+  }
+
+  // Aggregate: total overtime per user
+  const userSummary = [];
+  const maxDay = LABOR_SETTINGS.overtime_warning_at;
+  for(const [uid, days] of Object.entries(userMap)){
+    let totalOvertime = 0;
+    let daysOvertime = 0;
+    let totalHours = 0;
+    const overtimeByDay = [];
+    for(const [d, hrs] of Object.entries(days)){
+      totalHours += hrs;
+      if(hrs > maxDay){
+        const ot = hrs - maxDay;
+        totalOvertime += ot;
+        daysOvertime++;
+        overtimeByDay.push({date: d, hours: hrs, overtime: ot});
+      }
+    }
+    const u = USERS.find(x=>x.id===+uid);
+    userSummary.push({
+      userId: +uid,
+      userName: u ? u.name : `User #${uid}`,
+      userRole: u ? u.role : '',
+      totalHours,
+      totalOvertime,
+      daysOvertime,
+      overtimeByDay: overtimeByDay.sort((a,b)=>b.date.localeCompare(a.date))
+    });
+  }
+  userSummary.sort((a,b)=>b.totalOvertime - a.totalOvertime);
+
+  if(userSummary.length === 0){
+    return `<div class="card" style="padding:30px;text-align:center;color:var(--text-2)">
+      <i data-lucide="info" size="32" style="margin-bottom:8px"></i>
+      <div style="font-size:14px">Δεν έχει καταγραφεί καμία βάρδια στις τελευταίες 90 ημέρες.</div>
+    </div>`;
+  }
+
+  return `
+    <div class="card mb-3" style="padding:14px 18px;background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border-left:3px solid #f59e0b">
+      <div class="flex gap-2 items-center mb-1"><i data-lucide="alert-triangle" size="16" style="color:#f59e0b"></i><span class="fw-700">Υπερωρίες τελευταίων 90 ημερών</span></div>
+      <div class="text-sm muted">Όριο κανονικού ωραρίου: ${LABOR_SETTINGS.overtime_warning_at} ώρες/ημέρα. Όσες ώρες δουλέψει υπάλληλος πέραν αυτού λογίζονται ως υπερωρίες.</div>
+    </div>
+    <div class="users-grid">
+      ${userSummary.map(s => {
+        const iconHtml = getRoleIconHtml(s.userRole, 48);
+        const avatarHtml = iconHtml
+          ? `<div class="avatar role-avatar" style="width:48px;height:48px;flex-shrink:0">${iconHtml}</div>`
+          : `<div class="avatar" style="width:48px;height:48px;font-size:18px;flex-shrink:0">${s.userName[0]||'?'}</div>`;
+        return `
+        <div class="user-card">
+          <div class="user-card-head">
+            ${avatarHtml}
+            <div class="user-card-info">
+              <div class="user-card-name">${s.userName}</div>
+              <div class="user-card-role">${formatRoleDisplay(s.userRole)}</div>
+            </div>
+          </div>
+          <div class="user-card-meta">
+            <div class="flex gap-3" style="flex-wrap:wrap">
+              <div>
+                <div style="font-size:11px;color:var(--text-2)">Σύνολο ωρών</div>
+                <div style="font-size:16px;font-weight:700">${formatHours(s.totalHours)}</div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--text-2)">Υπερωρίες</div>
+                <div style="font-size:16px;font-weight:700;color:${s.totalOvertime>0?'#f59e0b':'var(--text-2)'}">${formatHours(s.totalOvertime)}</div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--text-2)">Ημέρες με υπερωρία</div>
+                <div style="font-size:16px;font-weight:700">${s.daysOvertime}</div>
+              </div>
+            </div>
+            ${s.overtimeByDay.length>0 ? `
+              <details style="margin-top:8px">
+                <summary style="cursor:pointer;font-size:12px;color:var(--text-2);user-select:none">Δες αναλυτικά (${s.overtimeByDay.length} ημέρες)</summary>
+                <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+                  ${s.overtimeByDay.slice(0,30).map(d=>`
+                    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 8px;background:var(--bg-2);border-radius:6px">
+                      <span>${new Date(d.date).toLocaleDateString('el-GR',{day:'numeric',month:'short',weekday:'short'})}</span>
+                      <span style="color:#f59e0b;font-weight:600">+${formatHours(d.overtime)} (${formatHours(d.hours)} σύνολο)</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </details>
+            `:''}
+          </div>
+        </div>
+      `;}).join('')}
+    </div>
+  `;
+}
+
+// ============== SCHEDULE TAB ==============
+function _renderScheduleTab(){
+  return `
+    <div class="card mb-3" style="padding:14px 18px;background:linear-gradient(135deg,rgba(0,212,168,0.06),rgba(74,163,255,0.04));border-left:3px solid var(--accent)">
+      <div class="flex gap-2 items-center mb-1"><i data-lucide="calendar" size="16" style="color:var(--accent)"></i><span class="fw-700">Προγραμματισμός Ωραρίου</span></div>
+      <div class="text-sm muted">Όρισε εβδομαδιαίο ωράριο ανά υπάλληλο. Υποστηρίζει σπαστές βάρδιες (πρωί/απόγευμα).</div>
+    </div>
+    <div class="form-row mb-3">
+      <label class="form-label">Επίλεξε υπάλληλο</label>
+      <select class="form-select" id="schedUserSelect" onchange="_renderScheduleForUser(this.value)">
+        <option value="">— επιλογή —</option>
+        ${USERS.map(u=>`<option value="${u.id}">${u.name} (${formatRoleDisplay(u.role)})</option>`).join('')}
+      </select>
+    </div>
+    <div id="schedUserContent"></div>
+  `;
+}
+
+function _renderScheduleForUser(userId){
+  const container = document.getElementById('schedUserContent');
+  if(!container) return;
+  if(!userId){
+    container.innerHTML = '';
+    return;
+  }
+  userId = +userId;
+  const u = USERS.find(x=>x.id===userId);
+  if(!u){ container.innerHTML = ''; return; }
+
+  const userSchedules = SHIFT_SCHEDULES.filter(s=>s.user_id===userId);
+  const byDay = {};
+  for(let i=0;i<7;i++) byDay[i] = [];
+  for(const s of userSchedules){
+    byDay[s.day_of_week].push(s);
+  }
+  for(const d in byDay) byDay[d].sort((a,b)=>(a.start_time||'').localeCompare(b.start_time||''));
+
+  // Order days starting from Monday
+  const dayOrder = [1,2,3,4,5,6,0];
+
+  container.innerHTML = `
+    <div class="sched-grid">
+      ${dayOrder.map(dayIdx => `
+        <div class="sched-day-card">
+          <div class="sched-day-head">
+            <span>${DAY_NAMES_GR[dayIdx]}</span>
+            <button class="btn btn-sm btn-ghost" onclick="_addScheduleSegment(${userId}, ${dayIdx})"><i data-lucide="plus" size="14"></i></button>
+          </div>
+          ${byDay[dayIdx].length === 0 ? '<div class="text-xs muted">Ρεπό</div>' : byDay[dayIdx].map((s,idx)=>`
+            <div class="sched-segment">
+              <span class="sched-segment-time">${(s.start_time||'').slice(0,5)} – ${(s.end_time||'').slice(0,5)}</span>
+              <span style="margin-left:auto">
+                <button class="icon-btn" onclick="_editScheduleSegment(${s.id})" title="Επεξεργασία" style="padding:2px"><i data-lucide="edit-2" size="12"></i></button>
+                <button class="icon-btn" onclick="_deleteScheduleSegment(${s.id})" style="color:var(--danger);padding:2px" title="Διαγραφή"><i data-lucide="trash-2" size="12"></i></button>
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      `).join('')}
+    </div>
+  `;
+  setTimeout(()=>lucide.createIcons(), 50);
+}
+
+async function _addScheduleSegment(userId, dayIdx){
+  // Use prompts (simple) or open mini-modal
+  const u = USERS.find(x=>x.id===userId);
+  if(!u) return;
+  openModal(`<div class="modal-head">
+    <h3 class="fw-800 text-xl">Νέα βάρδια — ${DAY_NAMES_GR[dayIdx]}</h3>
+    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+  </div>
+  <div class="modal-body">
+    <div class="form-row">
+      <label class="form-label">Από</label>
+      <input type="time" class="form-input" id="schedNewStart" value="09:00" step="900">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Έως</label>
+      <input type="time" class="form-input" id="schedNewEnd" value="14:00" step="900">
+    </div>
+    <div class="text-xs muted">💡 Tip: Για σπαστή βάρδια, δημιούργησε δύο segments (π.χ. 09:00-14:00 και 17:30-21:00).</div>
+    <div class="flex gap-2 mt-3" style="justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal()">Άκυρο</button>
+      <button class="btn btn-primary" onclick="_saveScheduleSegment(${userId},${dayIdx})">Αποθήκευση</button>
+    </div>
+  </div>`);
+  lucide.createIcons();
+}
+
+async function _saveScheduleSegment(userId, dayIdx){
+  const start = document.getElementById('schedNewStart').value;
+  const end = document.getElementById('schedNewEnd').value;
+  if(!start || !end){ toast('Συμπλήρωσε ώρες','warn'); return; }
+  if(start >= end){ toast('Η λήξη πρέπει να είναι μετά την έναρξη','warn'); return; }
+  // Check legal hours
+  const startH = parseInt(start.split(':')[0]) + parseInt(start.split(':')[1])/60;
+  const endH = parseInt(end.split(':')[0]) + parseInt(end.split(':')[1])/60;
+  const segmentHours = endH - startH;
+  if(segmentHours > LABOR_SETTINGS.absolute_max_per_day){
+    toast(`⚠️ Η βάρδια ξεπερνά το απόλυτο όριο ${LABOR_SETTINGS.absolute_max_per_day}ω`,'danger');
+    return;
+  }
+  try{
+    const {error} = await sb.from('shift_schedules').insert({
+      user_id: userId,
+      day_of_week: dayIdx,
+      start_time: start,
+      end_time: end,
+      segment_index: 1,
+      active: true
+    });
+    if(error) throw error;
+    toast('✓ Βάρδια αποθηκεύτηκε','success');
+    closeModal();
+    await loadShiftsExtensions();
+    _renderScheduleForUser(userId);
+  }catch(e){
+    toast('Σφάλμα: '+e.message,'danger');
+  }
+}
+
+async function _deleteScheduleSegment(id){
+  if(!confirm('Διαγραφή αυτής της βάρδιας;')) return;
+  try{
+    const {error} = await sb.from('shift_schedules').delete().eq('id', id);
+    if(error) throw error;
+    SHIFT_SCHEDULES = SHIFT_SCHEDULES.filter(s=>s.id!==id);
+    toast('✓ Διαγράφηκε','success');
+    const userId = +(document.getElementById('schedUserSelect')||{}).value;
+    if(userId) _renderScheduleForUser(userId);
+  }catch(e){
+    toast('Σφάλμα: '+e.message,'danger');
+  }
+}
+
+async function _editScheduleSegment(id){
+  const s = SHIFT_SCHEDULES.find(x=>x.id===id);
+  if(!s) return;
+  openModal(`<div class="modal-head">
+    <h3 class="fw-800 text-xl">Επεξεργασία βάρδιας — ${DAY_NAMES_GR[s.day_of_week]}</h3>
+    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+  </div>
+  <div class="modal-body">
+    <div class="form-row">
+      <label class="form-label">Από</label>
+      <input type="time" class="form-input" id="schedEditStart" value="${(s.start_time||'').slice(0,5)}" step="900">
+    </div>
+    <div class="form-row">
+      <label class="form-label">Έως</label>
+      <input type="time" class="form-input" id="schedEditEnd" value="${(s.end_time||'').slice(0,5)}" step="900">
+    </div>
+    <div class="flex gap-2 mt-3" style="justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal()">Άκυρο</button>
+      <button class="btn btn-primary" onclick="_saveEditScheduleSegment(${id})">Αποθήκευση</button>
+    </div>
+  </div>`);
+  lucide.createIcons();
+}
+
+async function _saveEditScheduleSegment(id){
+  const start = document.getElementById('schedEditStart').value;
+  const end = document.getElementById('schedEditEnd').value;
+  if(!start || !end || start >= end){ toast('Λάθος ώρες','warn'); return; }
+  try{
+    const {error} = await sb.from('shift_schedules').update({start_time: start, end_time: end}).eq('id', id);
+    if(error) throw error;
+    toast('✓ Ενημερώθηκε','success');
+    closeModal();
+    await loadShiftsExtensions();
+    const userId = +(document.getElementById('schedUserSelect')||{}).value;
+    if(userId) _renderScheduleForUser(userId);
+  }catch(e){
+    toast('Σφάλμα: '+e.message,'danger');
+  }
+}
+
+// ============== LABOR SETTINGS TAB ==============
+function _renderLaborSettingsTab(){
+  const ls = LABOR_SETTINGS;
+  return `
+    <div class="card mb-3" style="padding:14px 18px;background:linear-gradient(135deg,rgba(0,212,168,0.06),rgba(74,163,255,0.04));border-left:3px solid var(--accent)">
+      <div class="flex gap-2 items-center mb-1"><i data-lucide="gavel" size="16" style="color:var(--accent)"></i><span class="fw-700">Ρυθμίσεις Εργατικής Νομοθεσίας</span></div>
+      <div class="text-sm muted">${ls.legal_disclaimer || 'Σύμφωνα με την Ελληνική εργατική νομοθεσία (Ν. 4808/2021).'}</div>
+    </div>
+    <div class="card" style="padding:18px">
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">
+        <div class="form-row">
+          <label class="form-label">Κανονικές ώρες ανά ημέρα</label>
+          <input type="number" class="form-input" id="ls_max_day" value="${ls.max_hours_per_day}" min="1" max="24" step="0.5">
+          <div class="text-xs muted mt-1">Πάνω από αυτό λογίζεται υπερωρία</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Κανονικές ώρες ανά εβδομάδα</label>
+          <input type="number" class="form-input" id="ls_max_week" value="${ls.max_hours_per_week}" min="1" max="168" step="0.5">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Ώρα έναρξης υπερωρίας (ώρες/ημέρα)</label>
+          <input type="number" class="form-input" id="ls_overtime_at" value="${ls.overtime_warning_at}" min="1" max="24" step="0.5">
+          <div class="text-xs muted mt-1">Ειδοποίηση όταν φτάσει αυτή την ώρα</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Απόλυτο όριο ωρών/ημέρα</label>
+          <input type="number" class="form-input" id="ls_abs_day" value="${ls.absolute_max_per_day}" min="1" max="24" step="0.5">
+          <div class="text-xs muted mt-1">Σκληρό όριο — απαγορεύεται περαιτέρω εργασία</div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Απόλυτο όριο ωρών/εβδομάδα</label>
+          <input type="number" class="form-input" id="ls_abs_week" value="${ls.absolute_max_per_week}" min="1" max="168" step="0.5">
+        </div>
+        <div class="form-row">
+          <label class="form-label">Εβδομαδιαία ανάπαυση (ώρες)</label>
+          <input type="number" class="form-input" id="ls_rest" value="${ls.weekly_rest_hours}" min="0" max="168" step="0.5">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Νομικό disclaimer</label>
+        <textarea class="form-input form-textarea" id="ls_disclaimer" rows="3">${ls.legal_disclaimer||''}</textarea>
+        <div class="text-xs muted mt-1">Εμφανίζεται ως πληροφορία πάνω από την κάρτα ρυθμίσεων</div>
+      </div>
+      <div class="flex gap-2 mt-3" style="justify-content:flex-end">
+        <button class="btn btn-primary" onclick="_saveLaborSettings()"><i data-lucide="save" size="16"></i> Αποθήκευση</button>
+      </div>
+    </div>
+  `;
+}
+
+async function _saveLaborSettings(){
+  const newSettings = {
+    id: 1,
+    max_hours_per_day: parseFloat(document.getElementById('ls_max_day').value) || 8,
+    max_hours_per_week: parseFloat(document.getElementById('ls_max_week').value) || 40,
+    overtime_warning_at: parseFloat(document.getElementById('ls_overtime_at').value) || 8,
+    absolute_max_per_day: parseFloat(document.getElementById('ls_abs_day').value) || 13,
+    absolute_max_per_week: parseFloat(document.getElementById('ls_abs_week').value) || 48,
+    weekly_rest_hours: parseFloat(document.getElementById('ls_rest').value) || 24,
+    legal_disclaimer: document.getElementById('ls_disclaimer').value || ''
+  };
+  // Sanity checks
+  if(newSettings.overtime_warning_at < newSettings.max_hours_per_day){
+    if(!confirm('Η ώρα έναρξης υπερωρίας είναι μικρότερη από τις κανονικές ώρες. Σίγουρα θες να συνεχίσεις;')) return;
+  }
+  if(newSettings.absolute_max_per_day < newSettings.overtime_warning_at){
+    toast('Το απόλυτο όριο πρέπει να είναι ≥ από την έναρξη υπερωρίας','danger');
+    return;
+  }
+  try{
+    const {error} = await sb.from('labor_settings').upsert(newSettings);
+    if(error) throw error;
+    Object.assign(LABOR_SETTINGS, newSettings);
+    toast('✓ Ρυθμίσεις αποθηκεύτηκαν','success');
+    refreshShiftDisplays();
+  }catch(e){
+    toast('Σφάλμα: '+e.message,'danger');
+  }
+}
+
+// Helper: βρες ανοιχτή βάρδια τρέχοντος χρήστη
+function getCurrentUserActiveShift(){
+  if(!CURRENT_USER) return null;
+  return SHIFTS_CACHE.find(s=>s.user_id===CURRENT_USER.id && !s.ended_at);
+}
+
+// Helper: υπολογισμός τζίρου & συναλλαγών για βάρδια
+function getShiftStats(shift){
+  if(!shift) return {revenue:0, txCount:0};
+  const start = new Date(shift.started_at).getTime();
+  const end = shift.ended_at ? new Date(shift.ended_at).getTime() : Date.now();
+  const sales = SALES.filter(s=>{
+    const t = new Date(s.date).getTime();
+    return t>=start && t<=end;
+  });
+  const revenue = sales.reduce((a,s)=>a+(s.total||0),0);
+  const txCount = sales.length;
+  return {revenue, txCount};
+}
+
+// Helper: διάρκεια βάρδιας σε ώρες/λεπτά
+function shiftDuration(shift){
+  const start = new Date(shift.started_at).getTime();
+  const end = shift.ended_at ? new Date(shift.ended_at).getTime() : Date.now();
+  const ms = end - start;
+  const h = Math.floor(ms/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  return {hours:h, minutes:m, totalMinutes: Math.floor(ms/60000), display: `${h}h ${m}m`};
+}
+
+function renderShiftsHTML(){
+  // Sync hero card and topbar badge whenever shifts data updates
+  try{ refreshShiftDisplays(); }catch(_){}
+  // Only re-render the shifts page DOM if user is currently viewing it
+  // (otherwise just refresh the cached data and skip — avoids redirecting from Dashboard)
+  if(window.CURRENT_PAGE_ID && window.CURRENT_PAGE_ID !== 'shifts') return;
+  // Φίλτρο περιόδου
+  let filtered = SHIFTS_CACHE;
+  const now = Date.now();
+  if(SHIFTS_VIEW==='today'){
+    const todayStr = new Date().toISOString().slice(0,10);
+    filtered = filtered.filter(s=>(s.started_at||'').startsWith(todayStr));
+  } else if(SHIFTS_VIEW==='week'){
+    const weekAgo = now - 7*86400000;
+    filtered = filtered.filter(s=>new Date(s.started_at).getTime()>=weekAgo);
+  } else if(SHIFTS_VIEW==='month'){
+    const monthAgo = now - 30*86400000;
+    filtered = filtered.filter(s=>new Date(s.started_at).getTime()>=monthAgo);
+  }
+  if(SHIFTS_FILTER_USER) filtered = filtered.filter(s=>s.user_id===+SHIFTS_FILTER_USER);
+
+  // Active shift για τρέχοντα χρήστη
+  const myShift = getCurrentUserActiveShift();
+
+  // Στατιστικά
+  const completedShifts = filtered.filter(s=>s.ended_at);
+  const totalMinutes = completedShifts.reduce((a,s)=>a+shiftDuration(s).totalMinutes,0);
+  const totalH = Math.floor(totalMinutes/60);
+  const totalM = totalMinutes%60;
+  const totalRevenue = filtered.reduce((a,s)=>a+getShiftStats(s).revenue,0);
+
+  // Per-user summary (για μήνα/εβδομάδα)
+  const userStats = {};
+  filtered.forEach(s=>{
+    if(!userStats[s.user_id]) userStats[s.user_id] = {minutes:0, revenue:0, shifts:0};
+    if(s.ended_at) userStats[s.user_id].minutes += shiftDuration(s).totalMinutes;
+    userStats[s.user_id].revenue += getShiftStats(s).revenue;
+    userStats[s.user_id].shifts++;
+  });
+
+  const html = `
+  <div class="page-head">
+    <div>
+      <div class="page-title">⏰ Βάρδιες</div>
+      <div class="page-sub">${filtered.length} βάρδιες • Σύνολο ωρών: ${totalH}h ${totalM}m • Τζίρος: ${eur(totalRevenue)}</div>
+    </div>
+    <div class="flex gap-2" style="flex-wrap:wrap">
+      ${myShift
+        ? `<button class="btn btn-danger" onclick="clockOut()"><i data-lucide="log-out" size="18"></i> Αποχώρηση (Clock Out)</button>`
+        : `<button class="btn btn-primary" onclick="(typeof gpsClockIn==='function'?gpsClockIn():clockIn())"><i data-lucide="log-in" size="18"></i> Προσέλευση (Clock In)</button>`
+      }
+    </div>
+  </div>
+
+  ${myShift ? _renderActiveShiftCard(myShift) : ''}
+
+  <!-- Tabs περιόδου -->
+  <div class="tabs" style="margin-bottom:16px">
+    <div class="tab ${SHIFTS_VIEW==='today'?'active':''}" onclick="SHIFTS_VIEW='today';renderShiftsHTML()">Σήμερα</div>
+    <div class="tab ${SHIFTS_VIEW==='week'?'active':''}" onclick="SHIFTS_VIEW='week';renderShiftsHTML()">7 ημέρες</div>
+    <div class="tab ${SHIFTS_VIEW==='month'?'active':''}" onclick="SHIFTS_VIEW='month';renderShiftsHTML()">30 ημέρες</div>
+    <div class="tab ${SHIFTS_VIEW==='all'?'active':''}" onclick="SHIFTS_VIEW='all';renderShiftsHTML()">Όλες</div>
+  </div>
+
+  <!-- Per-user summary -->
+  ${Object.keys(userStats).length>1 ? `
+  <div class="card mb-3" style="padding:14px 16px">
+    <div class="fw-700 mb-2">📊 Σύνοψη ανά Υπάλληλο</div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+      ${Object.entries(userStats).map(([uid, stats])=>{
+        const u = USERS.find(x=>x.id===+uid);
+        const h = Math.floor(stats.minutes/60);
+        const m = stats.minutes%60;
+        return `<div style="padding:10px;background:var(--bg-2);border-radius:10px">
+          <div class="fw-700 text-sm">${u?.name||'—'}</div>
+          <div class="text-xs muted mt-1">⏱️ ${h}h ${m}m • 📦 ${stats.shifts} βάρδιες</div>
+          <div class="fw-700 text-sm mt-1" style="color:var(--accent)">${eur(stats.revenue)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>` : ''}
+
+  <!-- Φίλτρο χρήστη -->
+  <div class="flex gap-2 mb-3" style="flex-wrap:wrap">
+    <select class="form-select" style="max-width:200px" onchange="SHIFTS_FILTER_USER=this.value;renderShiftsHTML()">
+      <option value="">Όλοι οι υπάλληλοι</option>
+      ${USERS.map(u=>`<option value="${u.id}" ${SHIFTS_FILTER_USER==u.id?'selected':''}>${u.name}</option>`).join('')}
+    </select>
+    ${SHIFTS_FILTER_USER?`<button class="btn btn-ghost" onclick="SHIFTS_FILTER_USER='';renderShiftsHTML()"><i data-lucide="x" size="14"></i> Καθαρισμός</button>`:''}
+  </div>
+
+  <!-- Shifts table -->
+  <div class="card" style="padding:0">
+    <table class="tbl responsive-stack">
+      <thead><tr>
+        <th>Υπάλληλος</th>
+        <th>Είσοδος</th>
+        <th>Έξοδος</th>
+        <th>Διάρκεια</th>
+        <th style="text-align:right">Τζίρος</th>
+        <th style="text-align:right">Συναλλαγές</th>
+        <th>Καθήκοντα</th>
+        <th>Κατάσταση</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        ${filtered.length===0
+          ? `<tr><td colspan="8" style="text-align:center;padding:30px;border:none"><div style="font-size:28px;margin-bottom:8px">📋</div><div class="muted">Δεν υπάρχουν βάρδιες για αυτήν την περίοδο.</div></td></tr>`
+          : filtered.map(s=>{
+              const u = USERS.find(x=>x.id===s.user_id);
+              const dur = shiftDuration(s);
+              const stats = getShiftStats(s);
+              const startDate = new Date(s.started_at);
+              const endDate = s.ended_at ? new Date(s.ended_at) : null;
+              const active = !s.ended_at;
+              const tasks = s.tasks || [];
+              const doneCount = tasks.filter(t=>t.done).length;
+              const tasksCell = tasks.length>0
+                ? (doneCount===tasks.length
+                    ? `<span class="chip" style="background:rgba(74,222,128,0.15);color:#4ade80;font-size:10px">✓ ${doneCount}/${tasks.length}</span>`
+                    : `<span class="chip ${doneCount===0?'chip-danger':'chip-warn'}" style="font-size:10px">${doneCount}/${tasks.length}</span>`)
+                : `<span class="muted text-xs">—</span>`;
+              return `<tr ${active?'style="background:rgba(0,212,168,0.04)"':''}>
+                <td><div class="flex gap-2 items-center">
+                  <div class="avatar" style="width:28px;height:28px;font-size:12px">${u?.name?.[0]||'?'}</div>
+                  <div class="fw-700 text-sm">${u?.name||'—'}</div>
+                </div></td>
+                <td class="text-sm">${startDate.toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit'})} ${startDate.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}</td>
+                <td class="text-sm">${endDate?endDate.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'}):'<span class="muted">—</span>'}</td>
+                <td class="fw-700">${dur.display}</td>
+                <td style="text-align:right" class="fw-700">${eur(stats.revenue)}</td>
+                <td style="text-align:right">${stats.txCount}</td>
+                <td>${tasksCell}</td>
+                <td>${active
+                  ? `<span class="chip" style="background:rgba(0,212,168,0.15);color:var(--accent);font-size:10px">🟢 Ενεργή</span>`
+                  : `<span class="chip chip-neutral" style="font-size:10px">Ολοκληρώθηκε</span>`}</td>
+                <td>
+                  <div class="flex gap-1">
+                    ${active ? `<button class="icon-btn" style="color:#2ecc71" onclick="openSmartShiftClose()" title="Smart Shift Close"><i data-lucide="shield-check" size="14"></i></button>` : `<button class="icon-btn" onclick="openShiftDetail(${s.id})" title="Λεπτομέρειες"><i data-lucide="eye" size="14"></i></button>`}
+                    <button class="icon-btn" style="color:var(--danger)" onclick="deleteShift(${s.id})" title="Διαγραφή"><i data-lucide="trash-2" size="14"></i></button>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')
+        }
+      </tbody>
+    </table>
+  </div>
+  `;
+  // If we're inside the new tab system, write to shiftsTabContent instead of content
+  const tabContent = document.getElementById('shiftsTabContent');
+  if(tabContent){
+    tabContent.innerHTML = html;
+  }else{
+    document.getElementById('content').innerHTML = html;
+  }
+  lucide.createIcons();
+}
+
+function _renderActiveShiftCard(shift){
+  const dur = shiftDuration(shift);
+  const stats = getShiftStats(shift);
+  const tasks = shift.tasks || [];
+  const doneCount = tasks.filter(t=>t.done).length;
+
+  // Βρες εκκρεμότητες προηγούμενης βάρδιας (ίδιου χρήστη)
+  const myLastClosed = SHIFTS_CACHE
+    .filter(s => s.user_id===shift.user_id && s.ended_at && s.id!==shift.id)
+    .sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at))[0];
+
+  let carryOverHTML = '';
+  if(myLastClosed){
+    const prevPending = (myLastClosed.tasks||[]).filter(t=>!t.done);
+    if(prevPending.length>0){
+      const prevDate = new Date(myLastClosed.ended_at).toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit'});
+      carryOverHTML = `
+      <div style="margin-top:14px;padding:12px 14px;background:rgba(255,152,0,0.1);border:1px solid var(--warn);border-left:3px solid var(--warn);border-radius:10px">
+        <div class="flex gap-2 items-center mb-2">
+          <i data-lucide="alert-triangle" size="16" style="color:var(--warn)"></i>
+          <span class="fw-800 text-sm" style="color:var(--warn)">⚠️ Προσοχή: ${prevPending.length} εκκρεμότητες από ${prevDate}</span>
+        </div>
+        <div class="text-xs" style="margin-bottom:8px">Είχαν μείνει ατελή την προηγούμενη βάρδια σου${myLastClosed.pending_reason?' — <i>"'+myLastClosed.pending_reason+'"</i>':''}. Φρόντισε να τα κάνεις σήμερα:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${prevPending.map(t=>`<div style="padding:6px 10px;background:var(--bg-1);border-radius:6px;display:flex;gap:6px;align-items:center">
+            <span style="color:var(--warn)">→</span>
+            <span class="text-sm">${t.text}</span>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }
+  }
+
+  const tasksHTML = tasks.length>0 ? `
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div class="flex gap-2 items-center mb-2">
+        <i data-lucide="check-square" size="14"></i>
+        <span class="fw-700 text-sm">Καθήκοντα σήμερα (${doneCount}/${tasks.length})</span>
+        ${doneCount===tasks.length ? `<span class="chip" style="background:rgba(74,222,128,0.15);color:#4ade80;font-size:10px">✓ Όλα έτοιμα</span>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${tasks.map((t,i)=>`
+          <label style="display:flex;gap:8px;align-items:center;padding:6px 10px;background:var(--bg-1);border-radius:8px;cursor:pointer;${t.done?'opacity:0.55':''}">
+            <input type="checkbox" ${t.done?'checked':''} onchange="toggleShiftTask(${shift.id}, ${i})" style="cursor:pointer">
+            <span class="text-sm" style="${t.done?'text-decoration:line-through':''}">${t.text}</span>
+          </label>`).join('')}
+      </div>
+    </div>` : '';
+
+  return `<div class="card mb-3" style="padding:18px;background:linear-gradient(135deg,rgba(0,212,168,0.12),rgba(74,163,255,0.06));border:2px solid var(--accent)">
+    <div class="flex gap-2 items-center mb-2">
+      <div style="width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite"></div>
+      <div class="fw-800">🟢 Ενεργή βάρδια — ${CURRENT_USER.name}</div>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:8px">
+      <div>
+        <div class="text-xs muted">Έναρξη</div>
+        <div class="fw-700">${new Date(shift.started_at).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+      ${shift.gps_verified ? `<div>
+        <div class="text-xs muted">GPS</div>
+        <div class="fw-700" style="color:#2ecc71">📍 ${shift.gps_distance}m ✓</div>` : shift.gps_verified===false ? `<div>
+        <div class="text-xs muted">GPS</div>
+        <div class="fw-700" style="color:#e74c3c">⚠️ Χωρίς GPS</div>` : '<div style="display:none">'}
+      </div
+      </div>
+      <div>
+        <div class="text-xs muted">Διάρκεια</div>
+        <div class="fw-700" style="color:var(--accent)">${dur.display}</div>
+      </div>
+      <div>
+        <div class="text-xs muted">Τζίρος βάρδιας</div>
+        <div class="fw-800" style="color:var(--accent)">${eur(stats.revenue)}</div>
+      </div>
+      <div>
+        <div class="text-xs muted">Συναλλαγές</div>
+        <div class="fw-700">${stats.txCount}</div>
+      </div>
+    </div>
+    ${carryOverHTML}
+    ${tasksHTML}
+  </div>
+  <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}</style>`;
+}
+
+// Role aliases — αντιστοιχίζει διαφορετικούς τρόπους γραφής ρόλων σε τα 4 βασικά templates
+var ROLE_ALIASES = {
+  'admin': 'Διαχειριστής',
+  'administrator': 'Διαχειριστής',
+  'διαχειριστης': 'Διαχειριστής',
+  'manager': 'Διαχειριστής',
+  'cashier': 'Ταμίας',
+  'ταμιας': 'Ταμίας',
+  'warehouse': 'Αποθήκη',
+  'stock': 'Αποθήκη',
+  'αποθηκαριος': 'Αποθήκη',
+  'αποθηκη': 'Αποθήκη',
+  'employee': 'Υπάλληλος',
+  'staff': 'Υπάλληλος',
+  'υπαλληλος': 'Υπάλληλος'
+};
+
+function resolveRoleKey(userRole, templateKeys){
+  const role = (userRole||'').trim();
+  if(!role) return null;
+  // 1. Exact match
+  if(templateKeys.includes(role)) return role;
+  // 2. Case-insensitive match
+  const lower = role.toLowerCase();
+  const ciMatch = templateKeys.find(k=>k.toLowerCase()===lower);
+  if(ciMatch) return ciMatch;
+  // 3. Alias match (αφαιρεί τόνους και κάνει lowercase)
+  const normalized = lower.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const aliased = ROLE_ALIASES[normalized];
+  if(aliased && templateKeys.includes(aliased)) return aliased;
+  return null;
+}
+
+async function clockIn(){
+  if(!CURRENT_USER){toast('Δεν υπάρχει συνδεδεμένος χρήστης','danger');return;}
+  const active = getCurrentUserActiveShift();
+  if(active){
+    toast('Έχεις ήδη ανοιχτή βάρδια','warn');
+    return;
+  }
+  // Πάρε τα καθήκοντα του ρόλου με robust matching
+  const templates = getTaskTemplates();
+  const matchedKey = resolveRoleKey(CURRENT_USER.role, Object.keys(templates));
+  const roleTasks = matchedKey ? normalizeTaskList(templates[matchedKey]||[]) : [];
+
+  // Tasks JSON includes phase + scheduledTime for during-phase reminders
+  const tasksJson = roleTasks.map(t=>({
+    text: t.text,
+    phase: t.phase || 'during',
+    scheduledTime: t.scheduledTime || null,
+    done: false
+  }));
+
+  try{
+    // GPS coords from gpsClockIn (if available)
+    const gpsCoords = window._pendingGpsCoords || null;
+    window._pendingGpsCoords = null;
+
+    const {data, error} = await sb.from('shifts').insert({
+      user_id: CURRENT_USER.id,
+      started_at: new Date().toISOString(),
+      tasks: tasksJson,
+      gps_lat: gpsCoords ? gpsCoords.lat : null,
+      gps_lng: gpsCoords ? gpsCoords.lng : null,
+      gps_distance: gpsCoords ? gpsCoords.dist : null,
+      gps_verified: gpsCoords ? true : false
+    }).select().single();
+    if(error) throw error;
+    SHIFTS_CACHE.unshift(data);
+
+    // Ειδοποίηση admin μέσω WhatsApp
+    const waOwner = (typeof WA_CONFIG!=='undefined') ? WA_CONFIG.ownerPhone : null;
+    if(waOwner) {
+      const gpsNote = gpsCoords ? ' 📍 '+gpsCoords.dist+'m' : ' (χωρίς GPS)';
+      waSend(waOwner, '🟢 Clock-in: '+CURRENT_USER.name+' — '+new Date().toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})+gpsNote);
+    }
+
+    // Έλεγχος εκκρεμοτήτων προηγούμενης βάρδιας
+    const myLastClosed = SHIFTS_CACHE
+      .filter(s => s.user_id===CURRENT_USER.id && s.ended_at && s.id!==data.id)
+      .sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at))[0];
+    const prevPending = myLastClosed ? (myLastClosed.tasks||[]).filter(t=>!t.done) : [];
+
+    toast(`✅ Ξεκίνησε η βάρδια — ${CURRENT_USER.name}${roleTasks.length>0?` (${roleTasks.length} καθήκοντα)`:''}`,'success');
+
+    if(prevPending.length>0){
+      setTimeout(()=>{
+        toast(`⚠️ Προσοχή: ${prevPending.length} εκκρεμότητες από την προηγούμενη βάρδια — δες την κάρτα`,'warn');
+      }, 1500);
+    }
+
+    renderShiftsHTML();
+  }catch(err){
+    toast('Σφάλμα: '+err.message,'danger');
+  }
+}
+
+async function toggleShiftTask(shiftId, taskIdx){
+  const shift = SHIFTS_CACHE.find(s=>s.id===shiftId);
+  if(!shift || !shift.tasks || !shift.tasks[taskIdx]) return;
+  shift.tasks[taskIdx].done = !shift.tasks[taskIdx].done;
+  try{
+    const {error} = await sb.from('shifts').update({tasks: shift.tasks}).eq('id', shiftId);
+    if(error) throw error;
+    renderShiftsHTML();
+    if(typeof updateShiftTasksBanner === 'function') updateShiftTasksBanner();
+  }catch(err){
+    toast('Σφάλμα: '+err.message,'danger');
+    shift.tasks[taskIdx].done = !shift.tasks[taskIdx].done; // rollback
+  }
+}
+
+async function clockOut(){
+  const active = getCurrentUserActiveShift();
+  if(!active){toast('Δεν έχεις ανοιχτή βάρδια','warn');return;}
+
+  const dur = shiftDuration(active);
+  const stats = getShiftStats(active);
+  const tasks = active.tasks || [];
+  const pendingTasks = tasks.filter(t=>!t.done);
+
+  // Αν δεν υπάρχουν καθόλου καθήκοντα ή όλα έχουν ολοκληρωθεί → απλό confirm
+  if(tasks.length===0 || pendingTasks.length===0){
+    showConfirm(
+      `Κλείσιμο βάρδιας;\n\nΔιάρκεια: ${dur.display}\nΤζίρος: ${eur(stats.revenue)}\nΣυναλλαγές: ${stats.txCount}${tasks.length>0?`\nΚαθήκοντα: ${tasks.length}/${tasks.length} ✓`:''}`,
+      ()=>_doClockOut(active, stats, dur, null)
+    );
+    return;
+  }
+
+  // Υπάρχουν εκκρεμή καθήκοντα → ειδικό modal
+  openModal(`<div class="modal-head">
+    <h3 class="fw-800 text-xl">⚠️ Κλείσιμο Βάρδιας</h3>
+    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+  </div>
+  <div class="modal-body">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px">
+      <div class="card" style="padding:10px 12px">
+        <div class="text-xs muted">Διάρκεια</div>
+        <div class="fw-800 text-lg">${dur.display}</div>
+      </div>
+      <div class="card" style="padding:10px 12px">
+        <div class="text-xs muted">Τζίρος</div>
+        <div class="fw-800 text-lg" style="color:var(--accent)">${eur(stats.revenue)}</div>
+      </div>
+      <div class="card" style="padding:10px 12px">
+        <div class="text-xs muted">Συναλλαγές</div>
+        <div class="fw-800 text-lg">${stats.txCount}</div>
+      </div>
+    </div>
+
+    <div class="ai-box" style="padding:14px;border-left:3px solid var(--warn);background:rgba(255,152,0,0.08)">
+      <div class="flex gap-2 items-center mb-2">
+        <i data-lucide="alert-triangle" size="18" style="color:var(--warn)"></i>
+        <div class="fw-800">Εκκρεμούν ${pendingTasks.length} από ${tasks.length} καθήκοντα</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
+        ${tasks.map((t,i)=>`
+          <label style="display:flex;gap:8px;align-items:center;padding:7px 10px;background:var(--bg-1);border-radius:8px;cursor:pointer;${t.done?'opacity:0.5':''}">
+            <input type="checkbox" ${t.done?'checked':''} onchange="_toggleClockOutTask(${active.id}, ${i}, this.checked)" style="cursor:pointer">
+            <span class="text-sm" style="${t.done?'text-decoration:line-through':''}">${t.text}</span>
+          </label>`).join('')}
+      </div>
+    </div>
+
+    <div class="form-row mt-3" id="pendingReasonRow">
+      <label class="form-label">Αιτιολογία για τις εκκρεμότητες <span style="color:#ef4444">*</span></label>
+      <textarea class="form-input form-textarea" id="clockOutReason" rows="3" placeholder="Υποχρεωτική αιτιολογία (≥10 χαρακτήρες). π.χ. Πελάτης στην ουρά κατά τις 17:00, σφουγγάρισμα μετατέθηκε..."></textarea>
+      <div class="text-xs muted mt-1">⚠️ Η αιτιολογία θα αποθηκευτεί στο ιστορικό και θα είναι ορατή στον διαχειριστή.</div>
+    </div>
+
+    <div class="flex gap-2 mt-4" style="flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnAllDone" onclick="_clockOutAllDone(${active.id})" style="display:none"><i data-lucide="check-circle" size="16"></i> Όλα έτοιμα — Κλείσιμο</button>
+      <button class="btn btn-ghost" onclick="_clockOutWithPending(${active.id})" id="btnCloseWithPending"><i data-lucide="log-out" size="16"></i> Κλείσιμο με εκκρεμότητες</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+    </div>
+  </div>`);
+  lucide.createIcons();
+  _updateClockOutButtons(active.id);
+}
+
+function _updateClockOutButtons(shiftId){
+  const shift = SHIFTS_CACHE.find(s=>s.id===shiftId);
+  if(!shift) return;
+  const tasks = shift.tasks || [];
+  const allDone = tasks.every(t=>t.done);
+  const btnAllDone = document.getElementById('btnAllDone');
+  const btnWithPending = document.getElementById('btnCloseWithPending');
+  const reasonRow = document.getElementById('pendingReasonRow');
+  if(allDone){
+    if(btnAllDone) btnAllDone.style.display = 'inline-flex';
+    if(btnWithPending) btnWithPending.style.display = 'none';
+    if(reasonRow) reasonRow.style.display = 'none';
+  } else {
+    if(btnAllDone) btnAllDone.style.display = 'none';
+    if(btnWithPending) btnWithPending.style.display = 'inline-flex';
+    if(reasonRow) reasonRow.style.display = 'block';
+  }
+}
+
+async function _toggleClockOutTask(shiftId, taskIdx, checked){
+  const shift = SHIFTS_CACHE.find(s=>s.id===shiftId);
+  if(!shift || !shift.tasks || !shift.tasks[taskIdx]) return;
+  shift.tasks[taskIdx].done = checked;
+  try{
+    await sb.from('shifts').update({tasks: shift.tasks}).eq('id', shiftId);
+  }catch(err){
+    shift.tasks[taskIdx].done = !checked;
+  }
+  _updateClockOutButtons(shiftId);
+}
+
+async function _clockOutAllDone(shiftId){
+  const active = SHIFTS_CACHE.find(s=>s.id===shiftId);
+  if(!active){toast('Η βάρδια δεν βρέθηκε','danger');return;}
+  if(active.ended_at){toast('Η βάρδια έχει ήδη κλείσει','warn');closeModal();return;}
+  const dur = shiftDuration(active);
+  const stats = getShiftStats(active);
+  closeModal();
+  await _doClockOut(active, stats, dur, null);
+}
+
+async function _clockOutWithPending(shiftId){
+  const active = SHIFTS_CACHE.find(s=>s.id===shiftId);
+  if(!active){toast('Η βάρδια δεν βρέθηκε','danger');return;}
+  if(active.ended_at){toast('Η βάρδια έχει ήδη κλείσει','warn');closeModal();return;}
+  const reasonEl = document.getElementById('clockOutReason');
+  const reason = reasonEl?.value.trim() || '';
+
+  // MANDATORY: must provide reason (at least 10 characters) when there are pending tasks
+  if(reason.length < 10){
+    if(reasonEl){
+      reasonEl.style.borderColor = '#ef4444';
+      reasonEl.focus();
+    }
+    toast('Πρέπει να γράψεις αιτιολογία τουλάχιστον 10 χαρακτήρων για τα παρακαμμένα καθήκοντα','danger');
+    return;
+  }
+
+  const dur = shiftDuration(active);
+  const stats = getShiftStats(active);
+  closeModal();
+  await _doClockOut(active, stats, dur, reason);
+}
+
+async function _doClockOut(active, stats, dur, pendingReason){
+  try{
+    const endTime = new Date().toISOString();
+    const updateData = {
+      ended_at: endTime,
+      final_revenue: stats.revenue,
+      final_tx_count: stats.txCount
+    };
+    if(pendingReason !== null) updateData.pending_reason = pendingReason;
+
+    let {error} = await sb.from('shifts').update(updateData).eq('id', active.id);
+
+    // Αν αποτύχει λόγω missing column (schema cache), ξαναπροσπάθησε χωρίς pending_reason
+    if(error && (error.message||'').toLowerCase().includes('pending_reason')){
+      console.warn('pending_reason column missing, retrying without it');
+      delete updateData.pending_reason;
+      const retry = await sb.from('shifts').update(updateData).eq('id', active.id);
+      error = retry.error;
+    }
+
+    if(error) throw error;
+
+    const idx = SHIFTS_CACHE.findIndex(x=>x.id===active.id);
+    if(idx>=0){
+      SHIFTS_CACHE[idx].ended_at = endTime;
+      SHIFTS_CACHE[idx].final_revenue = stats.revenue;
+      SHIFTS_CACHE[idx].final_tx_count = stats.txCount;
+      if(pendingReason !== null) SHIFTS_CACHE[idx].pending_reason = pendingReason;
+    }
+
+    const tasks = active.tasks || [];
+    const doneCount = tasks.filter(t=>t.done).length;
+    const pendingCount = tasks.length - doneCount;
+
+    if(pendingCount > 0){
+      toast(`⚠️ Βάρδια έκλεισε με ${pendingCount} εκκρεμότητες • ${dur.display} • ${eur(stats.revenue)}`,'warn');
+    } else {
+      toast(`👋 Καλή ξεκούραση! ${dur.display} • ${eur(stats.revenue)}${tasks.length>0?` • Όλα τα καθήκοντα ✓`:''}`,'success');
+    }
+    renderShiftsHTML();
+    // Hide persistent banner & stop reminder ticker
+    if(typeof updateShiftTasksBanner === 'function') updateShiftTasksBanner();
+    if(window._taskReminderInterval){
+      clearInterval(window._taskReminderInterval);
+      window._taskReminderInterval = null;
+    }
+    // Auto-logout for non-admin users after clock-out
+    var _isAdmin = CURRENT_USER && (CURRENT_USER.perms||[]).includes('*');
+    if(!_isAdmin){
+      toast('✅ Βάρδια έκλεισε. Αποσύνδεση...', 'success', 2000);
+      setTimeout(function(){
+        if(typeof doLogout === 'function') doLogout();
+        else {
+          CURRENT_USER = null;
+          document.getElementById('appWrap').classList.add('hidden');
+          document.getElementById('loginScreen').classList.remove('hidden');
+        }
+      }, 2000);
+    }
+  }catch(err){
+    console.error('Clock out error:', err);
+    toast('Σφάλμα κλεισίματος: '+err.message,'danger');
+  }
+}
+
+function openShiftDetail(id){
+  const s = SHIFTS_CACHE.find(x=>x.id===id);
+  if(!s) return;
+  const u = USERS.find(x=>x.id===s.user_id);
+  const dur = shiftDuration(s);
+  const stats = getShiftStats(s);
+
+  // Βρες πωλήσεις της βάρδιας
+  const start = new Date(s.started_at).getTime();
+  const end = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
+  const sales = SALES.filter(sa=>{
+    const t = new Date(sa.date).getTime();
+    return t>=start && t<=end;
+  });
+  const avgSale = sales.length>0 ? stats.revenue/sales.length : 0;
+
+  openModal(`<div class="modal-head">
+    <h3 class="fw-800 text-xl">Βάρδια — ${u?.name||'—'}</h3>
+    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+  </div>
+  <div class="modal-body">
+    <div class="grid kpi-grid">
+      <div class="card kpi"><div class="kpi-label">Διάρκεια</div><div class="kpi-value">${dur.display}</div></div>
+      <div class="card kpi"><div class="kpi-label">Τζίρος</div><div class="kpi-value">${eur(stats.revenue)}</div></div>
+      <div class="card kpi"><div class="kpi-label">Συναλλαγές</div><div class="kpi-value">${stats.txCount}</div></div>
+      <div class="card kpi"><div class="kpi-label">Μέση αγορά</div><div class="kpi-value">${eur(avgSale)}</div></div>
+    </div>
+    <div class="mt-3">
+      <div class="text-xs muted">Έναρξη</div>
+      <div class="fw-700">${new Date(s.started_at).toLocaleString('el-GR')}</div>
+    </div>
+    <div class="mt-2">
+      <div class="text-xs muted">Λήξη</div>
+      <div class="fw-700">${s.ended_at?new Date(s.ended_at).toLocaleString('el-GR'):'—'}</div>
+    </div>
+    ${s.pending_reason?`
+    <div class="ai-box mt-3" style="padding:12px;border-left:3px solid var(--warn);background:rgba(255,152,0,0.08)">
+      <div class="fw-700" style="color:var(--warn)"><i data-lucide="alert-triangle" size="14" style="vertical-align:-2px"></i> Έκλεισε με εκκρεμότητες</div>
+      <div class="text-sm mt-1">${s.pending_reason}</div>
+    </div>`:''}
+    ${(s.tasks||[]).length>0?`
+    <div class="section-head mt-3"><div class="section-title">Καθήκοντα (${s.tasks.filter(t=>t.done).length}/${s.tasks.length})</div></div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      ${s.tasks.map(t=>`<div style="padding:8px 10px;background:var(--bg-2);border-radius:8px;display:flex;gap:8px;align-items:center">
+        <span style="color:${t.done?'var(--success)':'var(--text-2)'}">${t.done?'✓':'○'}</span>
+        <span class="text-sm" style="${t.done?'text-decoration:line-through;opacity:0.6':''}">${t.text}</span>
+      </div>`).join('')}
+    </div>`:''}
+    ${sales.length>0?`
+    <div class="section-head mt-3"><div class="section-title">Πωλήσεις Βάρδιας (${sales.length})</div></div>
+    <div style="max-height:300px;overflow-y:auto">
+      <table class="tbl">
+        <thead><tr><th>Ώρα</th><th>Προϊόν</th><th style="text-align:right">Σύνολο</th></tr></thead>
+        <tbody>
+          ${sales.slice(0,30).map(sa=>{
+            const p = PRODUCTS.find(x=>x.id===sa.productId);
+            return `<tr>
+              <td class="text-xs muted">${new Date(sa.date).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}</td>
+              <td>${p?.name||'—'}</td>
+              <td style="text-align:right" class="fw-700">${eur(sa.total)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`:'<div class="muted mt-3" style="text-align:center;padding:20px">Δεν έγιναν πωλήσεις σε αυτή τη βάρδια</div>'}
+  </div>`);
+  lucide.createIcons();
+}
+
+async function deleteShift(id){
+  showConfirm('Διαγραφή βάρδιας;', async ()=>{
+    try{
+      const {error} = await sb.from('shifts').delete().eq('id', id);
+      if(error) throw error;
+      SHIFTS_CACHE = SHIFTS_CACHE.filter(x=>x.id!==id);
+      toast('Διαγράφηκε','warn');
+      renderShiftsHTML();
+    }catch(err){
+      toast('Σφάλμα: '+err.message,'danger');
+    }
+  });
+}
