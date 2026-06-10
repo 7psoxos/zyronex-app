@@ -26502,6 +26502,18 @@ async function syncOfflineQueue(){
       }
 
       success++;
+      // Award loyalty points for offline sale (same logic as online checkout)
+      if(entry.customerId){
+        try{
+          await _loyaltyAward({
+            customerId: entry.customerId,
+            saleId: saleId || null,
+            subtotal: subtotal,
+            pointsUsed: entry.pointsUsed || 0,
+            shopId: SHOP_ID
+          });
+        }catch(e){ console.error('[offline sync] _loyaltyAward failed:', e); }
+      }
     }catch(err){
       console.error('Sync failed for entry:', entry, err);
       failed++;
