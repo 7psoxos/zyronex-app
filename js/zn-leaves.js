@@ -28568,7 +28568,7 @@ function _kioskRenderSettings(){
       <div style="font-size:12px;color:var(--text-2);line-height:1.6">
         <b style="color:var(--accent)">🖥️ Idle Screen</b> — Σκούρο θέμα για τον υπάλληλο.<br>
         <b style="color:#f472b6">🛍️ Kiosk Mode</b> — Gradient οθόνη για τον πελάτη.<br>
-        <b style="color:rgba(255,255,255,.5)">🔐 Έξοδος από Kiosk</b> — Τριπλό tap στην ώρα → PIN.
+        <b style="color:#d97706">🔐 Έξοδος από Kiosk</b> — Τριπλό tap στην ώρα → PIN.
       </div>
     </div>
 
