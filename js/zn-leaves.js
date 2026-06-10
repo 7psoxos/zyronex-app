@@ -25955,6 +25955,39 @@ async function checkout(){
   return _doCheckout();
 }
 
+async function _loyaltyAward(opts){
+  try{
+    var customerId = opts.customerId;
+    if(!customerId) return null;
+    var earned = Math.floor(opts.subtotal||0);
+    var pointsUsed = opts.pointsUsed||0;
+    var shopId = opts.shopId, saleId = opts.saleId||null;
+    var c = (typeof CUSTOMERS!=='undefined' && CUSTOMERS) ? CUSTOMERS.find(function(x){return x.id===customerId;}) : null;
+    var curPoints, curSpent, curVisits;
+    if(c){ curPoints=c.loyaltyPoints||0; curSpent=c.totalSpent||0; curVisits=c.visits||0; }
+    else {
+      var r = await sb.from('customers').select('loyalty_points,total_spent,visits').eq('id',customerId).single();
+      if(!r||!r.data) return null;
+      curPoints=r.data.loyalty_points||0; curSpent=r.data.total_spent||0; curVisits=r.data.visits||0;
+    }
+    var afterEarn = curPoints + earned;
+    var finalPoints = pointsUsed>0 ? Math.max(0, afterEarn - pointsUsed) : afterEarn;
+    var oldTier = c ? (c.loyaltyTier||'bronze') : 'bronze';
+    var tier='bronze';
+    if(afterEarn>=700) tier='platinum'; else if(afterEarn>=300) tier='gold'; else if(afterEarn>=100) tier='silver';
+    await _dbInvalidate('customers_');
+    await sb.from('customers').update({
+      total_spent: curSpent+(opts.subtotal||0), visits: curVisits+1, last_visit: addDays(0),
+      loyalty_points: finalPoints, loyalty_tier: tier
+    }).eq('id', customerId);
+    var rows=[];
+    if(earned>0) rows.push({shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'earn', delta:earned, balance_after:afterEarn});
+    if(pointsUsed>0) rows.push({shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'redeem', delta:-pointsUsed, balance_after:finalPoints});
+    if(rows.length){ try{ await sb.from('loyalty_ledger').insert(rows); }catch(e){ console.error('ledger insert', e); } }
+    if(c){ c.totalSpent=curSpent+(opts.subtotal||0); c.visits=curVisits+1; c.lastVisit=addDays(0); c.loyaltyPoints=finalPoints; c.loyaltyTier=tier; }
+    return {earned:earned, afterEarn:afterEarn, finalPoints:finalPoints, tier:tier, oldTier:oldTier, tierChanged:(tier!==oldTier), custName: c ? c.name : ''};
+  }catch(e){ console.error('_loyaltyAward', e); return null; }
+}
 
 async function _doCheckout(){
   window._marginConfirmed = false;
@@ -26143,59 +26176,26 @@ async function _doCheckout(){
     }
     let earnedPoints = 0;
     let newTier = null;
+    var _la = await _loyaltyAward({ customerId: customerId, saleId: (saleData && saleData.id) || null, subtotal: subtotal, pointsUsed: pointsUsed, shopId: SHOP_ID });
+    if(_la){ earnedPoints = _la.earned; newTier = _la.tier; }
+    // Points-used toast
+    if(customerId && pointsUsed > 0) toast(`⭐ Χρησιμοποιήθηκαν ${pointsUsed} πόντοι`, 'info');
+    // Store credit deduction (separate from loyalty — _loyaltyAward does not touch store_credit)
     if(customerId){
-      const c=CUSTOMERS.find(x=>x.id===customerId);
-      if(c){
-        // Loyalty points: 1 πόντος ανά 1€ (στρογγυλοποίηση προς τα κάτω)
-        earnedPoints = Math.floor(subtotal);
-        const newPoints = (c.loyaltyPoints||0) + earnedPoints;
-        // Tier thresholds
-        let tier = 'bronze';
-        if(newPoints >= 700) tier = 'platinum';
-        else if(newPoints >= 300) tier = 'gold';
-        else if(newPoints >= 100) tier = 'silver';
-        newTier = tier;
-        const oldTier = c.loyaltyTier || 'bronze';
-
-        await _dbInvalidate('customers_'); await sb.from('customers').update({
-          total_spent:c.totalSpent+subtotal,
-          visits:c.visits+1,
-          last_visit:addDays(0),
-          loyalty_points:newPoints,
-          loyalty_tier:tier
-        }).eq('id',customerId);
-
-        // Τοπική ενημέρωση για instant UI
-        c.totalSpent += subtotal;
-        c.visits++;
-        c.lastVisit = addDays(0);
-        c.loyaltyPoints = newPoints;
-        c.loyaltyTier = tier;
-
-        // ── Αφαίρεση πόντων που χρησιμοποιήθηκαν για πληρωμή
-        if(pointsUsed > 0){
-          const finalPoints = Math.max(0, newPoints - pointsUsed);
-          await _dbInvalidate('customers_'); sb.from('customers').update({loyalty_points: finalPoints}).eq('id', customerId);
-          c.loyaltyPoints = finalPoints;
-          toast(`⭐ Χρησιμοποιήθηκαν ${pointsUsed} πόντοι`, 'info');
-        }
-
-        // ── Αφαίρεση store credit που χρησιμοποιήθηκε
-        if(creditUsed > 0){
-          const newCredit = Math.max(0, (c.storeCredit||0) - creditUsed);
-          await _dbInvalidate('customers_'); sb.from('customers').update({store_credit: newCredit}).eq('id', customerId);
-          c.storeCredit = newCredit;
-          toast(`🏦 Store Credit: -${typeof eur==='function'?eur(creditUsed):creditUsed+'€'} (υπόλοιπο: ${typeof eur==='function'?eur(newCredit):newCredit+'€'})`, 'info');
-        }
-
-        // Tier upgrade notification
-        if(tier !== oldTier){
-          setTimeout(()=>{
-            const emoji = {bronze:'🥉', silver:'🥈', gold:'🥇', platinum:'💎'}[tier];
-            toast(`🎉 ${c.name} αναβαθμίστηκε σε ${emoji} ${tier.toUpperCase()}!`,'success');
-          }, 2000);
-        }
+      const _csc = CUSTOMERS.find(x=>x.id===customerId);
+      if(_csc && creditUsed > 0){
+        const newCredit = Math.max(0, (_csc.storeCredit||0) - creditUsed);
+        await _dbInvalidate('customers_'); sb.from('customers').update({store_credit: newCredit}).eq('id', customerId);
+        _csc.storeCredit = newCredit;
+        toast(`🏦 Store Credit: -${typeof eur==='function'?eur(creditUsed):creditUsed+'€'} (υπόλοιπο: ${typeof eur==='function'?eur(newCredit):newCredit+'€'})`,'info');
       }
+    }
+    // Tier upgrade notification
+    if(_la && _la.tierChanged){
+      setTimeout(()=>{
+        const emoji = {bronze:'🥉', silver:'🥈', gold:'🥇', platinum:'💎'}[_la.tier];
+        toast(`🎉 ${_la.custName} αναβαθμίστηκε σε ${emoji} ${_la.tier.toUpperCase()}!`,'success');
+      }, 2000);
     }
 
     // 5. Reload από DB
