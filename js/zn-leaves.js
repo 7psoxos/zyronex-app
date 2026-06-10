@@ -25291,15 +25291,22 @@ function addToCart(pid){
   if(!p){toast('Προϊόν δεν βρέθηκε','danger');return}
   const stock = (p.stock == null) ? 0 : Number(p.stock);
   if(stock <= 0){toast(`Εξαντλημένο (${p.name})`,'danger');return}
+
+  // Mixable liquids: ALWAYS open picker (each confirm adds a new distinct line).
+  // Stock guard: count already-committed units across all lines for this product.
+  if(_productNeedsNicPicker(p)){
+    const committed = CART.filter(i=>String(i.productId)===String(pid)).reduce((a,i)=>a+i.qty,0);
+    if(committed >= stock){toast('Δεν υπάρχει επιπλέον απόθεμα','warn');return}
+    openQuickMixPicker(p); return;
+  }
+
+  // Non-mixable: original qty++ / first-push logic
   const existing=CART.find(i=>String(i.productId)===String(pid));
   if(existing){
     if(existing.qty < stock){existing.qty++}
     else{toast('Δεν υπάρχει επιπλέον απόθεμα','warn');return}
   }
   else{
-    // Ανοίγει το Quick-Mix (nicotine picker) για αναμίξιμα υγρά —
-    // δουλεύει και χωρίς το checkbox, βάσει κατηγορίας/τύπου (βλ. _productNeedsNicPicker).
-    if(_productNeedsNicPicker(p)){ openQuickMixPicker(p); return; }
     CART.push({productId:p.id,qty:1,price:p.price,nicotine:null});
   }
   renderCart();
@@ -25620,7 +25627,9 @@ async function _quickMixConfirm(productId, nicotine, calc){
   var _mixNote = (nicotine > 0)
     ? (_finalVol + 'ml τελικό • ' + (calc.actualNicMg!=null?calc.actualNicMg:nicotine) + 'mg νικοτίνη')
     : (_finalVol + 'ml τελικό • χωρίς νικοτίνη');
-  CART.push({productId, qty:1, price:p.price, nicotine: nicotine || null, finalVolMl: _finalVol, mixNote: _mixNote});
+
+  // _mixConsumed records what was deducted live, so removeMixLine can restore it exactly.
+  var _mixConsumed = { booster: null, base: [] };
 
   // 2. Πρόσθεσε τα nicshots στο cart ΩΣ ΞΕΧΩΡΙΣΤΑ ITEMS (με τιμή)
   let boosterName = '';
@@ -25628,8 +25637,9 @@ async function _quickMixConfirm(productId, nicotine, calc){
     const ns = PRODUCTS.find(x => x.id === calc.matchingNicshot.id);
     if(ns && ns.stock >= calc.nicshotsNeeded){
       boosterName = ns.name;
-      // Πρόσθεσε X nicshots στο cart
-      const existingNs = CART.find(i => i.productId === ns.id);
+      _mixConsumed.booster = { productId: ns.id, qty: calc.nicshotsNeeded };
+      // Accumulate booster cart line by productId (all mix lines share one booster line)
+      const existingNs = CART.find(i => i.productId === ns.id && i._booster === true);
       if(existingNs){
         existingNs.qty += calc.nicshotsNeeded;
       } else {
@@ -25638,15 +25648,16 @@ async function _quickMixConfirm(productId, nicotine, calc){
           qty: calc.nicshotsNeeded,
           price: ns.price,
           nicotine: null,
-          mixNote: `Booster για ${p.name}` // εμφανίζεται στο cart
+          mixNote: `Booster για ${p.name}`,
+          _booster: true
         });
       }
-      // Αφαίρεσε από stock
+      // Deduct from stock immediately
       const newStock = Math.max(0, (ns.stock||0) - calc.nicshotsNeeded);
-      await sb.from('products').update({stock: newStock}).eq('id', ns.id);
+      try{ await sb.from('products').update({stock: newStock}).eq('id', ns.id); }
+      catch(e){ console.error('[mix] booster stock update failed:', e); }
       ns.stock = newStock;
     }
-    // (το guard στην αρχή της συνάρτησης φροντίζει το else)
   }
 
   // 3. Αφαίρεσε ξεχωριστά VG και PG από stock
@@ -25655,7 +25666,9 @@ async function _quickMixConfirm(productId, nicotine, calc){
       const vg = PRODUCTS.find(x => x.id === calc.matchingVg.id);
       if(vg){
         const newStock = Math.max(0, (vg.stock||0) - calc.needVgMl);
-        await sb.from('products').update({stock: newStock}).eq('id', vg.id);
+        _mixConsumed.base.push({ productId: vg.id, amount: calc.needVgMl });
+        try{ await sb.from('products').update({stock: newStock}).eq('id', vg.id); }
+        catch(e){ console.error('[mix] VG stock update failed:', e); }
         vg.stock = newStock;
       }
     }
@@ -25663,20 +25676,28 @@ async function _quickMixConfirm(productId, nicotine, calc){
       const pg = PRODUCTS.find(x => x.id === calc.matchingPg.id);
       if(pg){
         const newStock = Math.max(0, (pg.stock||0) - calc.needPgMl);
-        await sb.from('products').update({stock: newStock}).eq('id', pg.id);
+        _mixConsumed.base.push({ productId: pg.id, amount: calc.needPgMl });
+        try{ await sb.from('products').update({stock: newStock}).eq('id', pg.id); }
+        catch(e){ console.error('[mix] PG stock update failed:', e); }
         pg.stock = newStock;
       }
     }
-    // Backward-compat: αν υπάρχει μόνο γενική βάση (παλιά εγκατάσταση χωρίς VG/PG flagged)
+    // Backward-compat: single generic base product (no VG/PG flagging)
     if(calc.needVgMl === 0 && calc.needPgMl === 0 && calc.extraBaseMl > 0 && calc.matchingBase){
       const base = PRODUCTS.find(x => x.id === calc.matchingBase.id);
       if(base){
         const newStock = Math.max(0, (base.stock||0) - calc.extraBaseMl);
-        await sb.from('products').update({stock: newStock}).eq('id', base.id);
+        _mixConsumed.base.push({ productId: base.id, amount: calc.extraBaseMl });
+        try{ await sb.from('products').update({stock: newStock}).eq('id', base.id); }
+        catch(e){ console.error('[mix] base stock update failed:', e); }
         base.stock = newStock;
       }
     }
   }
+
+  // Push liquid line AFTER booster/base so _mixConsumed is fully populated
+  CART.push({productId, qty:1, price:p.price, nicotine: nicotine || null,
+             finalVolMl: _finalVol, mixNote: _mixNote, _mixConsumed});
 
   closeModal();
   renderCart();
@@ -25711,16 +25732,19 @@ function renderCart(){
   body.innerHTML=CART.map((it,idx)=>{
     const p=PRODUCTS.find(x=>x.id===it.productId);
     const isMixItem = !!it.mixNote;
+    const isMixLiquid = !!it._mixConsumed; // liquid line with deduction record
     const isCustom = !!it._custom;
-    // Για custom items χρησιμοποιούμε το it.name, αλλιώς το p.name
     const displayName = (isCustom || !p) ? (it.name || 'Πώληση') : p.name;
+    const qtyControls = isMixLiquid
+      ? `<button onclick="removeMixLine(${idx})" style="min-width:44px;min-height:44px;background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.3);border-radius:8px;cursor:pointer;color:#e74c3c;font-size:16px;display:flex;align-items:center;justify-content:center" title="Αφαίρεση + επαναφορά stock">🗑</button>`
+      : `<div class="qty"><button onclick="changeQty(${idx},-1)">−</button><span>${it.qty}</span><button onclick="changeQty(${idx},1)">+</button></div>`;
     return `<div class="cart-item" style="${isMixItem?'border-left:3px solid rgba(155,89,255,0.5);padding-left:12px;opacity:0.85':isCustom?'border-left:3px solid #9b59ff;padding-left:12px':''}">
       <div style="flex:1;min-width:0;overflow:hidden">
         <div class="fw-700 text-sm" style="word-break:break-word">${displayName}${isCustom?' <span style="color:#9b59ff;font-size:10px;font-weight:600">[CUSTOM]</span>':''}</div>
         <div class="text-xs muted">${eur(it.price)}${it.nicotine!=null?' • '+it.nicotine+'mg':''}${isMixItem?` • <span style="color:#9b59ff">⚗️ Mix</span>`:''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-        <div class="qty"><button onclick="changeQty(${idx},-1)">−</button><span>${it.qty}</span><button onclick="changeQty(${idx},1)">+</button></div>
+        ${qtyControls}
         <div class="fw-800" style="min-width:60px;text-align:right">${eur(it.price*it.qty)}</div>
       </div>
     </div>`;
@@ -25741,6 +25765,11 @@ function renderCart(){
     <span>+${Math.floor(subtotal)} πόντοι</span></div>` : '';
   const discRow = disc>0 ? `<div class="summary-row" style="color:var(--success)">
     <span>Έκπτωση ${disc}%</span><span>-${eur(discAmt)}</span></div>` : '';
+
+  // Booster total across all booster lines
+  const totalBoosters = CART.filter(i=>i._booster===true).reduce((a,i)=>a+i.qty,0);
+  const boosterRow = totalBoosters > 0 ? `<div class="summary-row" style="color:#9b59ff;font-size:12px;font-weight:700">
+    <span>🧪 Σύνολο booster</span><span>${totalBoosters} τμχ</span></div>` : '';
 
   // Silent consumables cost
   const silentCost = typeof calcSilentCost==='function' ? calcSilentCost() : 0;
@@ -25770,6 +25799,7 @@ function renderCart(){
     <div class="summary-row"><span>Υποσύνολο</span><span>${eur(rawTotal-rawTotal*0.24/1.24)}</span></div>
     ${discRow}
     <div class="summary-row"><span>ΦΠΑ 24%</span><span>${eur(vat)}</span></div>
+    ${boosterRow}
     ${silentRow}
     <div class="summary-total"><span>ΣΥΝΟΛΟ</span><span>${eur(subtotal)}</span></div>
     ${gcRow}
@@ -25777,6 +25807,49 @@ function renderCart(){
   lucide.createIcons();
   // Refresh POS tabs so the 🔗 Συμβατά tab appears/disappears based on cart devices
   if(typeof renderPOSTabs === 'function') renderPOSTabs();
+}
+
+async function removeMixLine(idx){
+  const it = CART[idx];
+  if(!it) return;
+  const mc = it._mixConsumed;
+
+  if(mc){
+    // (a) Restore booster stock
+    if(mc.booster && mc.booster.qty > 0){
+      const ns = PRODUCTS.find(x => x.id === mc.booster.productId);
+      if(ns){
+        ns.stock = (ns.stock||0) + mc.booster.qty;
+        try{ await sb.from('products').update({stock: ns.stock}).eq('id', ns.id); }
+        catch(e){ console.error('[removeMix] booster restore failed:', e); }
+      }
+      // (c) Reduce booster CART line
+      const bLine = CART.find(i => i._booster === true && i.productId === mc.booster.productId);
+      if(bLine){
+        bLine.qty -= mc.booster.qty;
+        if(bLine.qty <= 0){
+          const bIdx = CART.indexOf(bLine);
+          if(bIdx !== -1) CART.splice(bIdx, 1);
+        }
+      }
+    }
+    // (b) Restore each base product
+    for(const b of (mc.base||[])){
+      const bp = PRODUCTS.find(x => x.id === b.productId);
+      if(bp){
+        bp.stock = (bp.stock||0) + b.amount;
+        try{ await sb.from('products').update({stock: bp.stock}).eq('id', bp.id); }
+        catch(e){ console.error('[removeMix] base restore failed:', e); }
+      }
+    }
+  }
+
+  // Re-find idx in case booster splice shifted it
+  const realIdx = CART.indexOf(it);
+  if(realIdx !== -1) CART.splice(realIdx, 1);
+  renderCart();
+  if(typeof renderPOSGrid==='function') renderPOSGrid();
+  if(typeof renderQuickCategoriesGrid==='function') renderQuickCategoriesGrid();
 }
 
 function changeQty(idx,d){
