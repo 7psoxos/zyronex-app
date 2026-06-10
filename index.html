@@ -18897,14 +18897,7 @@ window.addEventListener('offline', ()=>{
    Χρησιμοποιείται από SUNMI bridge και άλλες λειτουργίες που χρειάζονται
    shop info. Διαβάζει πάντα φρέσκα από localStorage.
    ═══════════════════════════════════════════════════════════════════════════ */
-function getAppSettings(){
-  try {
-    return JSON.parse(localStorage.getItem('katastimaSettings') || '{}');
-  } catch(e) {
-    return {};
-  }
-}
-window.getAppSettings = getAppSettings;
+/* getAppSettings extracted to /js/zn-leaves.js */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    🖨️ SUNMI V3 MIX-D PRINTER BRIDGE
@@ -28019,60 +28012,9 @@ function saveIrisConfig(){
 }
 window.saveIrisConfig = saveIrisConfig;
 
-function saveSettings(){
-  const $val = (id, def='') => document.getElementById(id)?.value ?? def;
-  const $chk = (id, def=false) => document.getElementById(id)?.checked ?? def;
-  const settings = {
-    shopName: $val('s_shopName'),
-    afm: $val('s_afm'),
-    doy: $val('s_doy'),
-    addr: $val('s_addr'),
-    address: $val('s_address'),         // Αποθήκευση για το Sunmi receipt
-    receiptFooter: $val('s_receiptFooter'), // Αποθήκευση για το Sunmi receipt
-    city: $val('s_city'),
-    phone: $val('s_phone'),
-    email: $val('s_email'),
-    vat: parseFloat($val('s_vat','24')) || 24,
-    emailLowStock: $chk('s_emailLowStock'),
-    pushNotif: $chk('s_pushNotif'),
-    alertExpiry: $chk('s_alertExpiry'),
-    autoReorder: $chk('s_autoReorder'),
-    notifyEmail: $val('s_notifyEmail'),
-    printer: $val('s_printer'),
-    scanner: $val('s_scanner'),
-    autoPrint: $chk('s_autoPrint'),
-    // Daily reports
-    dailyReport: $chk('s_dailyReport'),
-    dailyReportTime: $val('s_dailyReportTime','10:00'),
-    weeklyReport: $chk('s_weeklyReport'),
-    monthlyReport: $chk('s_monthlyReport'),
-    reportEmail: $val('s_reportEmail'),
-    // Accountant
-    accountantEmail: $val('s_accountantEmail'),
-    accountantName: $val('s_accountantName'),
-    accountantFromEmail: $val('s_accountantFromEmail'),
-    accSendSales: $chk('s_accSendSales', true),
-    accSendShifts: $chk('s_accSendShifts', true),
-    accSendCashbook: $chk('s_accSendCashbook'),
-    accSendPurchases: $chk('s_accSendPurchases'),
-    accFmtPdf: $chk('s_accFmtPdf', true),
-    accFmtCsv: $chk('s_accFmtCsv', true),
-    accAutoSend: $chk('s_accAutoSend'),
-    // AADE myDATA
-    aadeCompany: $val('s_aadeCompany'),
-    aadeVat: $val('s_aadeVat'),
-    aadeUsername: $val('s_aadeUsername'),
-    aadeKey: $val('s_aadeKey'),
-    aadeEnv: $val('s_aadeEnv','sandbox'),
-  };
-  localStorage.setItem('katastimaSettings', JSON.stringify(settings));
-  if(typeof refreshHIDScanner === 'function') refreshHIDScanner();
-  toast('Οι ρυθμίσεις αποθηκεύτηκαν','success');
-}
+/* saveSettings extracted to /js/zn-leaves.js */
 
-function getSettings(){
-  return JSON.parse(localStorage.getItem('katastimaSettings') || '{}');
-}
+/* getSettings extracted to /js/zn-leaves.js */
 
 // ============================================================
 // ACCOUNTANT REPORTS — manual export + send
@@ -31160,54 +31102,9 @@ async function applyMarginFix(productId, newPrice){
   });
 }
 
-function openMarginSettings(){
-  const current = getMarginThreshold();
-  openModal(`<div class="modal-head">
-    <h3 class="fw-800 text-xl">⚙️ Ρυθμίσεις Margin (Godfather)</h3>
-    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
-  </div>
-  <div class="modal-body">
-    <div class="ai-box mb-3" style="padding:12px">
-      <div class="text-sm"><b>💡 Πώς δουλεύει:</b> Ορίζεις το ελάχιστο περιθώριο κέρδους (%). Αν κάποιο προϊόν πέσει κάτω από αυτό, θα εμφανιστεί στο Στρατηγείο ως "σε κίνδυνο" και θα απαιτείται <b>admin PIN</b> για πώληση στο ταμείο.</div>
-    </div>
+/* openMarginSettings extracted to /js/zn-leaves.js */
 
-    <div class="form-row">
-      <label class="form-label">Ελάχιστο Margin (%)</label>
-      <input class="form-input" type="number" min="0" max="100" step="1" id="ms_threshold" value="${current}">
-    </div>
-
-    <div class="form-row">
-      <label class="form-label">Admin PIN (για override στο POS)</label>
-      <input class="form-input" type="password" id="ms_adminPin" value="${getSettings().adminPin||''}" placeholder="π.χ. 1234">
-      <div class="text-xs muted mt-1">Αν κενό, το margin lock δεν θα ζητάει PIN (μόνο warning)</div>
-    </div>
-
-    <div class="flex gap-2 mt-4">
-      <button class="btn btn-primary" onclick="saveMarginSettings()"><i data-lucide="save" size="16"></i> Αποθήκευση</button>
-      <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
-    </div>
-  </div>`);
-  lucide.createIcons();
-}
-
-function saveMarginSettings(){
-  const threshold = parseFloat(document.getElementById('ms_threshold').value) || 40;
-  const pin = document.getElementById('ms_adminPin').value.trim();
-  try{
-    const settings = getSettings();
-    var _oldThreshold = settings.minMarginPct || 40;
-    settings.minMarginPct = threshold;
-    settings.adminPin = pin || null;
-    localStorage.setItem('katastimaSettings', JSON.stringify(settings));
-    if(parseFloat(_oldThreshold) !== parseFloat(threshold))
-      logShopChange('policy', 'The Godfather', 'Ελάχιστο περιθώριο κέρδους (%)', _oldThreshold, threshold);
-    closeModal();
-    toast(`✅ Threshold: ${threshold}%`,'success');
-    if(window.CURRENT_PAGE_ID === 'warroom') renderWarRoom();
-  }catch(e){
-    toast('Σφάλμα: '+e.message,'danger');
-  }
-}
+/* saveMarginSettings extracted to /js/zn-leaves.js */
 
 async function generateFlavorInsight(){
   const insightBox = document.getElementById('warroomAIInsight');
@@ -34396,43 +34293,9 @@ function complianceSaveCustom(){
   toast('✅ Προστέθηκε','success');
 }
 
-function complianceOpenSettings(){
-  var s = COMPLIANCE_CAL.getSettings();
-  openModal(
-    '<div class="modal-head"><h3 class="fw-800 text-xl">⚙️ Ρυθμίσεις Συμμόρφωσης</h3>'+
-    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>'+
-    '<div class="modal-body">'+
-      '<div class="form-row"><label class="form-label">Περίοδος ΦΠΑ</label>'+
-        '<select id="cc_vatPeriod" class="form-select" style="font-size:16px">'+
-          '<option value="quarterly"'+(s.vatPeriod==='quarterly'?' selected':'')+'>Τριμηνιαία (απλογραφικά)</option>'+
-          '<option value="monthly"'+(s.vatPeriod==='monthly'?' selected':'')+'>Μηνιαία (διπλογραφικά ή επιλογή)</option>'+
-        '</select>'+
-        '<div style="font-size:11.5px;color:var(--text-2);margin-top:5px">Τα περισσότερα μικρά καταστήματα: τριμηνιαία.</div></div>'+
-      '<div class="form-row"><label class="form-label">Κάνεις ενδοκοινοτικές αγορές (EU);</label>'+
-        '<select id="cc_intraEU" class="form-select" style="font-size:16px">'+
-          '<option value="no"'+(!s.hasIntraEU?' selected':'')+'>Όχι</option>'+
-          '<option value="yes"'+(s.hasIntraEU?' selected':'')+'>Ναι (εμφάνισε Φ4/Φ5)</option>'+
-        '</select></div>'+
-      '<div class="form-row"><label class="form-label">Προειδοποίηση πόσες μέρες πριν;</label>'+
-        '<input id="cc_leadDays" type="number" min="1" max="30" class="form-input" value="'+(s.leadDays||7)+'" style="font-size:16px">'+
-        '<div style="font-size:11.5px;color:var(--text-2);margin-top:5px">Οι προθεσμίες εντός αυτού του διαστήματος γίνονται 🟠 επείγουσες.</div></div>'+
-    '</div>'+
-    '<div class="modal-foot"><button class="btn btn-primary btn-lg" onclick="complianceSaveSettings()"><i data-lucide="save" size="16"></i> Αποθήκευση</button></div>'
-  );
-  if(typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-}
+/* complianceOpenSettings extracted to /js/zn-leaves.js */
 
-function complianceSaveSettings(){
-  var s = COMPLIANCE_CAL.getSettings();
-  s.vatPeriod = document.getElementById('cc_vatPeriod').value;
-  s.hasIntraEU = document.getElementById('cc_intraEU').value === 'yes';
-  s.leadDays = parseInt(document.getElementById('cc_leadDays').value) || 7;
-  COMPLIANCE_CAL.saveSettings(s);
-  closeModal();
-  _renderComplianceCalendarPage();
-  if(typeof complianceUpdateBadge === 'function') complianceUpdateBadge();
-  toast('✅ Αποθηκεύτηκαν','success');
-}
+/* complianceSaveSettings extracted to /js/zn-leaves.js */
 
 // Badge στο nav-item με αριθμό επειγουσών
 function complianceUpdateBadge(){
@@ -39619,77 +39482,7 @@ function olRenderCustomersTab(orders) {
   </div>`;
 }
 
-function olRenderSettingsTab(settings) {
-  return `
-  <div style="display:flex;flex-direction:column;gap:20px">
-    <!-- Webhook info -->
-    <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:14px;padding:18px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:var(--accent)">📡 Webhook URL</div>
-      <div style="font-size:13px;color:var(--text-1);margin-bottom:10px">Δώσε αυτό το URL στις πλατφόρμες για αυτόματη λήψη παραγγελιών:</div>
-      <div style="background:var(--bg-3);border-radius:8px;padding:12px;font-size:12px;font-family:monospace;word-break:break-all;color:var(--text-0)">
-        https://wopyucsdaeamywscxfzs.supabase.co/functions/v1/online-orders-webhook
-      </div>
-      <div style="font-size:11px;color:var(--text-1);margin-top:8px">⚠️ Χρειάζεται deploy του Edge Function για live webhooks. Προσωρινά χρησιμοποίησε το "+" κουμπί για χειροκίνητη εισαγωγή.</div>
-    </div>
-
-    <!-- Per-platform settings -->
-    ${Object.keys(PLATFORMS).map(function(p) {
-      var cfg = PLATFORMS[p];
-      var s = settings[p] || {};
-      return `
-      <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:20px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
-          <div style="display:flex;align-items:center;gap:12px">
-            <span style="font-size:28px">${cfg.emoji}</span>
-            <div>
-              <div style="font-size:16px;font-weight:800">${cfg.name}</div>
-              <div style="font-size:12px;color:var(--text-1)">Ρυθμίσεις σύνδεσης</div>
-            </div>
-          </div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <div style="position:relative;width:44px;height:24px;background:${s.enabled?'var(--success)':'var(--bg-3)'};border-radius:12px;transition:background .2s;cursor:pointer" onclick="olTogglePlatform('${p}',${!s.enabled})">
-              <div style="position:absolute;top:2px;left:${s.enabled?'22':'2'}px;width:20px;height:20px;background:#fff;border-radius:50%;transition:left .2s"></div>
-            </div>
-            <span style="font-size:13px;font-weight:700;color:${s.enabled?'var(--success)':'var(--text-1)'}">${s.enabled?'Ενεργό':'Ανενεργό'}</span>
-          </label>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <div>
-            <label style="font-size:12px;color:var(--text-1);display:block;margin-bottom:6px">API Key</label>
-            <input type="password" value="${escapeHtml(s.api_key||'')}" placeholder="Εισάγετε API Key..." onchange="olSaveSetting('${p}','api_key',this.value)" style="width:100%;padding:10px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;color:var(--text-0);font-size:14px;outline:none;font-family:inherit;box-sizing:border-box">
-          </div>
-          <div>
-            <label style="font-size:12px;color:var(--text-1);display:block;margin-bottom:6px">API Secret</label>
-            <input type="password" value="${escapeHtml(s.api_secret||'')}" placeholder="Εισάγετε API Secret..." onchange="olSaveSetting('${p}','api_secret',this.value)" style="width:100%;padding:10px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;color:var(--text-0);font-size:14px;outline:none;font-family:inherit;box-sizing:border-box">
-          </div>
-          <div>
-            <label style="font-size:12px;color:var(--text-1);display:block;margin-bottom:6px">Προμήθεια πλατφόρμας (%)</label>
-            <input type="number" value="${s.commission_pct||0}" min="0" max="50" step="0.1" onchange="olSaveSetting('${p}','commission_pct',parseFloat(this.value))" style="width:100%;padding:10px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;color:var(--text-0);font-size:14px;outline:none;font-family:inherit;box-sizing:border-box">
-          </div>
-          <div style="display:flex;gap:20px;flex-wrap:wrap;padding:12px;background:var(--bg-3);border-radius:10px">
-            ${[
-              ['auto_confirm','Αυτόματη επιβεβαίωση'],
-              ['auto_stock','Αυτόματη μείωση stock'],
-              ['auto_receipt','Αυτόματη απόδειξη'],
-            ].map(function(opt) {
-              return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500">
-                <input type="checkbox" ${s[opt[0]]?'checked':''} onchange="olSaveSetting('${p}','${opt[0]}',this.checked)" style="width:16px;height:16px;cursor:pointer">
-                ${opt[1]}
-              </label>`;
-            }).join('')}
-          </div>
-        </div>
-      </div>`;
-    }).join('')}
-
-    <!-- SQL Setup -->
-    <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:18px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:10px">🗄️ Database Setup</div>
-      <div style="font-size:13px;color:var(--text-1);margin-bottom:12px">Τρέξε αυτό στο Supabase SQL Editor (μία φορά):</div>
-      <button onclick="olCopySQL()" style="padding:10px 18px;border-radius:10px;background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;min-height:40px">📋 Αντιγραφή SQL</button>
-    </div>
-  </div>`;
-}
+/* olRenderSettingsTab extracted to /js/zn-leaves.js */
 
 async function olTogglePlatform(platform, enabled) {
   await olSaveSetting(platform, 'enabled', enabled);
@@ -40067,12 +39860,7 @@ function ageVerifyManual(){
 // Legacy compat
 function ageVerifyCheck(callback){ ageVerifyShowModal(callback); }
 
-function ageVerifySaveSettings(){
-  var s=JSON.parse(localStorage.getItem('katastimaSettings')||'{}');
-  s.ageVerifyMandatory=document.getElementById('ageVerifyMandatory')?.checked||false;
-  localStorage.setItem('katastimaSettings',JSON.stringify(s));
-  toast('✅ Ρύθμιση αποθηκεύτηκε','success');
-}
+/* ageVerifySaveSettings extracted to /js/zn-leaves.js */
 
 // Populate checkbox on settings render
 (function(){
@@ -40111,18 +39899,7 @@ function waSendBirthday(customer){
   var shopName=(JSON.parse(localStorage.getItem('katastimaSettings')||'{}').shopName)||'ZyroNex';
   waSend(customer.phone,'🎂 Χρόνια πολλά '+customer.name+'!\n\nΣε περιμένουμε στο '+shopName+' για μια ειδική έκπληξη! 🎁');
 }
-function renderWASettings(){
-  openModal('<div class="modal-head"><h3 class="fw-800 text-xl">📱 WhatsApp Config</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>'+
-    '<div class="modal-body" style="display:flex;flex-direction:column;gap:14px">'+
-    '<div class="form-row"><label class="form-label">Τηλέφωνο ιδιοκτήτη (για alerts)</label><input class="form-input" id="waOwnerPhone" placeholder="6940000000" value="'+(WA_CONFIG.ownerPhone||'')+'"></div>'+
-    '<div class="form-row"><label class="form-label">Provider</label><select class="form-input" id="waProvider">'+
-    '<option value="link"'+((!WA_CONFIG.provider||WA_CONFIG.provider==='link')?' selected':'')+'>wa.me link (δωρεάν)</option>'+
-    '<option value="callmebot"'+(WA_CONFIG.provider==='callmebot'?' selected':'')+'>CallMeBot API (αυτόματο)</option></select></div>'+
-    '<div class="form-row"><label class="form-label">CallMeBot API Key</label><input class="form-input" id="waApiKey" placeholder="API Key" value="'+(WA_CONFIG.apiKey||'')+'">'+
-    '<div style="font-size:11px;color:var(--text-3);margin-top:4px">Στείλε "I allow callmebot to send me messages" στο +34 644 44 56 32</div></div>'+
-    '<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="waSaveConfig()">Αποθήκευση</button><button class="btn btn-ghost" onclick="closeModal()">Κλείσιμο</button></div></div>');
-  if(typeof lucide!=='undefined')lucide.createIcons();
-}
+/* renderWASettings extracted to /js/zn-leaves.js */
 function waSaveConfig(){
   WA_CONFIG={ownerPhone:document.getElementById('waOwnerPhone')?.value.trim()||'',provider:document.getElementById('waProvider')?.value||'link',apiKey:document.getElementById('waApiKey')?.value.trim()||''};
   localStorage.setItem('wa_config',JSON.stringify(WA_CONFIG));
@@ -40337,36 +40114,10 @@ setTimeout(_exchCheckNotifications, 5000);
 // SETTINGS GRID — Category-based tile navigation
 // ═══════════════════════════════════════════════════════════
 
-var _settingsCategories = [
-  { id:'shop',        icon:'🏪', label:'Κατάστημα',         desc:'Επωνυμία, λογότυπο, ΑΦΜ, ΔΟΥ',             color:'#6366f1' },
-  { id:'payments',    icon:'💳', label:'Πληρωμές',           desc:'Μέθοδοι, split, gift cards',                color:'#34d399' },
-  { id:'users',       icon:'👥', label:'Χρήστες & Ρόλοι',   desc:'Χρήστες, δικαιώματα, PIN',                  color:'#f59e0b' },
-  { id:'notifications',icon:'🔔',label:'Ειδοποιήσεις',       desc:'Email reports, WhatsApp, alerts',            color:'#818cf8' },
-  { id:'age',         icon:'🔞', label:'Ηλικία & Compliance',desc:'Age verification, TPD, mandatory mode',      color:'#e74c3c' },
-  { id:'gps',         icon:'📍', label:'GPS & Βάρδιες',      desc:'GPS clock-in, ακτίνα, notify',              color:'#2ecc71' },
-  { id:'programs',    icon:'🎁', label:'Προγράμματα',        desc:'Gift cards, ΔΥΠΑ, loyalty',                  color:'#f39c12' },
-  { id:'exchange',    icon:'🔄', label:'ZyroNex Exchange',   desc:'Προφίλ B2B, ΑΦΜ, δίκτυο',                  color:'#818cf8' },
-  { id:'email',       icon:'📧', label:'Email & Reports',    desc:'Resend API, αυτόματα reports',               color:'#60a5fa' },
-  { id:'tax',         icon:'🧾', label:'Φορολογικά',         desc:'ΑΦΜ, myDATA, ΕΦΚ, ΑΑΔΕ',                   color:'#a78bfa' },
-  { id:'hardware',    icon:'🖨️', label:'Hardware',           desc:'Εκτυπωτής, scanner, cash drawer',            color:'#94a3b8' },
-  { id:'system',      icon:'⚙️', label:'Σύστημα',            desc:'Backup, cache, Shop ID, advanced',           color:'#64748b' },
-];
+/* _settingsCategories extracted to /js/zn-leaves.js */
 
 // Section selectors — which HTML sections belong to each category
-var _settingsSections = {
-  shop:         ['🆔 Πληροφορίες Συστήματος','🏪 Στοιχεία Καταστήματος','🖼️','λογότυπο','logo'],
-  payments:     ['💳','split','gift','Gift Card','payment','πληρωμ'],
-  users:        ['👥','χρήστ','user','PIN','ρόλ'],
-  notifications:['🔔','ειδοποίηση','email report','WhatsApp','notification','Αποστολή'],
-  age:          ['🔞','ηλικ','age','Age Verif'],
-  gps:          ['📍','GPS','gps','βάρδι','clock'],
-  programs:     ['🎁','ΔΥΠΑ','loyalty','πρόγραμμα'],
-  exchange:     ['🔄','Exchange','B2B','exchange'],
-  email:        ['📧','Resend','email','Email'],
-  tax:          ['🧾','ΑΦΜ','myDATA','ΕΦΚ','ΑΑΔΕ','φορολ'],
-  hardware:     ['🖨️','εκτυπ','scanner','printer','hardware','Hardware'],
-  system:       ['⚙️','Σύστημ','backup','cache','Shop ID','system'],
-};
+/* _settingsSections extracted to /js/zn-leaves.js */
 
 function znTestSecurity() {
   var lines = [];
@@ -40429,56 +40180,14 @@ function renderSettings() {
     '</div>';
 }
 
-var _settingsSubView = false; // tracks if we're inside a settings category panel
+/* _settingsSubView extracted to /js/zn-leaves.js */
 
-function _openSettingsPanel(catId) {
-  // Mark that we're in a settings sub-view (so goBack returns to grid)
-  _settingsSubView = true;
-  // Render full settings inline and scroll to category anchor
-  _renderSettingsInline();
-  // Add a back-to-grid button at top
-  setTimeout(function() {
-    var c = document.getElementById('content');
-    if (c && !document.getElementById('settingsBackToGrid')) {
-      var backBar = document.createElement('div');
-      backBar.id = 'settingsBackToGrid';
-      backBar.style.cssText = 'position:sticky;top:0;z-index:50;background:var(--bg-1);padding:10px 0;margin-bottom:8px;border-bottom:1px solid var(--border)';
-      backBar.innerHTML = '<button class="btn btn-ghost" style="font-size:14px" onclick="_settingsBackToGrid()">← Πίσω στις Ρυθμίσεις</button>';
-      c.insertBefore(backBar, c.firstChild);
-    }
-    var el = document.getElementById('settings-section-' + catId);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 80);
-}
+/* _openSettingsPanel extracted to /js/zn-leaves.js */
 
-function _settingsBackToGrid() {
-  _settingsSubView = false;
-  renderSettings(); // re-render the grid (the override version)
-  // Κράτα το tab bar συγχρονισμένο στο «Σύστημα» (οι ρυθμίσεις ανήκουν εκεί)
-  try { if(typeof znSyncTabBar === 'function') znSyncTabBar('settings'); } catch(_){}
-}
+/* _settingsBackToGrid extracted to /js/zn-leaves.js */
 
 // Internal: render old settings into a given container (not shown to user)
-function _renderSettingsFull(container) {
-  const s = JSON.parse(localStorage.getItem('katastimaSettings') || '{}');
-  // We need the old renderSettings HTML — call it temporarily
-  const origContent = document.getElementById('content');
-  const tempHolder = document.createElement('div');
-  tempHolder.id = '_settingsTemp';
-  tempHolder.style.display = 'none';
-  document.body.appendChild(tempHolder);
-
-  // Swap content div, render, capture, restore
-  tempHolder.innerHTML = '';
-  const oldId = origContent.id;
-  origContent.id = '_settingsReal';
-  tempHolder.id = 'content';
-  _renderSettingsOld();
-  container.innerHTML = tempHolder.innerHTML;
-  tempHolder.id = '_settingsTemp';
-  origContent.id = oldId;
-  document.body.removeChild(tempHolder);
-}
+/* _renderSettingsFull extracted to /js/zn-leaves.js */
 
 // Keep old renderSettings under a different name
 var _renderSettingsOld = null;
@@ -44916,100 +44625,7 @@ function renderKiosk(mode){
   _kioskRenderScreen(mode,cfg);
 }
 
-function _kioskRenderSettings(){
-  const isAdmin=CURRENT_USER&&(CURRENT_USER.perms||[]).includes('*');
-  if(!isAdmin){toast('Μόνο για Admin','warn');return;}
-  // Reset preview flag κάθε φορά που ανοίγει φρέσκια η σελίδα ρυθμίσεων
-  window._kioskPreviewShown = false;
-  const cfg=_kioskGetConfig();
-  const timeout=cfg.idleTimeout||180;
-  const disabled=cfg.idleDisabled||false;
-  const el=document.getElementById('content');
-  if(!el)return;
-  el.innerHTML=`
-  <div class="page-head">
-    <div><div class="page-title">🖥️ Kiosk & Idle Screen</div>
-    <div class="page-sub">Ρυθμίσεις οθόνης αναμονής και πελατών</div></div>
-  </div>
-  <div style="max-width:660px;display:flex;flex-direction:column;gap:16px">
-    <div class="card" style="padding:20px">
-      <div style="font-size:13px;font-weight:700;color:var(--text-0);margin-bottom:14px">Προεπισκόπηση</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="renderKiosk('kiosk')">🛍️ Kiosk Mode (Πελάτης)</button>
-        <button class="btn btn-ghost" onclick="renderKiosk('idle')">🖥️ Idle Screen (Αναμονή)</button>
-      </div>
-    </div>
-    <div class="card" style="padding:20px">
-      <div style="font-size:13px;font-weight:700;color:var(--text-0);margin-bottom:16px">⚙️ Ρυθμίσεις Idle Screen</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px;background:var(--bg-2);border-radius:12px;margin-bottom:12px">
-        <div>
-          <div style="font-size:13px;font-weight:600">Idle Screen</div>
-          <div style="font-size:11px;color:var(--text-2);margin-top:2px">Ενεργοποίηση οθόνης αναμονής</div>
-        </div>
-        <label style="position:relative;display:inline-block;width:46px;height:26px;cursor:pointer;flex-shrink:0">
-          <input type="checkbox" id="kioskIdleEnabled" ${disabled?'':'checked'} onchange="_kioskToggleIdleEnabled(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
-          <span style="position:absolute;inset:0;border-radius:13px;background:${disabled?'var(--border)':'var(--accent)'};transition:.3s" id="kioskToggleTrack"></span>
-          <span style="position:absolute;top:3px;left:${disabled?'3':'23'}px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.3s;box-shadow:0 1px 4px rgba(0,0,0,.3)" id="kioskToggleThumb"></span>
-        </label>
-      </div>
-      <div id="kioskTimeoutRow" style="padding:14px;background:var(--bg-2);border-radius:12px;${disabled?'opacity:.4;pointer-events:none':''}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div><div style="font-size:13px;font-weight:600">Χρόνος Αδράνειας</div>
-          <div style="font-size:11px;color:var(--text-2);margin-top:2px">Χρόνος πριν μπει σε αναμονή</div></div>
-          <div id="kioskTimeoutVal" style="font-size:20px;font-weight:800;color:var(--accent)">${(function(){const m={60:'1 λεπτό',120:'2 λεπτά',180:'3 λεπτά',240:'4 λεπτά',300:'5 λεπτά',600:'10 λεπτά',900:'15 λεπτά',1800:'30 λεπτά',3600:'60 λεπτά'};return m[timeout]||'3 λεπτά';})()}</div>
-        </div>
-        <!-- Slider με διακριτές τιμές (index 0-8) -->
-        <div style="position:relative">
-          <input type="range" min="0" max="8" step="1"
-            value="${[60,120,180,240,300,600,900,1800,3600].indexOf(timeout)<0?2:[60,120,180,240,300,600,900,1800,3600].indexOf(timeout)}"
-            oninput="_kioskSliderChange(this.value)"
-            style="width:100%;accent-color:var(--accent)">
-          <div id="kioskSliderTicks" style="display:flex;justify-content:space-between;margin-top:8px"></div>
-        </div>
-      </div>
-    </div>
-    <div class="card" style="padding:20px">
-      <div style="font-size:13px;font-weight:700;color:var(--text-0);margin-bottom:14px">🔗 Google Review Link</div>
-      <div style="font-size:12px;color:var(--text-2);margin-bottom:10px">URL αξιολόγησης Google για το κουμπί "Αξιολόγηση" στο Kiosk</div>
-      <input type="url" id="kioskGoogleReviewUrl"
-        value="${(typeof getAppSettings==='function'?getAppSettings().googleReviewUrl:'')||''}"
-        placeholder="https://g.page/r/..."
-        style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-0);font-size:13px;font-family:inherit;-webkit-appearance:none"
-        oninput="_kioskSaveGoogleReview(this.value)">
-    </div>
-    <div class="card" style="padding:14px;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.25);margin-bottom:0">
-      <div style="font-size:12px;color:var(--text-1);line-height:1.6">
-        <b style="color:#fbbf24">ℹ️ Σημείωση:</b> Ο χρόνος αδράνειας αφορά <b>ΜΟΝΟ το τερματικό του ταμείου</b>. Όταν περάσει ο χρόνος χωρίς δραστηριότητα, ανοίγει αυτόματα η οθόνη πελάτη (Kiosk). Οι συσκευές που είναι ήδη εγγεγραμμένες ως Kiosk ξεκινούν κατευθείαν σε kiosk mode και δεν επηρεάζονται.
-      </div>
-    </div>
-
-    <div class="card" style="padding:16px;background:rgba(0,212,168,.05);border:1px solid rgba(0,212,168,.2)">
-      <div style="font-size:12px;color:var(--text-2);line-height:1.6">
-        <b style="color:var(--accent)">🖥️ Idle Screen</b> — Σκούρο θέμα για τον υπάλληλο.<br>
-        <b style="color:#f472b6">🛍️ Kiosk Mode</b> — Gradient οθόνη για τον πελάτη.<br>
-        <b style="color:rgba(255,255,255,.5)">🔐 Έξοδος από Kiosk</b> — Τριπλό tap στην ώρα → PIN.
-      </div>
-    </div>
-
-    <!-- Device Registration -->
-    <div class="card" style="padding:20px" id="deviceRegCard">
-      <div style="font-size:13px;font-weight:700;color:var(--text-0);margin-bottom:6px">📱 Εγγραφή Συσκευής</div>
-      <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;line-height:1.5">
-        Εγγραφή αυτής της συσκευής ως <b>Kiosk tablet</b>. Μόλις εγγραφεί, κάθε φορά που ανοίγει η εφαρμογή ξεκινά αυτόματα σε kiosk mode.
-      </div>
-      <div id="deviceRegStatus" style="margin-bottom:12px;font-size:12px"></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="_registerAsKiosk()" style="font-size:13px">
-          📺 Εγγραφή ως Kiosk Device
-        </button>
-        <button class="btn btn-ghost" onclick="_unregisterDevice()" style="font-size:13px">
-          🗑️ Κατάργηση Εγγραφής
-        </button>
-      </div>
-      <div style="font-size:10px;color:var(--text-2);margin-top:10px;font-family:monospace" id="deviceUuidDisplay"></div>
-    </div>
-  </div>`;
-}
+/* _kioskRenderSettings extracted to /js/zn-leaves.js */
 
 function _kioskToggleIdleEnabled(checked){
   const cfg=_kioskGetConfig(); cfg.idleDisabled=!checked; _kioskSaveConfig(cfg);
