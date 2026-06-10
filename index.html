@@ -13666,6 +13666,23 @@ window.renderCategoriesManager = renderCategoriesManager;
 /* NICOTINE_LEVELS extracted to /js/zn-leaves.js */
 var today = new Date();
 var addDays = (d) => { const n=new Date(today); n.setDate(n.getDate()+d); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); };
+var DOC_STATE = {
+  view: 'list',       // list | new | preview
+  type: 'invoice',
+  template: 'modern-corporate',
+  accentColor: '#00d4a8',
+  font: 'sans',
+  lang: 'gr',
+  showEfk: false,
+  showStamp: false,
+  isWholesaler: false,
+  docNumber: '',
+  docDate: today,
+  clientName: '', clientAfm: '', clientDoy: '', clientAddr: '', clientCity: '',
+  lines: [],
+  notes: '',
+  history: []
+};
 
 /* ============================================================
    DATA LOADING από Supabase
