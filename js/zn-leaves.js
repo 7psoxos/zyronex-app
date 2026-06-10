@@ -25969,6 +25969,12 @@ async function _loyaltyAward(opts){
     var earned = Math.floor(opts.subtotal||0);
     var pointsUsed = opts.pointsUsed||0;
     var shopId = opts.shopId, saleId = opts.saleId||null;
+    if(saleId){
+      try{
+        var _existing = await sb.from('loyalty_ledger').select('id').eq('sale_id', saleId).limit(1);
+        if(_existing && _existing.data && _existing.data.length) return null;
+      }catch(e){ /* check failed -> proceed and award */ }
+    }
     var c = (typeof CUSTOMERS!=='undefined' && CUSTOMERS) ? CUSTOMERS.find(function(x){return x.id===customerId;}) : null;
     var curPoints, curSpent, curVisits;
     if(c){ curPoints=c.loyaltyPoints||0; curSpent=c.totalSpent||0; curVisits=c.visits||0; }
