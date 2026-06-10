@@ -28002,56 +28002,78 @@ async function init(){
 
   // Auto-login αν υπάρχει valid session — ΠΡΙΝ το renderLogin ώστε να μη φαίνεται το login screen
   var savedSession = getSavedSession();
-  var _autoUser = savedSession ? USERS.find(function(x){return x.id===savedSession.userId;}) : null;
+  var _autoUser = savedSession ? USERS.find(function(x){return String(x.id)===String(savedSession.userId);}) : null;
   if(!_autoUser){ renderLogin(); lucide.createIcons(); }
   // Note: initReservations() καλείται post-login (στο applySession) ώστε να
   // έχουμε CURRENT_USER + SHOP_ID διαθέσιμα για το morning notification.
 
   if(_autoUser){
-    const u = _autoUser;
-      CURRENT_USER = u;
-      document.getElementById('loginScreen').classList.add('hidden');
-      document.getElementById('appWrap').classList.remove('hidden');
-      document.getElementById('currentUserRole').textContent = formatRoleDisplay(u.role);
-      document.getElementById('topUser').textContent = u.name;
-      document.getElementById('topAvatar').textContent = u.name[0];
-      setTopbarAvatar(u);
-      applyCustomLogoToElements();
-      applyPermissionsToSidebar();
-      initNavSections();
-      updateHelpFabVisibility();
-      loadBankingData();
-      // Load shifts FIRST (so isUserClockedIn works correctly), THEN show page
-      loadShiftsForUser().then(()=>{
-        renderShiftTopbarBadge();
-        refreshShiftDisplays();
-        const startPage = _isPageReload()
-          ? (()=>{ const initialPage = getInitialPage(); const canUseInitial = initialPage && (CURRENT_USER.perms?.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage])); return canUseInitial ? initialPage : firstAllowedPage(); })()
-          : ((!PAGE_PERMS['dashboard'] || can(PAGE_PERMS['dashboard'])) ? 'dashboard' : firstAllowedPage());
-        showPage(startPage);
-        // Only prompt for clock-in AFTER shifts are loaded and page is shown
-        checkAndPromptClockIn();
-        // Schedule reminders if already clocked in
-        if(CURRENT_USER && !((CURRENT_USER.perms||[]).includes('*'))){
-          if(typeof isUserClockedIn === 'function' && isUserClockedIn(CURRENT_USER.id)){
-            scheduleDuringTaskReminders();
-            if(typeof updateShiftTasksBanner === 'function') updateShiftTasksBanner();
-          }
-        }
-      });
-      inspectorAutoScanOnLogin();
-      cleanupBadgeUpdate();
-      if(typeof autoBackupToVault === 'function') setTimeout(function(){autoBackupToVault();}, 5000);
-      lucide.createIcons();
-      // ── Subscription Lifecycle ──
-      await initSubscriptionLifecycle();
-      // ── Per-plugin subscriptions (authoritative billing state) ──
-      try { await loadPluginSubscriptions(); } catch(_){}
-      try { _handlePluginPurchaseReturn(); } catch(_){}
-    } else if(savedSession && !_autoUser){
-      // Ο χρήστης δεν υπάρχει πλέον — καθάρισε το session
-      clearSession();
+    var u = _autoUser;
+    CURRENT_USER = u;
+    // SHOP_ID source priority: (1) JWT claim, (2) user.shop_id
+    if(window.ZN_JWT_SHOP_ID){
+      SHOP_ID = window.ZN_JWT_SHOP_ID;
+    } else if(u.shop_id){
+      SHOP_ID = u.shop_id;
     }
+    window.IS_DEVELOPER_OWNER = (typeof DEVELOPER_SHOP_IDS !== 'undefined') && DEVELOPER_SHOP_IDS.includes(SHOP_ID);
+    sb.from('tenant_shops').select('is_developer_account').eq('id', SHOP_ID).single()
+      .then(function(_r){ if(_r.data && _r.data.is_developer_account === true){ window.IS_DEVELOPER_OWNER = true; if(typeof applyPermissionsToSidebar==='function') applyPermissionsToSidebar(); } })
+      .catch(function(){});
+    if(typeof loadCustomCategoryIcons === 'function') loadCustomCategoryIcons().catch(function(){});
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('appWrap').classList.remove('hidden');
+    document.getElementById('currentUserRole').textContent = formatRoleDisplay(u.role);
+    document.getElementById('topUser').textContent = u.name;
+    document.getElementById('topAvatar').textContent = u.name[0];
+    setTopbarAvatar(u);
+    applyCustomLogoToElements();
+    applyPermissionsToSidebar();
+    initNavSections();
+    updateHelpFabVisibility();
+    loadBankingData();
+    if(typeof initReservations === 'function') initReservations();
+    var _isAdminForExpense = CURRENT_USER && ((CURRENT_USER.perms||[]).includes('*') || (CURRENT_USER.role||'').toLowerCase()==='admin' || (CURRENT_USER.role||'').toLowerCase()==='διαχειριστής');
+    if(typeof EXPENSE_CALENDAR !== 'undefined' && _isAdminForExpense){
+      EXPENSE_CALENDAR.load().then(function(){ if(typeof _updateExpCalBadge==='function') _updateExpCalBadge(); if(typeof updateNotifDot==='function') updateNotifDot(); }).catch(function(){});
+    }
+    // Load shifts FIRST (so isUserClockedIn works correctly), THEN show page
+    loadShiftsForUser().then(function(){
+      renderShiftTopbarBadge();
+      refreshShiftDisplays();
+      var startPage = _isPageReload()
+        ? (function(){ var initialPage = getInitialPage(); var canUse = initialPage && (CURRENT_USER.perms && CURRENT_USER.perms.includes('*') || !PAGE_PERMS[initialPage] || can(PAGE_PERMS[initialPage])); return canUse ? initialPage : firstAllowedPage(); })()
+        : ((!PAGE_PERMS['dashboard'] || can(PAGE_PERMS['dashboard'])) ? 'dashboard' : firstAllowedPage());
+      _appReady = true;
+      var _freshHash = (location.hash||'').replace('#','').trim();
+      var _startPageFinal = _freshHash ? startPage : ((CURRENT_USER.perms||[]).includes('*') ? 'dashboard' : startPage);
+      try{ localStorage.setItem('lastPage', _startPageFinal); }catch(_){}
+      try{ history.replaceState({page:'__root__'},'','#'+_startPageFinal); }catch(_){}
+      try{ history.pushState({page:_startPageFinal},'','#'+_startPageFinal); }catch(_){}
+      window._pageHistory = [_startPageFinal];
+      _showPageInternal(_startPageFinal);
+      _updateBackBtn();
+      if(typeof znSyncTabBar === 'function') znSyncTabBar(_startPageFinal);
+      checkAndPromptClockIn();
+      if(CURRENT_USER && !((CURRENT_USER.perms||[]).includes('*'))){
+        if(typeof isUserClockedIn === 'function' && isUserClockedIn(CURRENT_USER.id)){
+          scheduleDuringTaskReminders();
+          if(typeof updateShiftTasksBanner === 'function') updateShiftTasksBanner();
+        }
+      }
+    });
+    inspectorAutoScanOnLogin();
+    cleanupBadgeUpdate();
+    if(typeof complianceUpdateBadge === 'function') complianceUpdateBadge();
+    if(typeof autoBackupToVault === 'function') setTimeout(function(){autoBackupToVault();}, 5000);
+    if(typeof _checkDeviceType === 'function') setTimeout(_checkDeviceType, 2000);
+    lucide.createIcons();
+    // ── Subscription Lifecycle ──
+    await initSubscriptionLifecycle();
+    // ── Per-plugin subscriptions (authoritative billing state) ──
+    try { await loadPluginSubscriptions(); } catch(_){}
+    try { _handlePluginPurchaseReturn(); } catch(_){}
+  }
 
   // Έλεγχος για προγραμματιζόμενες αναφορές (κάθε ώρα)
   setTimeout(checkScheduledReports, 3000);
