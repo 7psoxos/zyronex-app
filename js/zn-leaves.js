@@ -26538,11 +26538,46 @@ function aiOfferSuggest(){
   var c = window.SELECTED_CUSTOMER_ID ? (CUSTOMERS||[]).find(function(x){return x.id===window.SELECTED_CUSTOMER_ID;}) : null;
   var subtotal = CART.reduce(function(a,b){return a+b.price*b.qty;},0);
   var cartItems = CART.map(function(i){return (i.name||'?')+(i.category?' ['+i.category+']':'');}).join(', ');
-  var custCtx = c
-    ? 'Tier:'+( c.loyaltyTier||'bronze')+', Πόντοι:'+( c.loyaltyPoints||0)+', Σύνολο αγορών:'+Math.round(c.totalSpent||0)+'€, Επισκέψεις:'+(c.visits||0)+', Τελευταία:'+(c.lastVisit||'–')
-    : 'Επισκέπτης (χωρίς στοιχεία)';
 
-  var systemPrompt = 'Είσαι σύστημα έξυπνων προσφορών για κατάστημα vape. Αναλύεις το καλάθι και τα στοιχεία πελάτη και επιστρέφεις ΑΠΟΚΛΕΙΣΤΙΚΑ raw JSON, χωρίς markdown, χωρίς εξήγηση, χωρίς κείμενο εκτός JSON. Σχήμα: {"discountPct":<ακέραιος 0-15>,"crossSellName":"<όνομα προϊόντος ή κενό>","reason":"<σύντομη αιτιολογία στα ελληνικά, max 15 λέξεις>"}. Κανόνες: discountPct έως 15%, ανάλογα αξίας/tier πελάτη. crossSellName μόνο αν έχει νόημα με αυτό το καλάθι, αλλιώς κενό string. Reason σύντομα.';
+  var custCtx;
+  if(c){
+    // Recency in days
+    var daysSince = '–';
+    if(c.lastVisit){
+      var diff = Math.round((Date.now()-new Date(c.lastVisit).getTime())/(864e5));
+      daysSince = isNaN(diff) ? '–' : diff+'d';
+    }
+    // Recent products: up to 6 items from last 60 days, with name+category
+    var cutoff60 = new Date(Date.now()-60*864e5);
+    var recentSales = (SALES||[]).filter(function(s){
+      return s.customerId===c.id && new Date(s.date)>=cutoff60;
+    }).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,6);
+    var recentProducts = recentSales.map(function(s){
+      var p = (PRODUCTS||[]).find(function(x){return x.id===s.productId;});
+      return p ? (p.name+(p.category?' ['+p.category+']':'')) : null;
+    }).filter(Boolean).join(', ');
+
+    custCtx = 'Tier:'+( c.loyaltyTier||'bronze')+
+      ', Πόντοι:'+(c.loyaltyPoints||0)+
+      ', ΣύνολοΑγορών:'+Math.round(c.totalSpent||0)+'€'+
+      ', Επισκέψεις:'+(c.visits||0)+
+      ', ΤελΕπίσκεψη:'+daysSince+
+      (recentProducts ? ', ΠρόσφατεςΑγορές:'+recentProducts : '');
+  } else {
+    custCtx = 'Επισκέπτης';
+  }
+
+  var systemPrompt = 'Είσαι σύστημα εξατομικευμένων προσφορών για κατάστημα vape. Αναλύεις καλάθι + στοιχεία πελάτη και επιστρέφεις ΑΠΟΚΛΕΙΣΤΙΚΑ raw JSON, χωρίς markdown, χωρίς κείμενο εκτός JSON.\n'+
+    'Σχήμα: {"discountPct":<ακέραιος 0-15>,"crossSellName":"<ακριβές όνομα προϊόντος από τη λίστα ΠρόσφατεςΑγορές ή άδειο>","reason":"<max 15 λέξεις ελληνικά>"}\n'+
+    'Κανόνες για discountPct — ΠΟΙΚΙΛΕ βάσει:\n'+
+    '• Επισκέπτης ή νέος (Επισκέψεις<3): 3-6% ενθάρρυνση\n'+
+    '• Τακτικός (Επισκέψεις 3-10, ΣύνολοΑγορών<200€): 5-8%\n'+
+    '• Loyal (Επισκέψεις>10 ή ΣύνολοΑγορών 200-500€): 8-12%\n'+
+    '• VIP (Tier gold/platinum ή ΣύνολοΑγορών>500€): 10-15%\n'+
+    '• Αν ΤελΕπίσκεψη>30d: +2% για επανενεργοποίηση\n'+
+    '• Αν subtotal<10€: max 5% (μικρό καλάθι)\n'+
+    'crossSellName: μόνο αν υπάρχει συμβατό προϊόν στις ΠρόσφατεςΑγορές που ΔΕΝ είναι ήδη στο καλάθι. Αλλιώς κενό string.\n'+
+    'reason: σύντομα, αιτιολόγησε την συγκεκριμένη έκπτωση.';
   var userMsg = 'Καλάθι: '+cartItems+'. Σύνολο: '+eur(subtotal)+'. Πελάτης: '+custCtx;
 
   // Use claude-haiku-4-5-20251001 — valid model confirmed by _exchAICheck; default 'claude-sonnet-4-5' is stale
