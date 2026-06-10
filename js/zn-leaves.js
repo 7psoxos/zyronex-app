@@ -22769,7 +22769,7 @@ function renderSiteBuilder(){
       });
     };
   }catch(e){}
-  ZBUI.onExit = function(){ try { if(typeof showPage==='function') showPage('plugins'); } catch(e){} };
+  ZBUI.onExit = function(){ try { if(typeof showPage==='function') showPage('dashboard'); } catch(e){} };
   ZBUI.mount(document.getElementById('zbHost'));
   setTimeout(function(){
     try{
