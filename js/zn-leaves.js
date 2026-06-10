@@ -22675,3 +22675,56 @@ async function _exchCheckNotifications() {
 setInterval(_exchCheckNotifications, 120000);
 // Also check on load
 setTimeout(_exchCheckNotifications, 5000);
+
+// === SITE-BUILDER MODULE ===
+function renderSiteBuilder(){
+  var c = document.getElementById('content');
+  if(!c) return;
+  c.innerHTML =
+    '<div style="display:flex;gap:8px;padding:10px 12px;background:var(--bg-1);border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">'+
+      '<button class="btn btn-primary" id="zbSyncBtn" style="min-height:40px"><i data-lucide="refresh-cw" size="15"></i> Συγχρονισμός προϊόντων</button>'+
+      '<span id="zbSyncStatus" style="font-size:12px;color:var(--text-2)"></span>'+
+    '</div>'+
+    '<div id="zbHost" style="height:calc(100vh - 120px);min-height:480px;border-radius:12px;overflow:hidden"></div>';
+  try{
+    ZBUI.demoProducts = function(){
+      var src = (window.PRODUCTS||[]);
+      return src.slice(0,48).map(function(p){
+        return { id:p.id, name:p.name||'Προϊόν', price:String(p.price!=null?p.price:0), image:p.image||p.img||'', badge:p.badge||'', stock:(p.stock!=null?p.stock:null) };
+      });
+    };
+  }catch(e){}
+  ZBUI.onExit = function(){ try { if(typeof showPage==='function') showPage('plugins'); } catch(e){} };
+  ZBUI.mount(document.getElementById('zbHost'));
+  setTimeout(function(){
+    try{
+      if(ZBUI.state && ZBUI.state.site){
+        var feat = {
+          supabaseUrl: (typeof SUPABASE_URL!=='undefined'?SUPABASE_URL:''),
+          anonKey: (typeof SUPABASE_KEY!=='undefined'?SUPABASE_KEY:''),
+          shopId: window.ZN_JWT_SHOP_ID || (typeof SHOP_ID!=='undefined'?SHOP_ID:''),
+          ageMin: 18,
+          storeName: (ZBUI.state.site.name||'Eshop')
+        };
+        ZBUI.state.site.ecom = Object.assign(ZBUI.state.site.ecom||{}, {
+          checkoutEndpoint: feat.supabaseUrl + '/functions/v1/storefront-checkout',
+          anonKey: feat.anonKey, shopId: feat.shopId
+        });
+        ZBUI.state.site.features = feat;  // περνά στο export (age gate, advisor, enhanced)
+      }
+    }catch(e){}
+  }, 400);
+  var sb1 = document.getElementById('zbSyncBtn');
+  if(sb1) sb1.onclick = async function(){
+    var st = document.getElementById('zbSyncStatus');
+    sb1.disabled = true; if(st) st.textContent = '⏳ Συγχρονισμός...';
+    try{
+      var r = await ZNEshop.syncProducts({});
+      if(st) st.textContent = r.ok ? ('✓ Συγχρονίστηκαν '+r.synced+' προϊόντα') : ('⚠️ '+(r.error||'σφάλμα'));
+      if(typeof toast==='function') toast(r.ok?('✓ '+r.synced+' προϊόντα στο eshop'):'⚠️ Σφάλμα συγχρονισμού', r.ok?'success':'error');
+    }catch(e){ if(st) st.textContent='⚠️ σφάλμα'; }
+    sb1.disabled = false;
+    try{ lucide.createIcons(); }catch(_){}
+  };
+  try{ lucide.createIcons(); }catch(_){}
+}
