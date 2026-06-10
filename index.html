@@ -26311,44 +26311,6 @@ async function deleteUser(id){
 // Reads: tenant_shops (own row), plans, plugins, shop_plugins, invoices
 // SHOP_ID is the current shop. Read-only view of own subscription + purchase flow.
 // ═══════════════════════════════════════════════════════════════════════════
-// ── RENEW MODAL ──────────────────────────────────────────────────────────────
-function openRenewModal(){
-  const shop = SUB_DATA.shop||{};
-  const myPlan = (SUB_DATA.plansAll||[]).find(p=>p.tier===shop.plan)||{name:shop.plan,price_monthly:0,price_quarterly:0,price_yearly:0};
-  openModal(`
-    <div class="modal-head"><h3 class="fw-800 text-xl">Ανανέωση Συνδρομής</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>
-    <div class="modal-body">
-      <p class="text-sm muted" style="margin-bottom:16px">Επίλεξε περίοδο ανανέωσης για το πακέτο <strong>${myPlan.name}</strong>:</p>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        ${[
-          {key:'monthly',label:'Μηνιαία',price:myPlan.price_monthly,sub:'Χρέωση κάθε μήνα'},
-          {key:'quarterly',label:'Τριμηνιαία',price:myPlan.price_quarterly,sub:'Εξοικονόμηση vs μηνιαία'},
-          {key:'yearly',label:'Ετήσια',price:myPlan.price_yearly,sub:'Καλύτερη τιμή',best:true}
-        ].map(opt=>`
-          <label style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--bg-2);border:2px solid ${opt.best?'var(--accent)':'var(--border)'};border-radius:10px;cursor:pointer">
-            <div style="display:flex;align-items:center;gap:10px">
-              <input type="radio" name="renew_period" value="${opt.key}" ${opt.best?'checked':''} style="accent-color:var(--accent)">
-              <div><div class="fw-700">${opt.label} ${opt.best?'<span style="font-size:10px;color:var(--accent)">★ ΣΥΝΙΣΤΑΤΑΙ</span>':''}</div><div class="text-xs muted">${opt.sub}</div></div>
-            </div>
-            <div class="fw-800" style="font-size:18px">${opt.price||0}€</div>
-          </label>
-        `).join('')}
-      </div>
-      <div style="margin-top:16px;padding:12px;background:var(--bg-1);border-radius:8px">
-        <div class="text-xs fw-700" style="margin-bottom:8px">Τρόπος πληρωμής</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <span class="pay-method">💳 Κάρτα</span>
-          <span class="pay-method"> Apple Pay</span>
-          <span class="pay-method">G Google Pay</span>
-          <span class="pay-method">🅿️ PayPal</span>
-        </div>
-      </div>
-      <button class="btn btn-primary" style="width:100%;margin-top:16px" onclick="processRenewal()"><i data-lucide="lock" size="14"></i> Ασφαλής Πληρωμή</button>
-      <p class="text-xs muted" style="text-align:center;margin-top:10px">🔒 Ασφαλής πληρωμή μέσω Stripe. Το τιμολόγιο αποστέλλεται αυτόματα στο email σου.</p>
-    </div>
-  `);
-  lucide.createIcons();
-}
 function renderSettings(){
   // Load από localStorage
   const s = JSON.parse(localStorage.getItem('katastimaSettings') || '{}');
