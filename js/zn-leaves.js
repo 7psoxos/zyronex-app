@@ -28205,3 +28205,1755 @@ function _kioskRenderSettings(){
   </div>`;
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════
+// === SUBSCRIPTION MODULE ===
+// ═══════════════════════════════════════════════════════════════
+
+function getCurrentPlan() {
+  if(_isOwnerBypass()) return 'enterprise'; // admin εμφανίζεται ως enterprise
+  return (SHOP_SUBSCRIPTION?.plan || 'trial').toLowerCase();
+}
+
+// ── Upgrade prompt ───────────────────────────────────────────────────────────
+function showUpgradePrompt(featureName, requiredPlan = 'Pro') {
+  // Owner/admin bypass — δεν εμφανίζουμε ποτέ paywall στους owners
+  if(_isOwnerBypass()){
+    console.log(`[Plan] Bypass για owner στο feature: ${featureName}`);
+    return false;
+  }
+  const featureLabels = {
+    ai_oracle:        'AI Oracle',
+    brain:            'AI Brain Analytics',
+    pricewar:         'Price War Monitor',
+    warroom:          'War Room',
+    'customer-intel': 'Customer DNA',
+    campaigns:        'Email Campaigns',
+    mixology:         'Mixology Calculator',
+    invoice_scanner:  'Smart Invoice Scanner',
+    compliance:       'TPD/CoA Compliance',
+    competitors:      'Ανταγωνιστές',
+    inspector:        'System Inspector',
+    multi_location:   'Multi-Location',
+    api_access:       'API Access',
+    email_marketing:  'Email Marketing',
+  };
+  const label = featureLabels[featureName] || featureName;
+  const plan  = getCurrentPlan();
+  const price = requiredPlan === 'Enterprise' ? '249€/μήνα' : '129€/μήνα';
+
+  // Inject upgrade modal
+  let modal = document.getElementById('upgradePromptModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'upgradePromptModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:900;align-items:center;justify-content:center;padding:20px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="background:var(--bg-1);border:1px solid rgba(0,212,168,0.3);border-radius:20px;padding:32px 28px;max-width:420px;width:100%;text-align:center">
+      <div style="font-size:48px;margin-bottom:12px">🚀</div>
+      <div style="font-size:20px;font-weight:800;margin-bottom:8px">
+        ${label}
+      </div>
+      <div style="font-size:13px;color:var(--text-2);margin-bottom:8px">
+        Διαθέσιμο στο <strong style="color:var(--accent)">${requiredPlan} plan</strong>
+      </div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:24px;line-height:1.6">
+        Το τρέχον plan σας είναι <strong style="text-transform:uppercase">${plan}</strong>.<br>
+        Αναβαθμίστε για να ξεκλειδώσετε αυτή τη λειτουργία.
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(0,212,168,0.1),rgba(74,163,255,0.1));border:1px solid rgba(0,212,168,0.2);border-radius:12px;padding:16px;margin-bottom:24px">
+        <div style="font-size:22px;font-weight:800;color:var(--accent)">${price}</div>
+        <div style="font-size:12px;color:var(--text-2);margin-top:2px">${requiredPlan} Plan — ανά μήνα</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="openRenewModal();closeUpgradePrompt()">
+          ⬆️ Αναβάθμιση
+        </button>
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeUpgradePrompt()">
+          Αργότερα
+        </button>
+      </div>
+    </div>`;
+  modal.style.display = 'flex';
+}
+
+function closeUpgradePrompt() {
+  const m = document.getElementById('upgradePromptModal');
+  if (m) m.style.display = 'none';
+}
+
+// ── Guard function: wraps any feature call ───────────────────────────────────
+// Usage: if (!planGuard('ai_oracle')) return;
+
+// ── Apply plan restrictions to sidebar ──────────────────────────────────────
+function applyPlanToSidebar() {
+  const blockedInBasic = [
+    'ai','bi','oracle','brain','pricewar','warroom',
+    'customer-intel','campaigns','mixology','compliance',
+    'competitors','inspector','data-cleanup'
+  ];
+
+  const plan = getCurrentPlan();
+  if (plan === 'basic') {
+    blockedInBasic.forEach(page => {
+      const item = document.querySelector(`.nav-item[data-page="${page}"]`);
+      if (item) {
+        item.style.opacity = '0.4';
+        item.style.pointerEvents = 'none';
+        item.title = 'Απαιτείται Pro plan';
+        // Add lock icon
+        if (!item.querySelector('.plan-lock')) {
+          const lock = document.createElement('span');
+          lock.className = 'plan-lock';
+          lock.style.cssText = 'margin-left:auto;font-size:10px;color:var(--warn)';
+          lock.textContent = '🔒';
+          item.appendChild(lock);
+        }
+      }
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██████████████  ADMIN → APP REAL-TIME SYNC  ██████████████████████████████
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _planSyncChannel = null;
+
+function startPlanSync() {
+  if (_planSyncChannel) return; // Already running
+
+  // ⚠️ DISABLED: Supabase Realtime causes "Script error :0:0" in Safari
+  // The WebSocket connection fails silently in iOS Safari and throws CORS errors
+  // Plan changes will be detected on next page reload instead
+  console.log('[PLAN SYNC] Realtime DISABLED for Safari compatibility');
+  return;
+  
+  /* Original code disabled
+  _planSyncChannel = sb
+    .channel(`plan-sync-${SHOP_ID}`)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'tenant_shops',
+      filter: `id=eq.${SHOP_ID}`
+    }, (payload) => {
+      handlePlanChange(payload.new);
+    })
+    .subscribe();
+
+  console.log('[PLAN SYNC] Realtime listener started');
+  */
+}
+
+function stopPlanSync() {
+  if (_planSyncChannel) {
+    sb.removeChannel(_planSyncChannel);
+    _planSyncChannel = null;
+  }
+}
+
+async function handlePlanChange(newShopData) {
+  const oldPlan   = SHOP_SUBSCRIPTION?.plan;
+  const oldStatus = SHOP_SUBSCRIPTION?.status;
+  const newPlan   = newShopData.plan;
+  const newStatus = newShopData.status;
+
+  // Update local state
+  if (SHOP_SUBSCRIPTION) {
+    SHOP_SUBSCRIPTION.plan       = newPlan;
+    SHOP_SUBSCRIPTION.status     = newStatus;
+    SHOP_SUBSCRIPTION.expires_at = newShopData.expires_at;
+    SHOP_SUBSCRIPTION.daysLeft   = newShopData.expires_at
+      ? Math.floor((new Date(newShopData.expires_at) - Date.now()) / 86400000)
+      : null;
+  }
+
+  // Plan upgrade
+  if (oldPlan !== newPlan) {
+    console.log(`[PLAN SYNC] Plan changed: ${oldPlan} → ${newPlan}`);
+
+    if (['pro','enterprise'].includes(newPlan) && oldPlan === 'basic') {
+      // Upgrade!
+      toast(`🚀 Αναβάθμιση σε ${newPlan.toUpperCase()}! Νέες λειτουργίες διαθέσιμες.`, 'success');
+      applyPlanToSidebar();
+      applyPlanInterceptor();
+      // Reload sidebar to show unlocked features
+      if (typeof applyPermissionsToSidebar === 'function') applyPermissionsToSidebar();
+      if (typeof initNavSections === 'function') initNavSections();
+    } else if (newPlan === 'basic' && ['pro','enterprise'].includes(oldPlan)) {
+      // Downgrade
+      toast(`ℹ️ Υποβάθμιση σε Basic plan. Ορισμένες λειτουργίες απενεργοποιήθηκαν.`, 'info');
+      applyPlanToSidebar();
+    }
+  }
+
+  // Status change
+  if (oldStatus !== newStatus) {
+    console.log(`[PLAN SYNC] Status changed: ${oldStatus} → ${newStatus}`);
+
+    if (newStatus === 'active' && ['suspended','past_due'].includes(oldStatus)) {
+      // Reactivation!
+      if (typeof handleReactivation === 'function') {
+        handleReactivation(SHOP_SUBSCRIPTION?.expires_at);
+      }
+    } else if (newStatus === 'suspended') {
+      // Suspension
+      if (typeof showSuspendedScreen === 'function') showSuspendedScreen();
+      if (typeof blockAutomatedFeatures === 'function') blockAutomatedFeatures();
+    }
+  }
+
+  // Refresh subscription banner
+  if (typeof renderSubBanner === 'function') renderSubBanner();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ██████████████  SIGNUP FLOW  █████████████████████████████████████████████
+// ═══════════════════════════════════════════════════════════════════════════
+
+function showSignupFlow() {
+  let screen = document.getElementById('signupScreen');
+  if (!screen) {
+    screen = document.createElement('div');
+    screen.id = 'signupScreen';
+    screen.style.cssText = 'display:none;position:fixed;inset:0;background:var(--bg-0);z-index:1100;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px';
+    document.body.appendChild(screen);
+  }
+
+  screen.innerHTML = `
+    <div style="max-width:480px;margin:0 auto;padding:40px 0">
+
+      <!-- Logo -->
+      <div style="text-align:center;margin-bottom:32px">
+        <div style="width:56px;height:56px;background:linear-gradient(135deg,#00d4a8,#00a884);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;color:#000;font-weight:800">⚡</div>
+        <div style="font-size:22px;font-weight:800">ZyroNex</div>
+        <div style="font-size:13px;color:var(--text-2);margin-top:4px">Δημιουργία Λογαριασμού</div>
+      </div>
+
+      <!-- Step indicator -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:32px" id="signupSteps">
+        <div class="signup-step active" data-step="1">1<span>Στοιχεία</span></div>
+        <div class="signup-step-line"></div>
+        <div class="signup-step" data-step="2">2<span>Κατάστημα</span></div>
+        <div class="signup-step-line"></div>
+        <div class="signup-step" data-step="3">3<span>Plan</span></div>
+        <div class="signup-step-line"></div>
+        <div class="signup-step" data-step="4">4<span>Έτοιμο!</span></div>
+      </div>
+
+      <!-- Steps container -->
+      <div id="signupStepContent"></div>
+    </div>
+  `;
+
+  // CSS for signup
+  if (!document.getElementById('signupCSS')) {
+    const s = document.createElement('style');
+    s.id = 'signupCSS';
+    s.textContent = `
+      #signupScreen { font-family: 'Manrope', sans-serif; }
+      .signup-step {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        width: 32px; height: 32px; border-radius: 50%;
+        background: var(--bg-3); color: var(--text-2);
+        font-size: 13px; font-weight: 700; justify-content: center;
+        flex-shrink: 0; position: relative; transition: all 0.2s;
+      }
+      .signup-step span {
+        position: absolute; top: 38px; font-size: 10px; white-space: nowrap;
+        color: var(--text-2); font-weight: 500;
+      }
+      .signup-step.active { background: var(--accent); color: #000; }
+      .signup-step.done { background: var(--ok); color: #000; }
+      .signup-step-line { flex: 1; height: 2px; background: var(--border); }
+      .signup-card { background: var(--bg-1); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; }
+      .signup-input { width: 100%; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text-0); font-family: inherit; font-size: 14px; outline: none; margin-bottom: 14px; min-height: 44px; -webkit-appearance: none; }
+      .signup-input:focus { border-color: var(--accent); }
+      .signup-plan-card { border: 2px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+      .signup-plan-card:active { transform: scale(0.98); }
+      .signup-plan-card.selected { border-color: var(--accent); background: rgba(0,212,168,0.06); }
+      @media (max-width: 480px) {
+        #signupScreen { padding: 16px; }
+        .signup-card { padding: 20px 16px; }
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  screen.style.display = 'block';
+  renderSignupStep(1, {});
+}
+
+function renderSignupStep(step, data) {
+  // Update step indicators
+  document.querySelectorAll('.signup-step').forEach((el, i) => {
+    const s = i + 1;
+    el.className = 'signup-step' + (s === step ? ' active' : s < step ? ' done' : '');
+    el.firstChild.nodeValue = s < step ? '✓' : String(s);
+  });
+
+  const container = document.getElementById('signupStepContent');
+  if (!container) return;
+
+  if (step === 1) renderSignupStep1(container, data);
+  else if (step === 2) renderSignupStep2(container, data);
+  else if (step === 3) renderSignupStep3(container, data);
+  else if (step === 4) renderSignupStep4(container, data);
+}
+
+function renderSignupStep1(container, data) {
+  container.innerHTML = `
+    <div class="signup-card">
+      <div style="font-size:16px;font-weight:700;margin-bottom:20px">👤 Στοιχεία Διαχειριστή</div>
+
+      <input class="signup-input" id="s_name" type="text" placeholder="Ονοματεπώνυμο *" value="${data.name||''}">
+      <input class="signup-input" id="s_email" type="email" placeholder="Email *" value="${data.email||''}">
+      <input class="signup-input" id="s_phone" type="tel" placeholder="Κινητό (π.χ. 6912345678)" value="${data.phone||''}">
+      <input class="signup-input" id="s_password" type="password" placeholder="Κωδικός (min 6 χαρακτήρες) *">
+      <input class="signup-input" id="s_password2" type="password" placeholder="Επανάληψη κωδικού *">
+
+      <div id="s1_error" style="color:var(--danger);font-size:12px;margin-bottom:12px;display:none"></div>
+
+      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:14px" onclick="validateSignupStep1()">
+        Επόμενο →
+      </button>
+      <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--text-2)">
+        Έχετε ήδη λογαριασμό;
+        <a href="#" style="color:var(--accent)" onclick="hideSignupScreen()">Σύνδεση</a>
+      </div>
+    </div>
+  `;
+  document.getElementById('s_name')?.focus();
+}
+
+function validateSignupStep1() {
+  const name  = document.getElementById('s_name')?.value?.trim();
+  const email = document.getElementById('s_email')?.value?.trim();
+  const phone = document.getElementById('s_phone')?.value?.trim();
+  const pass  = document.getElementById('s_password')?.value;
+  const pass2 = document.getElementById('s_password2')?.value;
+  const err   = document.getElementById('s1_error');
+
+  if (!name || !email || !pass) { err.textContent='Παρακαλώ συμπληρώστε τα υποχρεωτικά πεδία'; err.style.display='block'; return; }
+  if (!email.includes('@')) { err.textContent='Μη έγκυρο email'; err.style.display='block'; return; }
+  if (pass.length < 6) { err.textContent='Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες'; err.style.display='block'; return; }
+  if (pass !== pass2) { err.textContent='Οι κωδικοί δεν ταιριάζουν'; err.style.display='block'; return; }
+
+  err.style.display = 'none';
+  window._signupData = { name, email, phone, password: pass };
+  renderSignupStep(2, window._signupData);
+}
+
+function renderSignupStep2(container, data) {
+  container.innerHTML = `
+    <div class="signup-card">
+      <div style="font-size:16px;font-weight:700;margin-bottom:20px">🏪 Στοιχεία Καταστήματος</div>
+
+      <input class="signup-input" id="s_shopname" type="text" placeholder="Όνομα καταστήματος *" value="${data.shopname||''}">
+      <input class="signup-input" id="s_address" type="text" placeholder="Διεύθυνση" value="${data.address||''}">
+      <input class="signup-input" id="s_city" type="text" placeholder="Πόλη" value="${data.city||''}">
+      <input class="signup-input" id="s_afm" type="text" placeholder="ΑΦΜ (προαιρετικό)" value="${data.afm||''}">
+      <input class="signup-input" id="s_doy" type="text" placeholder="ΔΟΥ (προαιρετικό)" value="${data.doy||''}">
+
+      <div id="s2_error" style="color:var(--danger);font-size:12px;margin-bottom:12px;display:none"></div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="renderSignupStep(1,window._signupData)">← Πίσω</button>
+        <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="validateSignupStep2()">Επόμενο →</button>
+      </div>
+    </div>
+  `;
+}
+
+function validateSignupStep2() {
+  const shopname = document.getElementById('s_shopname')?.value?.trim();
+  const address  = document.getElementById('s_address')?.value?.trim();
+  const city     = document.getElementById('s_city')?.value?.trim();
+  const afm      = document.getElementById('s_afm')?.value?.trim();
+  const doy      = document.getElementById('s_doy')?.value?.trim();
+  const err      = document.getElementById('s2_error');
+
+  if (!shopname) { err.textContent='Παρακαλώ εισάγετε όνομα καταστήματος'; err.style.display='block'; return; }
+
+  err.style.display='none';
+  window._signupData = { ...window._signupData, shopname, address, city, afm, doy };
+  renderSignupStep(3, window._signupData);
+}
+
+function renderSignupStep3(container, data) {
+  const plans = [
+    { id:'basic',    price:'69€/μήνα',  label:'Basic',      desc:'1 χρήστης, POS, αποθήκη, ΕΦΚ, myDATA', color:'var(--warn)',   badge:'' },
+    { id:'pro',      price:'129€/μήνα', label:'Pro ⭐',     desc:'3 χρήστες + AI Oracle, Price War, Scanner', color:'var(--accent)', badge:'ΔΗΜΟΦΙΛΕΣ' },
+    { id:'trial',    price:'Δωρεάν',    label:'Trial 14ημ', desc:'Δοκιμή Pro χωρίς κάρτα', color:'var(--info)',   badge:'ΝΕΟ' },
+  ];
+
+  const selectedPlan = data.plan || 'trial';
+
+  container.innerHTML = `
+    <div class="signup-card">
+      <div style="font-size:16px;font-weight:700;margin-bottom:6px">💎 Επιλογή Plan</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:20px">14 ημέρες δωρεάν δοκιμή — χωρίς κάρτα</div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px" id="planCards">
+        ${plans.map(p=>`
+          <div class="signup-plan-card ${selectedPlan===p.id?'selected':''}" onclick="selectSignupPlan('${p.id}')" id="plan_${p.id}">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <span style="font-weight:700;color:${p.color}">${p.label}</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${p.badge?`<span style="font-size:9px;font-weight:700;background:${p.color}22;color:${p.color};padding:2px 6px;border-radius:4px">${p.badge}</span>`:''}
+                <span style="font-weight:800;color:var(--text-0)">${p.price}</span>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--text-2)">${p.desc}</div>
+          </div>`).join('')}
+      </div>
+
+      <div id="s3_error" style="color:var(--danger);font-size:12px;margin-bottom:12px;display:none"></div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="renderSignupStep(2,window._signupData)">← Πίσω</button>
+        <button class="btn btn-primary" style="flex:1;justify-content:center" id="createAccountBtn" onclick="createAccount()">
+          Δημιουργία →
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function selectSignupPlan(planId) {
+  document.querySelectorAll('.signup-plan-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('plan_' + planId);
+  if (card) card.classList.add('selected');
+  window._signupData = { ...window._signupData, plan: planId };
+}
+
+async function createAccount() {
+  const data = window._signupData || {};
+  const btn  = document.getElementById('createAccountBtn');
+  if (!btn) return;
+
+  const plan = data.plan || 'trial';
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Δημιουργία...';
+
+  try {
+    // 1. Create Supabase auth user
+    const { data: authData, error: authError } = await sb.auth.signUp({
+      email:    data.email,
+      password: data.password,
+      options: { data: { full_name: data.name, phone: data.phone } }
+    });
+
+    if (authError) throw authError;
+    const userId = authData.user?.id;
+    if (!userId) throw new Error('User creation failed');
+
+    // 2. Create shop in tenant_shops
+    const trialEnd = new Date();
+    trialEnd.setDate(trialEnd.getDate() + 14);
+
+    const { data: shopData, error: shopError } = await sb.from('tenant_shops').insert({
+      shop_name:    data.shopname,
+      owner_name:   data.name,
+      owner_email:  data.email,
+      owner_phone:  data.phone || null,
+      address:      data.address || null,
+      city:         data.city || null,
+      afm:          data.afm || null,
+      doy:          data.doy || null,
+      plan:         plan === 'trial' ? 'trial' : plan,
+      status:       'active',
+      expires_at:   plan === 'trial' ? trialEnd.toISOString() : null,
+      monthly_price: plan === 'basic' ? 69 : plan === 'pro' ? 129 : plan === 'enterprise' ? 249 : 0,
+      created_at:   new Date().toISOString(),
+    }).select().single();
+
+    if (shopError) throw shopError;
+
+    // 3. Create app_user record
+    await sb.from('app_users').insert({
+      name:     data.name,
+      email:    data.email,
+      role:     'admin',
+      perms:    ['*'],
+      shop_id:  shopData.id,
+      user_id:  userId,
+      pin:      '1234', // Default PIN — θα αλλάξει
+      created_at: new Date().toISOString(),
+    });
+
+    // 4. Log signup event
+    await sb.from('subscription_events').insert({
+      subscription_id: shopData.id,
+      event_type: 'created',
+      details: { plan, source: 'signup_flow', trial_end: trialEnd.toISOString() }
+    }).then(()=>{}).catch(()=>{});
+
+    // 5. Success!
+    window._signupData.shopId = shopData.id;
+    renderSignupStep(4, window._signupData);
+
+  } catch(e) {
+    console.error('[SIGNUP]', e);
+    btn.disabled = false;
+    btn.textContent = 'Δημιουργία →';
+    const err = document.getElementById('s3_error');
+    if (err) {
+      err.style.display = 'block';
+      err.textContent = e.message?.includes('already registered')
+        ? 'Αυτό το email χρησιμοποιείται ήδη.'
+        : 'Σφάλμα: ' + (e.message || 'Δοκιμάστε ξανά');
+    }
+  }
+}
+
+function renderSignupStep4(container, data) {
+  container.innerHTML = `
+    <div class="signup-card" style="text-align:center">
+      <div style="font-size:64px;margin-bottom:16px">🎉</div>
+      <div style="font-size:22px;font-weight:800;margin-bottom:8px">Καλώς ήρθατε!</div>
+      <div style="font-size:14px;color:var(--text-2);margin-bottom:24px;line-height:1.7">
+        Ο λογαριασμός σας δημιουργήθηκε επιτυχώς.<br>
+        <strong style="color:var(--accent)">${data.shopname}</strong> είναι έτοιμο!
+      </div>
+
+      <div style="background:var(--bg-2);border-radius:12px;padding:16px;margin-bottom:24px;text-align:left">
+        <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Τα στοιχεία σας</div>
+        <div style="font-size:13px;display:flex;flex-direction:column;gap:6px">
+          <div>📧 <strong>${data.email}</strong></div>
+          <div>🏪 <strong>${data.shopname}</strong></div>
+          <div>💎 Plan: <strong style="text-transform:uppercase;color:var(--accent)">${data.plan||'trial'}</strong></div>
+          ${data.plan==='trial'||!data.plan?`<div style="color:var(--info);font-size:12px">✓ 14 ημέρες δωρεάν δοκιμή ενεργοποιήθηκαν</div>`:''}
+        </div>
+      </div>
+
+      <div style="background:rgba(255,169,77,0.1);border:1px solid rgba(255,169,77,0.3);border-radius:10px;padding:12px;margin-bottom:24px;font-size:12px;color:var(--warn)">
+        📧 Ελέγξτε το email σας για επιβεβαίωση λογαριασμού.
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:15px;padding:14px" onclick="hideSignupScreen()">
+        Είσοδος στην Εφαρμογή →
+      </button>
+    </div>
+  `;
+}
+
+function hideSignupScreen() {
+  const screen = document.getElementById('signupScreen');
+  if (screen) screen.style.display = 'none';
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ── INIT PLAN SYSTEM (called after loadSubscription) ────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+function initPlanSystem() {
+  applyPlanInterceptor();
+  applyPlanToSidebar();
+  startPlanSync();
+  console.log(`[PLAN] Plan: ${getCurrentPlan()} | Sync: started`);
+}
+
+// expose globally
+window.planHas         = planHas;
+window.planGuard       = planGuard;
+window.getPlanLimit    = getPlanLimit;
+window.getCurrentPlan  = getCurrentPlan;
+window.showSignupFlow  = showSignupFlow;
+window.hideSignupScreen= hideSignupScreen;
+window.initPlanSystem  = initPlanSystem;
+
+var SUB_DATA = { shop:null, plan:null, plugins:[], myPlugins:[], invoices:[], promos:[] };
+
+// Cancel/refund policy thresholds (admin-configurable; defaults here)
+var CANCEL_POLICY = {
+  fullRefundDays: 7,    // 0-7 ημέρες από την τελευταία χρέωση → 100%
+  partialRefundDays: 14, // 8-14 ημέρες → 50%
+  partialRefundPct: 50
+  // 15+ ημέρες → 0%
+};
+
+// Post-expiry lifecycle (informational display)
+var LIFECYCLE_STAGES = [
+  {day:0,   key:'expired',   el:'Λήξη συνδρομής', icon:'📅', desc:'Ειδοποίηση + banner. Πλήρης πρόσβαση για χάρη.'},
+  {day:3,   key:'pastdue',   el:'Ημέρα 1-3: Past Due', icon:'⏳', desc:'Read-only mode. Βλέπεις τα πάντα, δεν αλλάζεις δεδομένα.'},
+  {day:7,   key:'readonly',  el:'Ημέρα 4-7: Περιορισμένο', icon:'🔒', desc:'Μόνο POS λειτουργεί για να μη χαθούν πωλήσεις.'},
+  {day:14,  key:'suspended', el:'Ημέρα 8-14: Αναστολή', icon:'⛔', desc:'Μόνο εξαγωγή δεδομένων (export). Καμία άλλη λειτουργία.'},
+  {day:45,  key:'archived',  el:'Ημέρα 15-45: Αρχειοθέτηση', icon:'📦', desc:'Δεδομένα παγωμένα. 30 ημέρες περιθώριο για export.'},
+  {day:60,  key:'deletion',  el:'Ημέρα 60: Διαγραφή', icon:'🗑️', desc:'Οριστική διαγραφή μετά από 3 ειδοποιήσεις. Τα αρχεία στο Vault διαγράφονται.'}
+];
+
+async function renderSubscription(){
+  const c = document.getElementById('content');
+  if(!c) return;
+  c.innerHTML = `<div style="padding:40px;text-align:center"><div class="spinner" style="margin:0 auto"></div><p class="muted" style="margin-top:12px">Φόρτωση συνδρομής...</p></div>`;
+
+  // Load own shop subscription
+  try {
+    const {data:shop} = await sb.from('tenant_shops').select('*').eq('id',SHOP_ID).single();
+    SUB_DATA.shop = shop;
+  } catch(e){ SUB_DATA.shop = null; }
+
+  try { const {data} = await sb.from('plans').select('*'); SUB_DATA.plansAll = data||[]; } catch(e){ SUB_DATA.plansAll=[]; }
+  try { const {data} = await sb.from('plugins').select('*').eq('active',true); SUB_DATA.plugins = data||[]; } catch(e){ SUB_DATA.plugins=[]; }
+  try { const {data} = await sb.from('shop_plugins').select('*').eq('shop_id',SHOP_ID); SUB_DATA.myPlugins = data||[]; } catch(e){ SUB_DATA.myPlugins=[]; }
+  try { const {data} = await sb.from('invoices').select('*').eq('shop_id',SHOP_ID).order('created_at',{ascending:false}).limit(50); SUB_DATA.invoices = data||[]; } catch(e){ SUB_DATA.invoices=[]; }
+  try { const {data} = await sb.from('promotions').select('*').eq('active',true); SUB_DATA.promos = data||[]; } catch(e){ SUB_DATA.promos=[]; }
+
+  const shop = SUB_DATA.shop || {plan:'trial', status:'active', expires_at:null, shop_name:'Το κατάστημά μου'};
+  // Fallback features per tier (όταν το plan δεν υπάρχει στη βάση)
+  const DEFAULT_FEATURES = {
+    trial: ['POS & Ταμείο','Αποθήκη','Πελάτες','Βασικά Στατιστικά','Δοκιμαστική περίοδος — όλα ξεκλείδωτα'],
+    basic: ['POS & Ταμείο','Αποθήκη','Πελάτες','Βασικά Reports','Έως 500 προϊόντα','2 χρήστες'],
+    pro: ['Όλα του Basic','ZyroNex AI Agents','Banking & myDATA','Marketing Studio','Price War','Έως 5.000 προϊόντα','10 χρήστες'],
+    enterprise: ['Όλα του Pro','Multi-shop','Eshop Builder','Custom integrations','Priority support','Απεριόριστα προϊόντα/χρήστες']
+  };
+  const myPlan = (SUB_DATA.plansAll||[]).find(p=>p.tier===shop.plan) || {name:(shop.plan||'trial').charAt(0).toUpperCase()+(shop.plan||'trial').slice(1), tier:shop.plan||'trial', price_monthly:0, features:DEFAULT_FEATURES[shop.plan||'trial']||DEFAULT_FEATURES.trial};
+  // Αν το plan υπάρχει στη βάση αλλά χωρίς features, βάλε defaults
+  if(myPlan && (!myPlan.features || myPlan.features.length===0)) myPlan.features = DEFAULT_FEATURES[myPlan.tier]||DEFAULT_FEATURES.trial;
+
+  // Days left calc
+  const now = Date.now();
+  const daysLeft = shop.expires_at ? Math.floor((new Date(shop.expires_at)-now)/86400000) : null;
+  const expDate = shop.expires_at ? new Date(shop.expires_at).toLocaleDateString('el-GR',{day:'numeric',month:'long',year:'numeric'}) : '∞';
+
+  // Subscription state
+  let stateLabel, stateColor, stateIcon;
+  if(shop.status==='cancelled'){ stateLabel='Ακυρωμένη'; stateColor='var(--text-2)'; stateIcon='❌'; }
+  else if(daysLeft===null){ stateLabel='Ενεργή (χωρίς λήξη)'; stateColor='var(--accent)'; stateIcon='✅'; }
+  else if(daysLeft<0){ stateLabel='Έληξε'; stateColor='var(--danger)'; stateIcon='🔴'; }
+  else if(daysLeft<=7){ stateLabel='Λήγει σύντομα'; stateColor='#f59e0b'; stateIcon='⚠️'; }
+  else { stateLabel='Ενεργή'; stateColor='var(--accent)'; stateIcon='✅'; }
+
+  const tierColors = {trial:'#0088ff', basic:'#f59e0b', pro:'var(--accent)', enterprise:'#9b59ff'};
+  const planColor = tierColors[shop.plan]||'var(--accent)';
+
+  // Progress bar (period = 30 days assumed)
+  const pct = daysLeft===null ? 100 : Math.max(0,Math.min(100,Math.round((daysLeft/30)*100)));
+
+  c.innerHTML = `
+    <div class="page-head">
+      <h1 class="page-title">💳 Συνδρομή &amp; Plugins</h1>
+      <p class="page-sub">Διαχείριση του πακέτου σου, plugins και τιμολογίων</p>
+    </div>
+
+    <!-- CURRENT PLAN CARD -->
+    <div class="card" style="border-left:4px solid ${planColor};margin-bottom:16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <span style="font-size:20px;font-weight:800;color:${planColor}">${myPlan.name}</span>
+            <span style="font-size:12px;padding:3px 10px;border-radius:20px;background:${stateColor}18;color:${stateColor};font-weight:700">${stateIcon} ${stateLabel}</span>
+          </div>
+          <div class="text-sm muted">${shop.shop_name||''}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:28px;font-weight:800;color:var(--text-1)">${myPlan.price_monthly||0}€<span style="font-size:13px;color:var(--text-2);font-weight:400">/μήνα</span></div>
+        </div>
+      </div>
+
+      ${daysLeft!==null?`
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span class="muted">Λήξη: <strong style="color:var(--text-1)">${expDate}</strong></span>
+          <span style="color:${stateColor};font-weight:700">${daysLeft<0?`${Math.abs(daysLeft)} ημέρες πριν`:`${daysLeft} ημέρες ακόμα`}</span>
+        </div>
+        <div style="height:8px;background:var(--bg-2);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${stateColor};border-radius:4px;transition:width 0.3s"></div>
+        </div>
+      </div>`:''}
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" style="flex:1;min-width:130px;justify-content:center" onclick="openRenewModal()"><i data-lucide="refresh-cw" size="14"></i> Ανανέωση</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1;min-width:130px;justify-content:center" onclick="openUpgradeModal()"><i data-lucide="trending-up" size="14"></i> Αναβάθμιση</button>
+      </div>
+      ${shop.status!=='cancelled'?`<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;justify-content:center;color:var(--danger)" onclick="openCancelModal()"><i data-lucide="x-circle" size="14"></i> Ακύρωση συνδρομής</button>`:''}
+    </div>
+
+    <!-- INCLUDED FEATURES -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="fw-700" style="margin-bottom:12px">✓ Τι περιλαμβάνει το πακέτο σου</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+        ${(myPlan.features||[]).map(f=>`<div style="display:flex;gap:8px;align-items:center;font-size:13px"><span style="color:${planColor}">✓</span> ${f}</div>`).join('')}
+      </div>
+    </div>
+
+    <!-- PLUGINS MARKETPLACE (unified με το πραγματικό catalog + lifecycle) -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="fw-700">🧩 Plugins Marketplace</div>
+        <span class="text-xs muted">${(window.ZYRONEX_PLUGINS||[]).filter(p=>{try{return isPluginActive(p.id);}catch(_){return false;}}).length} ενεργά</span>
+      </div>
+      ${(window.ZYRONEX_PLUGINS||[]).length===0?`
+        <div class="text-sm muted" style="text-align:center;padding:20px">Δεν υπάρχουν διαθέσιμα plugins αυτή τη στιγμή.</div>
+      `:`
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+        ${(window.ZYRONEX_PLUGINS||[]).map(pl=>{
+          var active=false, state='active', daysLeft=null, isOwner=false;
+          try{ active=isPluginActive(pl.id); state=getPluginState(pl.id); daysLeft=getPluginDaysLeft(pl.id); isOwner=_isOwnerBypass(); }catch(_){}
+          var pr = pl.pricing||{};
+          var monthly = pr.monthly ? pr.monthly.toFixed(2).replace('.',',') : null;
+          var oneTime = pr.oneTime ? String(pr.oneTime).replace('.',',') : null;
+          // Status chip ανάλογα με το lifecycle
+          var chip;
+          if(isOwner && active){
+            chip = '<span style="font-size:11px;color:#818cf8;font-weight:700">👑 Ενεργό (owner)</span>';
+          } else if(active && (state==='warning'||state==='urgent')){
+            var cc = state==='urgent' ? '#f39c12' : '#eab308';
+            chip = '<span style="font-size:11px;color:'+cc+';font-weight:700">⏳ Λήγει σε '+daysLeft+(daysLeft===1?' μέρα':' μέρες')+'</span>';
+          } else if(active && (state==='past_due'||state==='readonly')){
+            chip = '<span style="font-size:11px;color:#ef4444;font-weight:700">⚠️ Ληγμένη — ανανέωσε</span>';
+          } else if(active){
+            chip = '<span style="font-size:12px;color:var(--accent);font-weight:700">✓ Ενεργό</span>';
+          } else {
+            chip = '<button class="btn btn-primary btn-sm" onclick="_pluginBuy(\'' + pl.id + '\',\'monthly\')" style="font-size:12px">Αγορά</button>';
+          }
+          var priceLine = monthly
+            ? '<span style="font-size:18px;font-weight:800">'+monthly+'€</span><span style="font-size:11px;color:var(--text-2)">/μήνα</span>'
+            : (oneTime ? '<span style="font-size:18px;font-weight:800">'+oneTime+'€</span><span style="font-size:11px;color:var(--text-2)"> εφάπαξ</span>' : '');
+          return `
+          <div style="background:var(--bg-2);border-radius:12px;padding:16px;border:1px solid ${active?'rgba(0,255,136,0.25)':'var(--border)'};position:relative">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <div style="width:40px;height:40px;border-radius:10px;background:var(--surface-2,#18181b);display:flex;align-items:center;justify-content:center;font-size:20px">${pl.icon||'🧩'}</div>
+              <div style="flex:1;min-width:0">
+                <div class="fw-700" style="font-size:14px">${pl.name}</div>
+                <div style="font-size:10px;color:var(--text-2)">${pl.category||'Πρόσθετο'}</div>
+              </div>
+            </div>
+            <div class="text-sm muted" style="margin-bottom:12px;line-height:1.5;min-height:40px">${pl.about||pl.tagline||''}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>${priceLine}</div>
+              ${chip}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`}
+    </div>
+
+    <!-- INVOICES -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="fw-700" style="margin-bottom:12px">📄 Τιμολόγια</div>
+      ${SUB_DATA.invoices.length===0?`
+        <div class="text-sm muted" style="text-align:center;padding:20px">Δεν υπάρχουν τιμολόγια ακόμα.</div>
+      `:`
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${SUB_DATA.invoices.map(inv=>{
+          const si = inv.status==='paid'?{c:'var(--accent)',i:'✅',l:'Πληρωμένο'}:inv.status==='overdue'?{c:'var(--danger)',i:'🔴',l:'Ληξιπρόθεσμο'}:{c:'#f59e0b',i:'⏳',l:'Εκκρεμεί'};
+          return `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--bg-2);border-radius:8px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:13px;font-weight:600">${inv.invoice_number||('#'+String(inv.id).slice(0,8))}</div>
+              <div class="text-xs muted">${inv.description||''} · ${new Date(inv.created_at).toLocaleDateString('el-GR')}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:11px;color:${si.c};font-weight:700">${si.i} ${si.l}</span>
+              <span class="fw-700">${(inv.total||0).toFixed(2)}€</span>
+              ${inv.pdf_url?`<a href="${inv.pdf_url}" target="_blank" class="btn btn-ghost btn-sm" style="padding:4px 8px"><i data-lucide="download" size="12"></i></a>`:''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`}
+    </div>
+
+    <!-- LIFECYCLE INFO (what happens when subscription ends) -->
+    <div class="card" style="background:rgba(245,158,11,0.04);border-color:rgba(245,158,11,0.15)">
+      <div class="fw-700" style="margin-bottom:6px">ℹ️ Τι συμβαίνει αν λήξει η συνδρομή;</div>
+      <div class="text-sm muted" style="margin-bottom:16px">Τα δεδομένα σου προστατεύονται. Δες αναλυτικά το χρονοδιάγραμμα:</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${LIFECYCLE_STAGES.map(st=>`
+          <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;background:var(--bg-2);border-radius:8px">
+            <span style="font-size:18px;flex-shrink:0">${st.icon}</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text-1)">${st.el}</div>
+              <div class="text-xs muted" style="margin-top:2px;line-height:1.5">${st.desc}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="margin-top:14px;padding:10px 12px;background:var(--accent-dim,rgba(0,255,136,0.06));border-radius:8px;font-size:12px;line-height:1.6">
+        💚 <strong>Τα αρχεία σου (Vault) και οι παραγγελίες</strong> παραμένουν διαθέσιμα για εξαγωγή έως την ημέρα 45. Μετά την οριστική διαγραφή δεν είναι δυνατή η ανάκτηση.
+      </div>
+    </div>
+  `;
+  if(typeof lucide!=='undefined') lucide.createIcons();
+}
+
+
+function processRenewal(){
+  const period = document.querySelector('input[name="renew_period"]:checked')?.value||'monthly';
+  closeModal();
+  // ZyroNex hook: invoke Stripe checkout Edge Function
+  // await sb.functions.invoke('create-checkout-session',{body:{shop_id:SHOP_ID,type:'renewal',period}})
+  toast('🔌 Σύνδεση με Stripe checkout — Προσεχώς (Edge Function απαιτείται)','info');
+}
+
+// ── UPGRADE MODAL ────────────────────────────────────────────────────────────
+function openUpgradeModal(){
+  const shop = SUB_DATA.shop||{};
+  const plans = (SUB_DATA.plansAll||[]).filter(p=>p.tier!=='trial');
+  const tierColors = {basic:'#f59e0b', pro:'var(--accent)', enterprise:'#9b59ff'};
+  openModal(`
+    <div class="modal-head"><h3 class="fw-800 text-xl">Αναβάθμιση Πακέτου</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${plans.map(p=>{
+          const isCurrent = p.tier===shop.plan;
+          const color = tierColors[p.tier]||'var(--accent)';
+          return `
+          <div style="padding:16px;background:var(--bg-2);border:2px solid ${isCurrent?color:'var(--border)'};border-radius:12px;${isCurrent?'opacity:0.6':''}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <span class="fw-800" style="font-size:16px;color:${color}">${p.name} ${isCurrent?'<span style="font-size:10px;color:var(--text-2)">(τρέχον)</span>':''}</span>
+              <span class="fw-800" style="font-size:20px">${p.price_monthly}€<span style="font-size:11px;color:var(--text-2)">/μ</span></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">
+              ${(p.features||[]).slice(0,5).map(f=>`<div style="font-size:12px;display:flex;gap:6px"><span style="color:${color}">✓</span> ${f}</div>`).join('')}
+            </div>
+            ${!isCurrent?`<button class="btn btn-primary btn-sm" style="width:100%" onclick="processUpgrade('${p.tier}')">Αναβάθμιση σε ${p.name}</button>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `);
+  lucide.createIcons();
+}
+
+function processUpgrade(tier){
+  closeModal();
+  // ZyroNex hook: Stripe subscription update with proration
+  toast('🔌 Αναβάθμιση σε '+tier+' — Stripe Edge Function απαιτείται','info');
+}
+
+// ── CANCEL MODAL with refund policy ──────────────────────────────────────────
+function openCancelModal(){
+  const shop = SUB_DATA.shop||{};
+  // Days since last charge (use last paid invoice or fallback to period start)
+  const lastInvoice = (SUB_DATA.invoices||[]).find(i=>i.status==='paid');
+  const lastChargeDate = lastInvoice ? new Date(lastInvoice.paid_at||lastInvoice.created_at) : null;
+  const daysSinceCharge = lastChargeDate ? Math.floor((Date.now()-lastChargeDate)/86400000) : null;
+
+  const myPlan = (SUB_DATA.plansAll||[]).find(p=>p.tier===shop.plan)||{price_monthly:0};
+  const paidAmount = lastInvoice ? lastInvoice.total : myPlan.price_monthly;
+
+  // Determine refund based on policy
+  let refundPct, refundAmount, policyText, policyColor;
+  if(daysSinceCharge===null){
+    refundPct=0; refundAmount=0;
+    policyText='Δεν βρέθηκε πρόσφατη χρέωση. Η ακύρωση θα ισχύσει στο τέλος της τρέχουσας περιόδου.';
+    policyColor='var(--text-2)';
+  } else if(daysSinceCharge<=CANCEL_POLICY.fullRefundDays){
+    refundPct=100; refundAmount=paidAmount;
+    policyText=`Είσαι εντός ${CANCEL_POLICY.fullRefundDays} ημερών από την τελευταία χρέωση. Δικαιούσαι <strong>πλήρη επιστροφή</strong>.`;
+    policyColor='var(--accent)';
+  } else if(daysSinceCharge<=CANCEL_POLICY.partialRefundDays){
+    refundPct=CANCEL_POLICY.partialRefundPct; refundAmount=(paidAmount*CANCEL_POLICY.partialRefundPct/100);
+    policyText=`Έχουν περάσει ${daysSinceCharge} ημέρες. Δικαιούσαι <strong>μερική επιστροφή ${CANCEL_POLICY.partialRefundPct}%</strong>.`;
+    policyColor='#f59e0b';
+  } else {
+    refundPct=0; refundAmount=0;
+    policyText=`Έχουν περάσει ${daysSinceCharge} ημέρες (>${CANCEL_POLICY.partialRefundDays}). <strong>Δεν προβλέπεται επιστροφή χρημάτων</strong>, αλλά διατηρείς πρόσβαση έως τη λήξη.`;
+    policyColor='var(--danger)';
+  }
+
+  openModal(`
+    <div class="modal-head"><h3 class="fw-800 text-xl">Ακύρωση Συνδρομής</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>
+    <div class="modal-body">
+      <div style="padding:14px 16px;background:${policyColor}14;border:1px solid ${policyColor}40;border-radius:10px;margin-bottom:16px">
+        <div style="font-size:13px;line-height:1.6;color:var(--text-1)">${policyText}</div>
+        ${refundPct>0?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${policyColor}30;display:flex;justify-content:space-between;align-items:center">
+          <span class="text-sm">Ποσό επιστροφής:</span>
+          <span class="fw-800" style="font-size:20px;color:${policyColor}">${refundAmount.toFixed(2)}€</span>
+        </div>`:''}
+      </div>
+
+      <div style="background:var(--bg-2);border-radius:10px;padding:14px;margin-bottom:16px">
+        <div class="fw-700 text-sm" style="margin-bottom:8px">📋 Πολιτική Ακύρωσης</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+          <div style="display:flex;justify-content:space-between"><span class="muted">0-${CANCEL_POLICY.fullRefundDays} ημέρες</span><span style="color:var(--accent);font-weight:700">100% επιστροφή</span></div>
+          <div style="display:flex;justify-content:space-between"><span class="muted">${CANCEL_POLICY.fullRefundDays+1}-${CANCEL_POLICY.partialRefundDays} ημέρες</span><span style="color:#f59e0b;font-weight:700">${CANCEL_POLICY.partialRefundPct}% επιστροφή</span></div>
+          <div style="display:flex;justify-content:space-between"><span class="muted">${CANCEL_POLICY.partialRefundDays+1}+ ημέρες</span><span style="color:var(--danger);font-weight:700">Χωρίς επιστροφή</span></div>
+        </div>
+      </div>
+
+      <div style="background:rgba(245,158,11,0.06);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;line-height:1.6">
+        ⚠️ Μετά την ακύρωση, η πρόσβαση παραμένει έως τη λήξη της περιόδου. Στη συνέχεια ισχύει το χρονοδιάγραμμα διατήρησης δεδομένων (read-only → αρχειοθέτηση → διαγραφή στις 60 ημέρες).
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Λόγος ακύρωσης (προαιρετικό)</label>
+        <select class="form-select" id="cancel_reason">
+          <option value="">— Επίλεξε —</option>
+          <option value="too_expensive">Πολύ ακριβό</option>
+          <option value="missing_features">Λείπουν features</option>
+          <option value="closing_business">Κλείνω την επιχείρηση</option>
+          <option value="switching">Αλλάζω σε άλλη λύση</option>
+          <option value="other">Άλλο</option>
+        </select>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Παραμένω συνδρομητής</button>
+        <button class="btn" style="flex:1;background:var(--danger);color:#fff" onclick="confirmCancel(${refundAmount.toFixed(2)})">Επιβεβαίωση Ακύρωσης</button>
+      </div>
+    </div>
+  `);
+  lucide.createIcons();
+}
+
+async function confirmCancel(refundAmount){
+  const reason = document.getElementById('cancel_reason')?.value||'';
+  closeModal();
+  try {
+    await sb.from('tenant_shops').update({status:'cancelled', cancel_reason:reason, cancelled_at:new Date().toISOString()}).eq('id',SHOP_ID);
+    // ZyroNex hook: trigger refund via Stripe if refundAmount>0
+    // await sb.functions.invoke('process-refund',{body:{shop_id:SHOP_ID,amount:refundAmount}})
+    toast(refundAmount>0?`Η συνδρομή ακυρώθηκε. Επιστροφή ${refundAmount}€ σε 5-10 εργάσιμες.`:'Η συνδρομή ακυρώθηκε.','success');
+    setTimeout(()=>renderSubscription(),800);
+  } catch(e){ toast('Σφάλμα ακύρωσης: '+e.message,'danger'); }
+}
+
+// ── BUY PLUGIN ───────────────────────────────────────────────────────────────
+function buyPlugin(pluginId){
+  const pl = (SUB_DATA.plugins||[]).find(p=>p.id===pluginId);
+  if(!pl) return;
+  const promo = SUB_DATA.promos.find(pr=>pr.target_type==='plugin'&&pr.target_id===pl.id);
+  const finalPrice = promo ? (pl.price*(1-promo.discount_pct/100)).toFixed(2) : pl.price;
+  openModal(`
+    <div class="modal-head"><h3 class="fw-800 text-xl">Αγορά Plugin</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+        <div style="width:56px;height:56px;border-radius:14px;background:var(--bg-2);display:flex;align-items:center;justify-content:center;font-size:28px">${pl.icon||'🧩'}</div>
+        <div>
+          <div class="fw-800" style="font-size:18px">${pl.name}</div>
+          <div class="text-sm muted">${pl.type==='subscription'?`Συνδρομή · χρέωση ${pl.billing_interval==='yearly'?'ετήσια':'μηνιαία'}`:'Εφάπαξ πληρωμή'}</div>
+        </div>
+      </div>
+      <p class="text-sm" style="margin-bottom:16px;line-height:1.6">${pl.description||''}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px;background:var(--bg-2);border-radius:10px;margin-bottom:16px">
+        <span class="fw-700">Σύνολο</span>
+        <div>
+          ${promo?`<span style="text-decoration:line-through;color:var(--text-3);font-size:14px">${pl.price}€</span> `:''}
+          <span class="fw-800" style="font-size:22px">${finalPrice}€</span>
+          ${pl.type==='subscription'?`<span style="font-size:12px;color:var(--text-2)">/${pl.billing_interval==='yearly'?'έτος':'μήνα'}</span>`:''}
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="processPluginPurchase('${pl.id}')"><i data-lucide="lock" size="14"></i> Ασφαλής Πληρωμή ${finalPrice}€</button>
+      <p class="text-xs muted" style="text-align:center;margin-top:10px">🔒 Stripe · Apple Pay · Google Pay · PayPal</p>
+    </div>
+  `);
+  lucide.createIcons();
+}
+
+function processPluginPurchase(pluginId){
+  closeModal();
+  // ZyroNex hook: Stripe checkout for plugin (one-time or subscription based on plugin.type)
+  toast('🔌 Σύνδεση με Stripe — Edge Function απαιτείται','info');
+}
+
+var SUB = {
+  ALERT_SOFT:    14,
+  ALERT_WARN:     7,
+  ALERT_URGENT:   2,
+  GRACE_READONLY: 4,
+  GRACE_SUSPEND:  7,
+  RETENTION_FULL: 90,
+  RETENTION_ARCH: 365,
+};
+
+var SHOP_SUBSCRIPTION = null;
+
+var BLOCKED_FEATURES_PASTDUE = [
+  'auto_email_accountant','ergani_submission','shifts_scheduling',
+  'email_marketing','ai_oracle','price_war_monitoring',
+  'backup_jobs','mydata_autosubmit',
+];
+
+var BLOCKED_PAGES_READONLY = [
+  'pos','purchases','shipments','batches','waste',
+  'suppliers','shifts','customers',
+];
+
+// ── LOAD SUBSCRIPTION ───────────────────────────────────────────────────────
+async function loadSubscription() {
+  try {
+    const { data } = await sb.from('tenant_shops')
+      .select('id,shop_name,plan,status,expires_at,monthly_price')
+      .eq('id', SHOP_ID).single();
+    if (!data) return null;
+    SHOP_SUBSCRIPTION = {
+      ...data,
+      daysLeft: data.expires_at
+        ? Math.floor((new Date(data.expires_at) - Date.now()) / 86400000)
+        : null,
+    };
+    return SHOP_SUBSCRIPTION;
+  } catch(e) { console.warn('[SUB] loadSubscription:', e); return null; }
+}
+
+// ── GET STATE ───────────────────────────────────────────────────────────────
+function getSubState() {
+  if (!SHOP_SUBSCRIPTION) return 'unknown';
+  const { status, daysLeft } = SHOP_SUBSCRIPTION;
+  if (status === 'suspended') return 'suspended';
+  if (status === 'cancelled') return 'cancelled';
+  if (daysLeft === null) return 'active';
+  if (daysLeft < 0) {
+    const od = Math.abs(daysLeft);
+    if (od >= SUB.GRACE_SUSPEND)  return 'suspended';
+    if (od >= SUB.GRACE_READONLY) return 'readonly';
+    return 'past_due';
+  }
+  if (daysLeft <= SUB.ALERT_URGENT) return 'urgent';
+  if (daysLeft <= SUB.ALERT_WARN)   return 'warning';
+  if (daysLeft <= SUB.ALERT_SOFT)   return 'soft';
+  return 'active';
+}
+
+function isFeatureAllowed(f) {
+  const s = getSubState();
+  if (['past_due','readonly','suspended','cancelled'].includes(s))
+    return !BLOCKED_FEATURES_PASTDUE.includes(f);
+  return true;
+}
+
+function isPageAllowed(p) {
+  const s = getSubState();
+  if (s === 'suspended' || s === 'cancelled') return false;
+  if (s === 'readonly') return !BLOCKED_PAGES_READONLY.includes(p);
+  return true;
+}
+
+// ── CSS INJECTION ───────────────────────────────────────────────────────────
+function injectSubCSS() {
+  if (document.getElementById('subLifecycleCSS')) return;
+  const style = document.createElement('style');
+  style.id = 'subLifecycleCSS';
+  style.textContent = `
+    #subBanner{display:none;width:100%;padding:10px 20px;font-size:13px;font-weight:600;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;z-index:50;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+    #subBanner.show{display:flex}
+    #subBanner.soft{background:rgba(74,163,255,0.12);border-bottom:1px solid rgba(74,163,255,0.25);color:#4aa3ff}
+    #subBanner.warning{background:rgba(255,169,77,0.15);border-bottom:1px solid rgba(255,169,77,0.3);color:#ffa94d}
+    #subBanner.urgent,#subBanner.past_due{background:rgba(255,71,87,0.15);border-bottom:1px solid rgba(255,71,87,0.3);color:#ff4757}
+    #subBanner.readonly{background:rgba(255,71,87,0.2);border-bottom:2px solid #ff4757;color:#ff4757}
+    .sub-banner-btn{padding:6px 14px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;min-height:32px;-webkit-tap-highlight-color:transparent}
+
+    #subUrgentModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:800;align-items:center;justify-content:center;padding:20px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+    #subUrgentModal.show{display:flex}
+    .urgent-box{background:var(--bg-1);border:2px solid #ff4757;border-radius:20px;padding:32px 28px;max-width:440px;width:100%;text-align:center;animation:urgPulse 2s infinite}
+    @keyframes urgPulse{0%,100%{box-shadow:0 0 20px rgba(255,71,87,0.2)}50%{box-shadow:0 0 40px rgba(255,71,87,0.5)}}
+
+    #readOnlyOverlay{display:none;position:fixed;inset:0;background:rgba(8,12,24,0.88);z-index:300;align-items:center;justify-content:center;padding:20px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+    #readOnlyOverlay.show{display:flex}
+    .readonly-box{background:var(--bg-1);border:1px solid rgba(255,71,87,0.4);border-radius:20px;padding:40px 32px;max-width:480px;width:100%;text-align:center}
+
+    #suspendedScreen{display:none;position:fixed;inset:0;background:var(--bg-0);z-index:1000;align-items:center;justify-content:center;padding:20px}
+    #suspendedScreen.show{display:flex}
+    .suspended-box{max-width:520px;width:100%;text-align:center}
+    .suspended-data-info{background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;font-size:13px;color:var(--text-1);text-align:left;line-height:1.8}
+
+    #dataGapBanner{display:none;background:rgba(255,169,77,0.1);border:1px solid rgba(255,169,77,0.3);border-radius:12px;padding:14px 18px;margin:0 0 20px;font-size:13px;color:#ffa94d;line-height:1.6}
+    #dataGapBanner.show{display:block}
+
+    #dataGapModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:900;align-items:center;justify-content:center;padding:20px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+    #dataGapModal.show{display:flex}
+    .data-gap-box{background:var(--bg-1);border:1px solid rgba(255,169,77,0.4);border-radius:20px;padding:32px 28px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+    @media(max-width:768px){
+      #subBanner{padding:10px 16px;font-size:12px}
+      .readonly-box,.suspended-box,.urgent-box,.data-gap-box{padding:28px 20px}
+      #dataGapBanner{margin:0 0 16px}
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ── BANNER ──────────────────────────────────────────────────────────────────
+function renderSubBanner() {
+  const isAdmin = CURRENT_USER?.role==='admin' || (CURRENT_USER?.perms||[]).includes('*');
+  console.log('%c[SubBanner] render called','color:#ffa94d;font-weight:700');
+  console.log('[SubBanner] isAdmin:', isAdmin, '| user role:', CURRENT_USER?.role);
+  if (!isAdmin) { console.log('[SubBanner] Not admin → skip'); return; }
+
+  let banner = document.getElementById('subBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'subBanner';
+    const content = document.getElementById('content');
+    if (content?.parentNode) content.parentNode.insertBefore(banner, content);
+  }
+
+  const state = getSubState();
+  console.log('[SubBanner] state:', state, '| sub:', SHOP_SUBSCRIPTION?.plan, '| daysLeft:', SHOP_SUBSCRIPTION?.daysLeft);
+  const sub   = SHOP_SUBSCRIPTION;
+  const dl    = sub?.daysLeft ?? null;
+  const exp   = sub?.expires_at ? new Date(sub.expires_at).toLocaleDateString('el-GR') : '—';
+
+  const msgs = {
+    soft:     `📅 Η συνδρομή σας λήγει σε ${dl} ημέρες (${exp}).`,
+    warning:  `⚠️ Η συνδρομή λήγει σε ${dl} ημέρες! Ανανεώστε για να μην διακοπεί η λειτουργία.`,
+    urgent:   `🚨 ΕΠΕΙΓΟΝ: Λήγει σε ${dl} ημέρ${dl===1?'α':'ες'}! Ανανεώστε ΤΩΡΑ.`,
+    past_due: `🔴 Η συνδρομή έχει λήξει — Grace period: ${SUB.GRACE_SUSPEND+dl} ημέρες απομένουν.`,
+    readonly: `🔒 Read-Only Mode — Δεν επιτρέπονται νέες εγγραφές. Ανανεώστε για πλήρη πρόσβαση.`,
+  };
+  if (!msgs[state]) { banner.className=''; banner.style.display='none'; return; }
+
+  const dismissed = sessionStorage.getItem('subBannerDismissed')==='1';
+  if (dismissed) {
+    // soft = session-level dismissal (μένει dismissed μέχρι ξανα-ανοίξεις)
+    if (state === 'soft') { banner.className=''; return; }
+    // warning/urgent = 1-hour cooldown (ξανα-εμφανίζεται μετά)
+    if (state === 'warning' || state === 'urgent') {
+      const at = parseInt(sessionStorage.getItem('subBannerDismissedAt')||'0',10);
+      const ONE_HOUR = 60*60*1000;
+      if (Date.now() - at < ONE_HOUR) { banner.className=''; return; }
+      // cooldown έληξε — clear dismissal για να ξανα-φανεί
+      sessionStorage.removeItem('subBannerDismissed');
+      sessionStorage.removeItem('subBannerDismissedAt');
+    }
+    // past_due / readonly: ποτέ δεν dismissable (το X δεν εμφανίζεται για readonly,
+    // και για past_due το X δίνει μόνο instant relief — επόμενος render ξανα-εμφανίζει)
+  }
+
+  banner.className = `show ${state}`;
+  banner.innerHTML = `
+    <span style="flex:1">${msgs[state]}</span>
+    <button class="sub-banner-btn" onclick="openRenewModal()">Ανανέωση</button>
+    ${state!=='readonly'?`<button class="sub-banner-btn" onclick="dismissSubBanner()" style="opacity:0.7;padding:6px 10px;min-width:32px" aria-label="Κλείσιμο" title="Κλείσιμο">✕</button>`:''}
+  `;
+}
+
+function dismissSubBanner() {
+  const b = document.getElementById('subBanner');
+  if (b) b.className='';
+  // Soft dismissals = session-level (ξανα-εμφανίζονται σε reload)
+  // Warning/urgent dismissals = 1 hour cooldown (ξανα-εμφανίζονται μετά)
+  try {
+    sessionStorage.setItem('subBannerDismissed','1');
+    sessionStorage.setItem('subBannerDismissedAt', Date.now().toString());
+  } catch(_){}
+}
+
+// ── URGENT MODAL ────────────────────────────────────────────────────────────
+function showUrgentModal() {
+  const state   = getSubState();
+  const isAdmin = CURRENT_USER?.role==='admin' || (CURRENT_USER?.perms||[]).includes('*');
+  if (!['urgent','past_due'].includes(state) || !isAdmin) return;
+
+  const today   = new Date().toDateString();
+  const lastSeen= localStorage.getItem('subUrgentModalDate');
+  if (lastSeen===today && state==='urgent') return;
+
+  let modal = document.getElementById('subUrgentModal');
+  if (!modal) { modal=document.createElement('div'); modal.id='subUrgentModal'; document.body.appendChild(modal); }
+
+  const sub = SHOP_SUBSCRIPTION;
+  const dl  = sub?.daysLeft ?? 0;
+  const exp = sub?.expires_at ? new Date(sub.expires_at).toLocaleDateString('el-GR') : '—';
+  const od  = dl<0 ? Math.abs(dl) : 0;
+
+  modal.innerHTML = `
+    <div class="urgent-box">
+      <div style="font-size:52px;margin-bottom:12px">${state==='past_due'?'🔴':'🚨'}</div>
+      <div style="font-size:20px;font-weight:800;color:#ff4757;margin-bottom:8px">
+        ${state==='past_due'?'Η συνδρομή έχει λήξει!':`Λήγει σε ${dl} ημέρ${dl===1?'α':'ες'}!`}
+      </div>
+      <div style="font-size:13px;color:var(--text-2);margin-bottom:24px;line-height:1.7">
+        ${state==='past_due'
+          ?`Η συνδρομή έληξε πριν ${od} ημέρ${od===1?'α':'ες'} (${exp}).<br>
+            Οι αυτοματοποιημένες λειτουργίες έχουν <strong style="color:#ff4757">παυθεί</strong>.<br>
+            ${od>=SUB.GRACE_READONLY
+              ?`<strong style="color:#ff4757">Read-Only mode ενεργό.</strong>`
+              :`Απομένουν ${SUB.GRACE_SUSPEND-od} ημέρες πριν την πλήρη αναστολή.`}`
+          :`Η συνδρομή σας λήγει στις <strong>${exp}</strong>.<br>
+            Ανανεώστε για να συνεχίσουν όλες οι λειτουργίες κανονικά.`
+        }
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-danger" style="width:100%;justify-content:center;font-size:15px;padding:14px" onclick="openRenewModal();closeUrgentModal()">
+          💳 Ανανέωση Συνδρομής
+        </button>
+        ${state!=='past_due'?`<button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="closeUrgentModal()">Το θυμάμαι — Κλείσιμο</button>`:''}
+      </div>
+    </div>`;
+  modal.className='show';
+  localStorage.setItem('subUrgentModalDate', today);
+}
+
+function closeUrgentModal() {
+  const m=document.getElementById('subUrgentModal'); if(m) m.className='';
+}
+
+// ── READ-ONLY OVERLAY ───────────────────────────────────────────────────────
+function checkReadOnlyMode(page) {
+  const s = getSubState();
+  if (s==='suspended'||s==='cancelled') { showSuspendedScreen(); return false; }
+  if (s==='readonly' && BLOCKED_PAGES_READONLY.includes(page)) { showReadOnlyOverlay(page); return false; }
+  const ov=document.getElementById('readOnlyOverlay'); if(ov) ov.className='';
+  return true;
+}
+
+function showReadOnlyOverlay(page) {
+  let ov=document.getElementById('readOnlyOverlay');
+  if(!ov){ov=document.createElement('div');ov.id='readOnlyOverlay';document.body.appendChild(ov);}
+  const names={pos:'Ταμείο',purchases:'Αγορές',shipments:'Αποστολές',batches:'Παρτίδες',waste:'Απομειώσεις',suppliers:'Προμηθευτές',shifts:'Βάρδιες',customers:'Πελάτες'};
+  ov.innerHTML=`
+    <div class="readonly-box">
+      <div style="font-size:48px;margin-bottom:12px">🔒</div>
+      <div style="font-size:20px;font-weight:800;color:#ff4757;margin-bottom:8px">Read-Only Mode</div>
+      <div style="font-size:13px;color:var(--text-2);margin-bottom:24px;line-height:1.6">
+        Η σελίδα <strong>"${names[page]||page}"</strong> δεν είναι διαθέσιμη.<br>
+        Η συνδρομή έχει λήξει — εφαρμογή σε λειτουργία ανάγνωσης μόνο.
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-danger" onclick="openRenewModal();closeReadOnlyOverlay()">💳 Ανανέωση</button>
+        <button class="btn btn-ghost" onclick="closeReadOnlyOverlay();showPage('dashboard')">Αρχική</button>
+      </div>
+    </div>`;
+  ov.className='show';
+}
+
+function closeReadOnlyOverlay(){const o=document.getElementById('readOnlyOverlay');if(o)o.className='';}
+
+// ── SUSPENDED SCREEN ────────────────────────────────────────────────────────
+function showSuspendedScreen() {
+  let sc=document.getElementById('suspendedScreen');
+  if(!sc){sc=document.createElement('div');sc.id='suspendedScreen';document.body.appendChild(sc);}
+  const sub=SHOP_SUBSCRIPTION;
+  const exp=sub?.expires_at?new Date(sub.expires_at).toLocaleDateString('el-GR'):'—';
+  const od=sub?.daysLeft!==null?Math.abs(sub.daysLeft):'?';
+  const suspDate=sub?.expires_at?new Date(sub.expires_at):new Date();
+  const d90=new Date(suspDate);d90.setDate(d90.getDate()+SUB.RETENTION_FULL);
+  const d365=new Date(suspDate);d365.setDate(d365.getDate()+SUB.RETENTION_ARCH);
+
+  sc.innerHTML=`
+    <div class="suspended-box">
+      <div style="font-size:64px;margin-bottom:20px">⛔</div>
+      <div style="font-size:26px;font-weight:800;margin-bottom:8px">Η συνδρομή έχει ανασταλεί</div>
+      <div style="font-size:14px;color:var(--text-2);margin-bottom:24px;line-height:1.7">
+        Η συνδρομή έληξε στις <strong>${exp}</strong> (${od} ημέρες πριν).<br>
+        Ανανεώστε για άμεση επαναφορά όλων των δεδομένων σας.
+      </div>
+      <div class="suspended-data-info">
+        <div style="font-weight:700;margin-bottom:8px;color:var(--text-0)">📦 Τα δεδομένα σας</div>
+        <div>✅ Πλήρη έως: <strong>${d90.toLocaleDateString('el-GR')}</strong></div>
+        <div>📦 Αρχείο έως: <strong>${d365.toLocaleDateString('el-GR')}</strong></div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-2)">Φορολογικά (ΕΦΚ/myDATA): 5 χρόνια βάσει νόμου.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:16px;padding:16px" onclick="openRenewModal()">💳 Ανανέωση — Άμεση Επαναφορά</button>
+        <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="openExportModal()">📥 Εξαγωγή Δεδομένων (PDF)</button>
+        <div style="font-size:11px;color:var(--text-2);text-align:center;margin-top:4px">support@zyronex.gr</div>
+      </div>
+    </div>`;
+  sc.className='show';
+}
+
+// ── HONEST DATA BANNER ──────────────────────────────────────────────────────
+// Επιστρέφει HTML προειδοποίησης όταν τα δεδομένα στη μνήμη είναι περιορισμένα
+// (φορτώθηκαν λιγότερα από όσα υπάρχουν). Χρησιμοποιείται σε σελίδες με στατιστικά
+// ώστε ο χρήστης να ξέρει ότι τα νούμερα αφορούν τα πρόσφατα δεδομένα, όχι το σύνολο.
+function honestDataBanner(){
+  try {
+    var d = window._DATA_LIMITED;
+    if(!d || !d.active) return '';
+    var loaded = d.salesLoaded || 0;
+    var total = d.salesTotal || 0;
+    return '<div style="background:rgba(74,163,255,0.1);border:1px solid rgba(74,163,255,0.3);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--info);line-height:1.5">'
+      + 'ℹ️ <b>Τα στατιστικά αφορούν τις πιο πρόσφατες ' + loaded + ' πωλήσεις</b> (από ' + total + ' συνολικά). '
+      + 'Για πλήρη ανάλυση όλου του ιστορικού, χρησιμοποίησε τις αναφορές με φίλτρο ημερομηνίας.'
+      + '</div>';
+  } catch(_) { return ''; }
+}
+
+// ── DATA GAP BANNER ─────────────────────────────────────────────────────────
+function checkAndShowDataGapBanner() {
+  const gi=localStorage.getItem('vs_data_gap');
+  if(!gi) return;
+  const {suspendedAt,reactivatedAt,acknowledged}=JSON.parse(gi);
+  if(acknowledged) return;
+  const sd=new Date(suspendedAt).toLocaleDateString('el-GR');
+  const rd=new Date(reactivatedAt).toLocaleDateString('el-GR');
+  const content=document.getElementById('content');
+  if(!content) return;
+  let b=document.getElementById('dataGapBanner');
+  if(!b){b=document.createElement('div');b.id='dataGapBanner';content.parentNode.insertBefore(b,content);}
+  b.innerHTML=`
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <span style="font-size:20px;flex-shrink:0">⚠️</span>
+      <div style="flex:1">
+        <strong>Κενό δεδομένων λόγω διακοπής συνδρομής</strong><br>
+        Τα δεδομένα από <strong>${sd}</strong> έως <strong>${rd}</strong> δεν είναι διαθέσιμα.
+        Ενδέχεται αποκλίσεις σε αποθέματα και τζίρους.
+        <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="showDataGapDisclaimerModal()" style="font-size:12px;color:#ffa94d;border-color:#ffa94d">Διάβασε τους όρους</button>
+          <button class="btn btn-ghost btn-sm" onclick="acknowledgeDataGap()" style="font-size:12px">Κατανοητό — Κλείσιμο</button>
+        </div>
+      </div>
+    </div>`;
+  b.className='show';
+}
+
+function acknowledgeDataGap() {
+  const gi=localStorage.getItem('vs_data_gap');
+  if(gi){const d=JSON.parse(gi);d.acknowledged=true;localStorage.setItem('vs_data_gap',JSON.stringify(d));}
+  const b=document.getElementById('dataGapBanner');if(b)b.className='';
+}
+
+function showDataGapDisclaimerModal() {
+  const gi=localStorage.getItem('vs_data_gap');
+  if(!gi) return;
+  const {suspendedAt,reactivatedAt}=JSON.parse(gi);
+  const sd=new Date(suspendedAt).toLocaleDateString('el-GR');
+  const rd=new Date(reactivatedAt).toLocaleDateString('el-GR');
+  let m=document.getElementById('dataGapModal');
+  if(!m){m=document.createElement('div');m.id='dataGapModal';document.body.appendChild(m);}
+  m.innerHTML=`
+    <div class="data-gap-box">
+      <div style="font-size:32px;text-align:center;margin-bottom:12px">⚠️</div>
+      <div style="font-size:18px;font-weight:800;text-align:center;margin-bottom:16px">Δήλωση Αποποίησης Ευθύνης</div>
+      <div style="font-size:13px;color:var(--text-1);line-height:1.8;margin-bottom:20px">
+        Αναγνωρίζω ότι λόγω <strong>διακοπής συνδρομής</strong> από <strong>${sd}</strong> έως <strong>${rd}</strong>,
+        τα δεδομένα αποθέματος, τζίρων και αναλύσεων ενδέχεται να παρουσιάζουν <strong>αποκλίσεις</strong>.<br><br>
+        Η <strong>ZyroNex</strong> δεν φέρει ευθύνη για τυχόν ανακρίβειες του διαστήματος αναστολής.<br><br>
+        Συνιστάται <strong>έλεγχος αποθέματος</strong> για επαλήθευση υπολοίπων.
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:20px;padding:14px;background:var(--bg-2);border-radius:10px">
+        <input type="checkbox" id="dataGapCheck" style="margin-top:2px;width:18px;height:18px;flex-shrink:0;cursor:pointer">
+        <label for="dataGapCheck" style="font-size:13px;cursor:pointer;line-height:1.5">Έχω διαβάσει και αποδέχομαι τους παραπάνω όρους.</label>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="confirmDataGapDisclaimer()">✅ Αποδέχομαι</button>
+    </div>`;
+  m.className='show';
+}
+
+function confirmDataGapDisclaimer() {
+  const cb=document.getElementById('dataGapCheck');
+  if(!cb?.checked){if(typeof toast==='function')toast('Παρακαλώ τσεκάρετε το checkbox','warning');return;}
+  acknowledgeDataGap();
+  const m=document.getElementById('dataGapModal');if(m)m.className='';
+  if(typeof toast==='function')toast('✅ Αποδοχή καταγράφηκε','success');
+}
+
+// ── RENEW MODAL ─────────────────────────────────────────────────────────────
+function openRenewModal() {
+  const sub=SHOP_SUBSCRIPTION;
+  const plan=sub?.plan||'pro';
+  const prices={basic:69,pro:129,enterprise:249};
+  const price=prices[plan]||129;
+  // TODO: Stripe checkout integration
+  if(typeof toast==='function')toast('Επικοινωνήστε: billing@zyronex.gr','info');
+}
+
+// ── EXPORT MODAL ─────────────────────────────────────────────────────────────
+function openExportModal() {
+  var old = document.getElementById('_exportModalWrap');
+  if(old) old.remove();
+
+  var types = [
+    ['sales',    '📊', 'Αναφορά Πωλήσεων'],
+    ['customers','👥', 'Λίστα Πελατών'],
+    ['tax',      '🧾', 'Φορολογικά / ΕΦΚ'],
+    ['inventory','📦', 'Snapshot Αποθέματος']
+  ];
+
+  var checkboxes = '';
+  types.forEach(function(t) {
+    checkboxes +=
+      '<label id="expLbl_'+t[0]+'" style="display:flex;align-items:center;gap:12px;padding:14px 16px;' +
+      'background:#0a0e1a;border:2px solid #2a3050;border-radius:10px;cursor:pointer;' +
+      '-webkit-tap-highlight-color:transparent;transition:border-color 0.15s;min-height:52px">' +
+      '<input type="checkbox" id="expChk_'+t[0]+'" value="'+t[0]+'" checked ' +
+      'onchange="_expToggle(this)" ' +
+      'style="width:20px;height:20px;accent-color:#00d4ff;cursor:pointer;flex-shrink:0">' +
+      '<span style="font-size:20px">'+t[1]+'</span>' +
+      '<span style="font-size:14px;font-weight:700">'+t[2]+'</span>' +
+      '<span id="expSpin_'+t[0]+'" style="display:none;margin-left:auto;font-size:12px;color:#00d4ff;white-space:nowrap">⏳</span>' +
+      '<span id="expDone_'+t[0]+'" style="display:none;margin-left:auto;font-size:12px;color:#2ed573;white-space:nowrap">✅</span>' +
+      '</label>';
+  });
+
+  var h =
+    '<div id="_exportModalWrap" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;' +
+    'display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch">' +
+    '<div style="background:#1a1f35;border-radius:16px;width:100%;max-width:420px;margin-top:20px;overflow:hidden">' +
+
+    // Header
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #2a3050">' +
+    '<div style="font-weight:800;font-size:16px">📤 Εξαγωγή Δεδομένων</div>' +
+    '<button type="button" onclick="document.getElementById(&quot;_exportModalWrap&quot;).remove()" ' +
+    'style="width:40px;height:40px;border-radius:8px;background:rgba(255,71,87,0.2);border:1.5px solid rgba(255,71,87,0.4);' +
+    'color:#ff4757;font-size:18px;cursor:pointer;-webkit-tap-highlight-color:transparent">✕</button>' +
+    '</div>' +
+
+    // Body
+    '<div style="padding:16px">' +
+    '<p style="font-size:13px;color:#8892a4;margin-bottom:12px;line-height:1.6">' +
+    'Επίλεξε τι θέλεις να εξάγεις — μπορείς να επιλέξεις πολλαπλά.</p>' +
+
+    // Select all row
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+    '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#8892a4">' +
+    '<input type="checkbox" id="expChkAll" checked onchange="_expToggleAll(this)" ' +
+    'style="width:16px;height:16px;accent-color:#00d4ff;cursor:pointer">Επιλογή όλων</label>' +
+    '<span id="expSelCount" style="font-size:12px;color:#00d4ff;font-weight:700">4 επιλεγμένα</span>' +
+    '</div>' +
+
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">' +
+    checkboxes +
+    '</div>' +
+
+    // Warning
+    '<div style="padding:10px 12px;background:rgba(255,71,87,0.08);border-radius:8px;font-size:12px;color:#8892a4;margin-bottom:14px">' +
+    '⚠️ Τα αρχεία περιέχουν watermark και δεν μπορούν να εισαχθούν σε άλλες εφαρμογές.</div>' +
+
+    // Format toggle + Download button
+    '<div style="display:flex;gap:8px;margin-bottom:12px">' +
+    '<button type="button" id="expFmtZip" onclick="_expSetFormat(&quot;zip&quot;)" ' +
+    'style="flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:44px;border:2px solid #00d4ff;background:rgba(0,212,255,0.12);color:#00d4ff">📦 ZIP (1 αρχείο)</button>' +
+    '<button type="button" id="expFmtSep" onclick="_expSetFormat(&quot;separate&quot;)" ' +
+    'style="flex:1;padding:10px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:44px;border:2px solid #2a3050;background:transparent;color:#8892a4">🗂️ Ξεχωριστά</button>' +
+    '</div>' +
+    '<div id="expFormatNote" style="font-size:11px;color:#00d4ff;margin-bottom:10px;padding:6px 10px;background:rgba(0,212,255,0.06);border-radius:6px">' +
+    '📦 Ένα ZIP με όλα τα HTML έγγραφα — ανοίξ' + 'ε τα στο browser και κάνε Print → PDF</div>' +
+    '<button type="button" id="expDownloadBtn" onclick="exportSelectedPDFs()" ' +
+    'style="width:100%;padding:14px;background:linear-gradient(135deg,#00d4ff,#0099bb);color:#0a0e1a;' +
+    'border:none;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;' +
+    '-webkit-tap-highlight-color:transparent;min-height:52px">' +
+    '📦 Λήψη ZIP</button>' +
+
+    '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', h);
+}
+
+function _expToggle(cb) {
+  var lbl = document.getElementById('expLbl_' + cb.value);
+  if(lbl) lbl.style.borderColor = cb.checked ? '#00d4ff' : '#2a3050';
+  _expUpdateCount();
+}
+
+function _expToggleAll(cb) {
+  ['sales','customers','tax','inventory'].forEach(function(t) {
+    var c = document.getElementById('expChk_' + t);
+    var l = document.getElementById('expLbl_' + t);
+    if(c) c.checked = cb.checked;
+    if(l) l.style.borderColor = cb.checked ? '#00d4ff' : '#2a3050';
+  });
+  _expUpdateCount();
+}
+
+function _expUpdateCount() {
+  var count = ['sales','customers','tax','inventory'].filter(function(t) {
+    var c = document.getElementById('expChk_' + t);
+    return c && c.checked;
+  }).length;
+  var span = document.getElementById('expSelCount');
+  if(span) span.textContent = count + ' επιλεγμέν' + (count === 1 ? 'ο' : 'α');
+  var btn = document.getElementById('expDownloadBtn');
+  if(btn) {
+    btn.disabled = count === 0;
+    btn.style.opacity = count === 0 ? '0.4' : '1';
+    btn.textContent = count === 0 ? 'Επίλεξε τουλάχιστον ένα' :
+      (count === 1 ? '⬇️ Λήψη PDF' : '⬇️ Λήψη ' + count + ' PDF αρχείων');
+  }
+  // Sync "select all" checkbox
+  var all = document.getElementById('expChkAll');
+  if(all) all.checked = count === 4;
+}
+
+window._expFormat = 'zip'; // default: ZIP
+
+function _expSetFormat(fmt) {
+  window._expFormat = fmt;
+  var btnZip = document.getElementById('expFmtZip');
+  var btnSep = document.getElementById('expFmtSep');
+  var note   = document.getElementById('expFormatNote');
+  var dlBtn  = document.getElementById('expDownloadBtn');
+  if(fmt === 'zip') {
+    if(btnZip) { btnZip.style.background='rgba(0,212,255,0.12)'; btnZip.style.borderColor='#00d4ff'; btnZip.style.color='#00d4ff'; }
+    if(btnSep) { btnSep.style.background='transparent'; btnSep.style.borderColor='#2a3050'; btnSep.style.color='#8892a4'; }
+    if(note)   note.textContent = '📦 Ένα ZIP με όλα τα HTML έγγραφα — άνοιξέ τα στο browser και κάνε Print → PDF';
+    if(dlBtn)  dlBtn.textContent = '📦 Λήψη ZIP';
+  } else {
+    if(btnSep) { btnSep.style.background='rgba(155,77,255,0.12)'; btnSep.style.borderColor='#9b4dff'; btnSep.style.color='#9b4dff'; }
+    if(btnZip) { btnZip.style.background='transparent'; btnZip.style.borderColor='#2a3050'; btnZip.style.color='#8892a4'; }
+    if(note)   note.textContent = '🗂️ Ανοίγει ξεχωριστό παράθυρο για κάθε έγγραφο — κάνε Print → PDF σε καθένα';
+    if(dlBtn)  dlBtn.textContent = '🗂️ Λήψη Εγγράφων';
+  }
+}
+
+async function exportSelectedPDFs() {
+  var selected = ['sales','customers','tax','inventory'].filter(function(t) {
+    var c = document.getElementById('expChk_' + t);
+    return c && c.checked;
+  });
+  if(selected.length === 0) return;
+
+  var btn = document.getElementById('expDownloadBtn');
+  if(btn) { btn.disabled = true; btn.textContent = '⏳ Δημιουργία...'; btn.style.opacity = '0.7'; }
+
+  var fmt = window._expFormat || 'zip';
+
+  if(fmt === 'zip') {
+    // ── ZIP mode: φόρτωσε JSZip, συλλογή HTML, δημιουργία zip ────────────
+    try {
+      // Φόρτωσε JSZip
+      if(!window.JSZip) {
+        await new Promise(function(resolve, reject) {
+          var s = document.createElement('script');
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      var zip = new window.JSZip();
+      var now = new Date().toLocaleDateString('el-GR').replace(/\//g,'-');
+      var folder = zip.folder('ZyroNex_Export_' + now);
+      var names = {sales:'1_Pwlhseis',customers:'2_Pelates',tax:'3_Forologika',inventory:'4_Apothema'};
+      var success = 0;
+
+      for(var i = 0; i < selected.length; i++) {
+        var type = selected[i];
+        var spin = document.getElementById('expSpin_' + type);
+        var done = document.getElementById('expDone_' + type);
+        if(spin) spin.style.display = 'inline';
+        if(btn)  btn.textContent = '⏳ ' + (i+1) + '/' + selected.length + ' Δημιουργία...';
+
+        try {
+          var html = await _buildExportHTML(type); // returns HTML string
+          folder.file(names[type] + '.html', html);
+          if(spin) spin.style.display = 'none';
+          if(done) done.style.display = 'inline';
+          success++;
+        } catch(e) {
+          if(spin) spin.style.display = 'none';
+          console.error('[Export ZIP]', type, e);
+        }
+      }
+
+      // Δημιουργία και λήψη ZIP
+      if(btn) btn.textContent = '⏳ Δημιουργία ZIP...';
+      var blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'ZyroNex_Export_' + now + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 2000);
+
+      if(typeof toast==='function') toast('✅ ZIP με ' + success + ' έγγραφα κατεβαίνει!', 'success');
+      if(btn) { btn.textContent = '✅ Ολοκληρώθηκε'; btn.style.background='linear-gradient(135deg,#2ed573,#27ae60)'; }
+
+    } catch(e) {
+      console.error('[Export ZIP error]', e);
+      if(typeof toast==='function') toast('❌ Σφάλμα ZIP: ' + e.message, 'danger');
+      if(btn) { btn.disabled=false; btn.textContent='⬇️ Δοκίμασε ξανά'; btn.style.opacity='1'; }
+      return;
+    }
+
+  } else {
+    // ── Separate mode: ένα παράθυρο ανά έγγραφο (με confirm για πολλά) ──
+    if(selected.length > 1) {
+      var ok = confirm('Tha anoixoun ' + selected.length + ' parathyra. Synexeia;')
+      if(!ok) {
+        if(btn) { btn.disabled=false; btn.textContent='🗂️ Λήψη Εγγράφων'; btn.style.opacity='1'; }
+        return;
+      }
+    }
+    var success = 0;
+    for(var i = 0; i < selected.length; i++) {
+      var type = selected[i];
+      var spin = document.getElementById('expSpin_' + type);
+      var done = document.getElementById('expDone_' + type);
+      if(spin) spin.style.display = 'inline';
+      try {
+        await exportDataPDF(type, true);
+        if(spin) spin.style.display = 'none';
+        if(done) done.style.display = 'inline';
+        success++;
+      } catch(e) {
+        if(spin) spin.style.display = 'none';
+      }
+      if(i < selected.length-1) await new Promise(function(r){setTimeout(r,500);});
+    }
+    if(typeof toast==='function') toast('✅ ' + success + ' έγγραφ' + (success===1?'ο':'α') + ' δημιουργήθηκ' + (success===1?'ε':'αν'), 'success');
+    if(btn) { btn.textContent='✅ Ολοκληρώθηκε'; btn.style.background='linear-gradient(135deg,#2ed573,#27ae60)'; }
+  }
+
+  setTimeout(function() {
+    var wrap = document.getElementById('_exportModalWrap');
+    if(wrap) wrap.remove();
+  }, 1800);
+}
+
+// Επιστρέφει μόνο το HTML string (χωρίς να ανοίξει παράθυρο)
+async function _buildExportHTML(type) {
+  var names = {
+    sales:'Αναφορά Πωλήσεων / Sales Report',
+    customers:'Λίστα Πελατών / Customer List',
+    tax:'Φορολογικά Στοιχεία / Tax Data',
+    inventory:'Snapshot Αποθέματος / Inventory Snapshot'
+  };
+  var now      = new Date().toLocaleDateString('el-GR');
+  var shopName = (SHOP_SUBSCRIPTION && SHOP_SUBSCRIPTION.shop_name) || 'ZyroNex ZyroNex';
+  var title    = names[type] || type;
+
+  function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  var tableHtml = '';
+
+  if(type === 'sales') {
+    var r = await sb.from('sales').select('created_at,total,payment_method,payment_splits').order('created_at',{ascending:false}).limit(200);
+    var rows = r.data||[];
+    var total = rows.reduce(function(s,x){return s+(x.total||0);},0);
+    tableHtml = '<table><thead><tr><th>Ημερομηνία / Date</th><th>Σύνολο / Total</th><th>Μέθοδος / Method</th></tr></thead><tbody>' +
+      rows.map(function(s){
+        var d = new Date(s.created_at).toLocaleDateString('el-GR');
+        var m = s.payment_splits ? 'Split' : (s.payment_method||'—');
+        return '<tr><td>'+d+'</td><td>'+parseFloat(s.total||0).toFixed(2)+'€</td><td>'+esc(m)+'</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="summary">Σύνολο / Total: '+total.toFixed(2)+'€ &nbsp;|&nbsp; Πωλήσεις / Sales: '+rows.length+'</div>';
+
+  } else if(type === 'customers') {
+    var r = await sb.from('customers').select('name,phone,email,loyalty_points,loyalty_tier,store_credit').order('name').limit(500);
+    var rows = r.data||[];
+    tableHtml = '<table><thead><tr><th>Όνομα / Name</th><th>Τηλέφωνο / Phone</th><th>Email</th><th>Tier</th><th>Πόντοι / Points</th><th>Credit</th></tr></thead><tbody>' +
+      rows.map(function(c){
+        return '<tr><td>'+esc(c.name)+'</td><td>'+esc(c.phone)+'</td><td>'+esc(c.email)+'</td>' +
+               '<td>'+esc(c.loyalty_tier||'Bronze')+'</td><td>'+(c.loyalty_points||0)+'</td>' +
+               '<td>'+parseFloat(c.store_credit||0).toFixed(2)+'€</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="summary">Σύνολο / Total: '+rows.length+' πελάτες / customers</div>';
+
+  } else if(type === 'tax') {
+    var r = await sb.from('sales').select('created_at,subtotal,vat,total').order('created_at',{ascending:false}).limit(500);
+    var rows = r.data||[];
+    var totalVat = rows.reduce(function(s,x){return s+(x.vat||0);},0);
+    var totalNet = rows.reduce(function(s,x){return s+(x.subtotal||0);},0);
+    var byMonth = {};
+    rows.forEach(function(s){
+      var m = (s.created_at||'').slice(0,7);
+      if(!byMonth[m]) byMonth[m]={vat:0,net:0,count:0};
+      byMonth[m].vat += s.vat||0; byMonth[m].net += s.subtotal||0; byMonth[m].count++;
+    });
+    tableHtml = '<table><thead><tr><th>Μήνας / Month</th><th>Καθαρό / Net</th><th>ΦΠΑ 24% / VAT</th><th>Συναλλαγές / Txn</th></tr></thead><tbody>' +
+      Object.keys(byMonth).sort().reverse().map(function(m){
+        var row=byMonth[m];
+        return '<tr><td>'+m+'</td><td>'+row.net.toFixed(2)+'€</td><td>'+row.vat.toFixed(2)+'€</td><td>'+row.count+'</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="summary">Σύνολο ΦΠΑ / Total VAT: '+totalVat.toFixed(2)+'€ &nbsp;|&nbsp; Καθαρό / Net: '+totalNet.toFixed(2)+'€</div>';
+
+  } else if(type === 'inventory') {
+    var prods = typeof PRODUCTS!=='undefined' ? PRODUCTS : [];
+    if(!prods.length){ var r=await sb.from('products').select('name,category,price,cost,stock,min_stock,expiry').order('name').limit(1000); prods=r.data||[]; }
+    var totalCost   = prods.reduce(function(s,p){return s+(p.cost||0)*(p.stock||0);},0);
+    var totalRetail = prods.reduce(function(s,p){return s+(p.price||0)*(p.stock||0);},0);
+    tableHtml = '<table><thead><tr><th>Προϊόν / Product</th><th>Κατηγορία / Category</th><th>Stock</th><th>Τιμή / Price</th><th>Κόστος / Cost</th><th>Λήξη / Expiry</th></tr></thead><tbody>' +
+      prods.map(function(p){
+        var expStyle=''; var exp=p.expiry||'';
+        if(exp){ var dl=Math.floor((new Date(exp)-Date.now())/86400000); if(dl<0) expStyle='color:#c00;font-weight:700'; else if(dl<30) expStyle='color:#d80;font-weight:700'; }
+        return '<tr><td>'+esc(p.name)+'</td><td>'+esc(p.category)+'</td>' +
+               '<td style="'+(p.stock===0?'color:#c00;font-weight:700':p.stock<=(p.min_stock||0)?'color:#d80':'')+'">'+p.stock+'</td>' +
+               '<td>'+parseFloat(p.price||0).toFixed(2)+'€</td>' +
+               '<td>'+parseFloat(p.cost||0).toFixed(2)+'€</td>' +
+               '<td style="'+expStyle+'">'+(exp||'—')+'</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="summary">Προϊόντα / Products: '+prods.length+' &nbsp;|&nbsp; Αξία κόστους: '+totalCost.toFixed(2)+'€ &nbsp;|&nbsp; Λιανική: '+totalRetail.toFixed(2)+'€</div>';
+  }
+
+  return '<!DOCTYPE html><html lang="el"><head><meta charset="UTF-8"><title>'+title+'</title>' +
+    '<style>@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap");' +
+    '*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Inter",system-ui,sans-serif;background:#fff;color:#111;padding:28px;max-width:950px;margin:0 auto}' +
+    '.header{background:linear-gradient(135deg,#0a0e1a,#1a1f35);color:white;padding:20px 24px;border-radius:12px;margin-bottom:24px}' +
+    '.brand{font-size:20px;font-weight:900;color:#00d4ff;margin-bottom:4px}.doc-title{font-size:15px;font-weight:700;color:white;margin-bottom:8px}' +
+    '.meta{font-size:12px;color:#8892a4;line-height:1.8}.badge{display:inline-block;background:rgba(255,71,87,0.2);border:1px solid rgba(255,71,87,0.4);color:#ff6b7a;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;margin-top:6px}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px}thead tr{background:#f5f7fa}th{padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:2px solid #ddd}' +
+    'td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:top}tr:hover td{background:#fafbfc}' +
+    '.summary{margin-top:12px;padding:10px 14px;background:#f5f7fa;border-radius:8px;font-weight:700;font-size:12px}' +
+    '.wm-text{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;font-weight:900;color:rgba(0,0,0,0.04);white-space:nowrap;pointer-events:none;z-index:0;letter-spacing:8px}' +
+    '.footer{margin-top:24px;padding-top:12px;border-top:1px solid #eee;font-size:10px;color:#aaa;line-height:1.8}' +
+    '@media print{body{padding:12px}@page{margin:1cm}}</style></head><body>' +
+    '<div class="wm-text">ZyroNex</div>' +
+    '<div class="header"><div class="brand">ZyroNex ZyroNex</div><div class="doc-title">'+title+'</div>' +
+    '<div class="meta">Κατάστημα / Shop: <strong style="color:white">'+esc(shopName)+'</strong><br>' +
+    'Ημερομηνία / Date: <strong style="color:white">'+now+'</strong></div>' +
+    '<div class="badge">⛔ Συνδρομή Ανασταλμένη / Subscription Suspended</div></div>' +
+    tableHtml +
+    '<div class="footer">ZyroNex ZyroNex Export — Αρχείο για αναφορά μόνο / Reference document only.<br>' +
+    'Δεν επιτρέπεται η εισαγωγή σε άλλες εφαρμογές / Not permitted in other applications.<br>' +
+    'Φορολογικά: 5 χρόνια βάσει νόμου / Tax data: 5 years by law.</div></body></html>';
+}
+
+async function exportDataPDF(type, silent) {
+  var spin = document.getElementById('expSpin_' + type);
+  if(spin) spin.style.display = 'inline';
+
+  try {
+    var html  = await _buildExportHTML(type);
+    var names = {sales:'Αναφορά Πωλήσεων',customers:'Λίστα Πελατών',tax:'Φορολογικά Στοιχεία',inventory:'Snapshot Αποθέματος'};
+    var title = names[type] || type;
+
+    var win = window.open('', '_blank', 'width=950,height=750');
+    if(!win) {
+      // Popup blocked — fallback: download HTML
+      var now  = new Date().toLocaleDateString('el-GR').replace(/\//g,'-');
+      var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href = url; a.download = 'zyronex-' + type + '-' + now + '.html';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1000);
+      if(!silent && typeof toast==='function') toast('✅ ' + title + ' — αποθηκεύτηκε ως HTML (Print → PDF)', 'success');
+    } else {
+      win.document.open(); win.document.write(html); win.document.close();
+      setTimeout(function(){ win.focus(); win.print(); }, 900);
+      if(!silent && typeof toast==='function') toast('✅ ' + title + ' — Πάτα "Αποθήκευση ως PDF"', 'success');
+    }
+
+    if(!silent) {
+      setTimeout(function() {
+        var wrap = document.getElementById('_exportModalWrap');
+        if(wrap) wrap.remove();
+      }, 1200);
+    }
+  } catch(e) {
+    console.error('[Export]', e);
+    if(typeof toast==='function') toast('❌ Σφάλμα: ' + e.message, 'danger');
+  } finally {
+    if(spin) spin.style.display = 'none';
+  }
+}
+
+// ── BLOCK AUTOMATED FEATURES ────────────────────────────────────────────────
+function blockAutomatedFeatures() {
+  window._scheduledReportsBlocked=true;
+  window._shiftRemindersBlocked=true;
+  window._bankingSyncBlocked=true;
+  console.warn('[SUB] Automated features suspended — subscription inactive');
+}
+
+// ── REACTIVATION ─────────────────────────────────────────────────────────────
+function handleReactivation(previousExpiry) {
+  localStorage.setItem('vs_data_gap',JSON.stringify({
+    suspendedAt:previousExpiry,
+    reactivatedAt:new Date().toISOString(),
+    acknowledged:false
+  }));
+  const sc=document.getElementById('suspendedScreen');if(sc)sc.className='';
+  window._scheduledReportsBlocked=false;
+  window._shiftRemindersBlocked=false;
+  window._bankingSyncBlocked=false;
+  loadSubscription().then(()=>{
+    renderSubBanner();
+    checkAndShowDataGapBanner();
+    if(typeof toast==='function')toast('✅ Συνδρομή ενεργοποιήθηκε! Καλώς ήρθατε ξανά.','success');
+  });
+}
+
+// ── MAIN INIT ────────────────────────────────────────────────────────────────
