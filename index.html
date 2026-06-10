@@ -2767,6 +2767,12 @@ window.onerror = function(msg, src, line, col, err) {
   </div>
 
   <div class="content" id="content"><!-- pages render here --></div>
+
+  <!-- Central page close button — persists across innerHTML rewrites of #content -->
+  <button id="znPageClose" class="icon-btn" aria-label="Κλείσιμο"
+    style="display:none;position:fixed;z-index:40;top:calc(max(14px,env(safe-area-inset-top)) + 56px + 8px);right:16px;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:10px;-webkit-tap-highlight-color:transparent">
+    <i data-lucide="x" size="18"></i>
+  </button>
 </main>
 </div>
 
@@ -16118,6 +16124,28 @@ window.ZNNav = {
 
 // ── In-app back navigation — bulletproof simple version ──
 window._pageHistory = [];
+
+// Central page-close button wiring (click handler set once; survives #content rewrites)
+(function(){
+  var btn = document.getElementById('znPageClose');
+  if(btn) btn.addEventListener('click', function(){ if(typeof goBack === 'function') goBack(); });
+})();
+
+function _updatePageCloseBtn(p){
+  try {
+    var btn = document.getElementById('znPageClose');
+    if(!btn) return;
+    if(p === 'dashboard'){
+      btn.style.display = 'none';
+    } else {
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      if(typeof lucide !== 'undefined') lucide.createIcons({el: btn});
+    }
+  } catch(_){}
+}
+
 function _showPageInternal(p){
   // 🛡️ AUDIT MODE LOCK GUARD — when audit mode is active, ONLY allow audit page
   // (prevents navigation while inspector is using the tablet)
@@ -16253,6 +16281,8 @@ function _showPageInternal(p){
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   } catch(_){}
+  // Update central page-close button visibility
+  try { _updatePageCloseBtn(p); } catch(_){}
 }
 
 // Επαναφορά σελίδας από URL hash ή localStorage στο load
