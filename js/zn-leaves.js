@@ -29957,3 +29957,149 @@ function handleReactivation(previousExpiry) {
 }
 
 // ── MAIN INIT ────────────────────────────────────────────────────────────────
+
+// === ROUTER HELPERS (back-btn, sidebar-perms, goBack) ===
+
+function _updateBackBtn() {
+  var btn = document.getElementById('tabBarBackBtn'); // New: tab bar back button
+  var logo = document.getElementById('topbarLogo');
+  var search = document.getElementById('topbarSearch');
+
+  // Determine current page
+  var hist = window._pageHistory || [];
+  var currentPage = hist[hist.length - 1] || 'dashboard';
+  var onDashboard = (currentPage === 'dashboard');
+
+  // Tab bar back button: show when not already at the section home page
+  if (btn) {
+    if (onDashboard) {
+      btn.style.display = 'none';
+    } else {
+      var inKB = (currentPage === 'help');
+      var hasKBHistory = inKB && window._helpDocHistory && window._helpDocHistory.length >= 1;
+      var tab3 = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? ZN_PAGE_TO_TAB[currentPage] : null;
+      var tabHome3 = (typeof ZN_TAB_HOME !== 'undefined' && tab3) ? ZN_TAB_HOME[tab3] : null;
+      var isAtSectionHome = tabHome3 && (tabHome3 === currentPage);
+      var canGoBack = hasKBHistory || (typeof _settingsSubView !== 'undefined' && _settingsSubView) || !isAtSectionHome;
+      btn.style.display = canGoBack ? 'flex' : 'none';
+    }
+  }
+
+  // Logo: always visible, search hidden on mobile (CSS handles it)
+  if (logo) {
+    logo.style.display = 'flex';
+    // Populate logo content
+    var logoUrl = (typeof getCustomLogo === 'function') ? getCustomLogo() : null;
+    var settings = {};
+    try { settings = typeof getAppSettings === 'function' ? getAppSettings() : {}; } catch(e){}
+    var logoImg  = document.getElementById('topbarLogoImg');
+    var logoName = document.getElementById('topbarLogoName');
+    if (logoUrl && logoImg) {
+      logoImg.src = logoUrl;
+      logoImg.style.display = 'block';
+      if (logoName) logoName.style.display = 'none';
+    } else {
+      if (logoImg) logoImg.style.display = 'none';
+      if (logoName) {
+        logoName.textContent = settings.shopName || 'ZyroNex';
+        logoName.style.display = 'block';
+      }
+    }
+  }
+  // Search: only on non-dashboard, desktop only (CSS hides on mobile)
+  if (search) {
+    search.style.display = (window.innerWidth >= 768 ? 'flex' : 'none');
+  }
+}
+
+function goBack() {
+  // PRIORITY -1: ZNNav overlay stack (kiosk, sub-panels, custom screens) — HIGHEST priority
+  if (window.ZNNav && window.ZNNav.hasOverlay()) {
+    window.ZNNav.closeTop();
+    return;
+  }
+  // PRIORITY -0.5: Αν είμαστε στη σελίδα ρυθμίσεων Kiosk, το πρώτο swipe/back
+  // ανοίγει το Kiosk overlay (προεπισκόπηση). Το επόμενο swipe (αφού κλείσει
+  // το preview) πάει κανονικά πίσω — αποφυγή ατέρμονου βρόχου.
+  var _curPg = window._pageHistory && window._pageHistory[window._pageHistory.length - 1];
+  if (_curPg === 'kiosk' && typeof renderKiosk === 'function' && !window._kioskPreviewShown) {
+    window._kioskPreviewShown = true;
+    renderKiosk('kiosk');
+    return;
+  }
+  // Reset το flag όταν φεύγουμε από τη σελίδα kiosk
+  if (_curPg !== 'kiosk') window._kioskPreviewShown = false;
+  // PRIORITY -0.4: Site Builder — back βγαίνει στο dashboard (ΟΧΙ στο Plugin Market
+  // απ' όπου ήρθες). Τα εσωτερικά overlays του editor τα έχει ήδη πιάσει το ZNNav.
+  if (_curPg === 'sitebuilder' && typeof window.ZBUI !== 'undefined' && window.ZBUI && typeof window.ZBUI.exit === 'function') {
+    window.ZBUI.exit();
+    return;
+  }
+  // PRIORITY 0: If we're inside a settings category panel, return to settings grid
+  if (typeof _settingsSubView !== 'undefined' && _settingsSubView) {
+    _settingsBackToGrid();
+    return;
+  }
+  // PRIORITY 1: If we're inside a KB article, go back through KB history first
+  var currentPage = window._pageHistory[window._pageHistory.length - 1];
+  if (currentPage === 'help' && window._helpDocHistory && window._helpDocHistory.length > 1) {
+    // Go back through KB articles
+    window._helpDocHistory.pop(); // remove current article
+    var prevDoc = window._helpDocHistory[window._helpDocHistory.length - 1];
+    if (prevDoc && typeof helpOpenDoc === 'function') {
+      window._helpDocHistory.pop(); // helpOpenDoc will re-push
+      helpOpenDoc(prevDoc);
+      return;
+    }
+  }
+  // PRIORITY 2: Inside a single KB article → back to KB home (welcome grid)
+  if (currentPage === 'help' && window._helpDocHistory && window._helpDocHistory.length === 1) {
+    window._helpDocHistory = [];
+    if (typeof helpRenderWelcomeInArea === 'function') {
+      helpRenderWelcomeInArea();
+      return;
+    }
+  }
+  // PRIORITY 2.5: At KB welcome grid (no doc history) → leave Help, go to the
+  // PREVIOUS page from the page stack (NOT dashboard). This is the fix for
+  // "back from Help always goes to dashboard".
+  // Falls through to PRIORITY 3 which pops _pageHistory correctly.
+  // PRIORITY 3: Parent-tab navigation — always go to the home page of the
+  // current page's section (ZN_TAB_HOME). One rule for every page.
+  var currentPg2 = window._pageHistory && window._pageHistory[window._pageHistory.length - 1];
+  if(!currentPg2 || currentPg2 === 'dashboard') return; // already at root
+  var tab2 = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? ZN_PAGE_TO_TAB[currentPg2] : null;
+  var tabHome2 = (typeof ZN_TAB_HOME !== 'undefined' && tab2) ? (ZN_TAB_HOME[tab2] || 'dashboard') : 'dashboard';
+  if(tabHome2 === currentPg2) return; // already at section home
+  window._navByBack = true;
+  showPage(tabHome2);
+}
+
+function applyPermissionsToSidebar(){
+  if(!CURRENT_USER) return;
+  const isDev = (typeof isDeveloperOwner === 'function' && isDeveloperOwner());
+  const isAdmin = isDev || CURRENT_USER.perms?.includes('*');
+  // Show/hide individual items
+  document.querySelectorAll('.nav-item[data-page]').forEach(el=>{
+    const page = el.dataset.page;
+    const need = PAGE_PERMS[page];
+    if(page === 'dashboard'){ el.style.display=''; return; }
+    // Developer-only pages — μόνο για IS_DEVELOPER_OWNER shops
+    if(page === 'inspector-competitors'){
+      el.style.display = isDev ? '' : 'none';
+      return;
+    }
+    el.style.display = (isAdmin || !need || can(need)) ? '' : 'none';
+  });
+  // Show/hide section headers based on whether group has visible items
+  // Never touch nav-group display — only the header
+  document.querySelectorAll('.sidebar .nav-section[data-section]').forEach(sec=>{
+    const group = document.getElementById('nav-' + sec.dataset.section);
+    if(!group){ sec.style.display=''; return; }
+    const anyVisible = Array.from(group.querySelectorAll('.nav-item[data-page]'))
+      .some(item => item.style.display !== 'none');
+    sec.style.display = anyVisible ? '' : 'none';
+    // Never hide the group itself — that's for collapse toggle only
+  });
+}
+
