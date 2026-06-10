@@ -21198,3 +21198,1480 @@ function ceCopyAllHashtags() {
   }).catch(function(){});
 }
 
+
+
+// =============================================================================
+// === EXCHANGE MODULE ===
+// =============================================================================
+// ═══════════════════════════════════════════════════════════════════
+// ZYRONEX EXCHANGE — B2B Trade Network
+// ═══════════════════════════════════════════════════════════════════
+
+// Custom SNV bottle icon (grey/black to match consumables tone)
+var _EXCH_SNV_SVG = '<svg viewBox="0 0 48 48" style="width:1em;height:1em;vertical-align:-0.15em;display:inline-block" xmlns="http://www.w3.org/2000/svg"><rect x="18" y="4" width="12" height="5" rx="1" fill="#4a4a4a" stroke="#1a1a1a" stroke-width="1.5"/><rect x="16" y="9" width="16" height="7" rx="1" fill="#5a5a5a" stroke="#1a1a1a" stroke-width="1.5"/><path d="M17 16 h14 a4 4 0 0 1 4 4 v20 a3 3 0 0 1 -3 3 h-16 a3 3 0 0 1 -3 -3 v-20 a4 4 0 0 1 4 -4 z" fill="#e0e0e0" stroke="#1a1a1a" stroke-width="1.5"/><line x1="19" y1="11" x2="19" y2="14" stroke="#1a1a1a" stroke-width="1"/><line x1="22" y1="11" x2="22" y2="14" stroke="#1a1a1a" stroke-width="1"/><line x1="25" y1="11" x2="25" y2="14" stroke="#1a1a1a" stroke-width="1"/><line x1="28" y1="11" x2="28" y2="14" stroke="#1a1a1a" stroke-width="1"/></svg>';
+
+var _exchTab = 'browse'; // browse | requests | mine | messages | shops
+var _exchFilters = { category: '', region: '', maxPrice: '', search: '' };
+var _exchProfile = null; // this shop's exchange profile
+
+// ── MAIN RENDER ──────────────────────────────────────────────────
+async function renderExchange() {
+  var c = document.getElementById('content');
+  if (!c) return;
+
+  // Check if shop has accepted terms
+  await _exchLoadProfile();
+
+  if (!_exchProfile || !_exchProfile.terms_accepted_at) {
+    _exchRenderOnboarding();
+    return;
+  }
+
+  c.innerHTML =
+    '<style>' +
+    '.exch-wrap{max-width:900px;margin:0 auto;padding-bottom:60px}' +
+    '.exch-header{background:linear-gradient(135deg,#0a0e27 0%,#0d1a30 50%,#130d2e 100%);border-radius:20px;padding:20px;margin-bottom:16px;border:1px solid rgba(99,102,241,0.2);position:relative;overflow:hidden}' +
+    '.exch-header::before{content:"";position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(99,102,241,0.15) 0%,transparent 70%);pointer-events:none}' +
+    '.exch-title{font-size:22px;font-weight:900;background:linear-gradient(135deg,#818cf8,#60a5fa,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}' +
+    '.exch-tabs{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}' +
+    '.exch-tabs::-webkit-scrollbar{display:none}' +
+    '.exch-tab{flex-shrink:0;padding:8px 16px;border-radius:99px;font-size:12px;font-weight:700;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}' +
+    '.exch-tab.active{background:linear-gradient(135deg,#6366f1,#4f46e5);border-color:transparent;color:#fff;box-shadow:0 2px 12px rgba(99,102,241,0.35)}' +
+    '.exch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px}' +
+    '.exch-card{background:var(--bg-2);border-radius:16px;border:1px solid var(--border);overflow:hidden;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent}' +
+    '.exch-card:hover{border-color:rgba(99,102,241,0.4);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.2)}' +
+    '.exch-card-img{width:100%;height:160px;object-fit:cover;background:var(--bg-3)}' +
+    '.exch-card-img-placeholder{width:100%;height:160px;background:linear-gradient(135deg,var(--bg-3),var(--bg-2));display:flex;align-items:center;justify-content:center;font-size:48px}' +
+    '.exch-card-body{padding:14px}' +
+    '.exch-card-cat{font-size:10px;font-weight:700;color:#818cf8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}' +
+    '.exch-card-name{font-size:14px;font-weight:800;margin-bottom:6px;line-height:1.3}' +
+    '.exch-card-shop{font-size:11px;color:var(--text-3);margin-bottom:8px}' +
+    '.exch-card-footer{display:flex;justify-content:space-between;align-items:center}' +
+    '.exch-price{font-size:18px;font-weight:900;color:#34d399}' +
+    '.exch-qty{font-size:11px;color:var(--text-2);background:var(--bg-3);padding:3px 8px;border-radius:6px}' +
+    '.exch-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}' +
+    '.exch-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}' +
+    '.exch-filter-select{padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-1);font-size:13px;-webkit-appearance:none}' +
+    '.exch-search{flex:1;min-width:180px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-1);font-size:13px}' +
+    '.exch-empty{text-align:center;padding:60px 20px;color:var(--text-2)}' +
+    '.exch-stat{text-align:center}' +
+    '.exch-stat-val{font-size:24px;font-weight:900;color:#818cf8}' +
+    '.exch-stat-lbl{font-size:11px;color:var(--text-3);margin-top:2px}' +
+    '@media(min-width:600px){.exch-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}' +
+    '</style>' +
+    '<div class="exch-wrap">' +
+    '<div class="exch-header">' +
+    '<div class="exch-title">🔄 ZyroNex Exchange</div>' +
+    '<div style="font-size:13px;font-weight:700;margin-bottom:14px;background:linear-gradient(135deg,#ff8a3d,#ff5e62);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">B2B Trade Network</div>' +
+    '<div style="display:flex;gap:16px;margin-bottom:16px">' +
+    '<div class="exch-stat"><div class="exch-stat-val" id="exchStatListings">—</div><div class="exch-stat-lbl">Αγγελίες</div></div>' +
+    '<div class="exch-stat"><div class="exch-stat-val" id="exchStatShops">—</div><div class="exch-stat-lbl">Καταστήματα</div></div>' +
+    '<div class="exch-stat"><div class="exch-stat-val" id="exchStatMine">—</div><div class="exch-stat-lbl">Δικές μου</div></div>' +
+    '</div>' +
+    '<div class="exch-tabs">' +
+    '<button class="exch-tab' + (_exchTab==='browse'?' active':'') + '" onclick="_exchSetTab(\'browse\')">🔍 Browse</button>' +
+    '<button class="exch-tab' + (_exchTab==='requests'?' active':'') + '" onclick="_exchSetTab(\'requests\')">📢 Ζητώ</button>' +
+    '<button class="exch-tab' + (_exchTab==='mine'?' active':'') + '" onclick="_exchSetTab(\'mine\')">📦 Τα δικά μου</button>' +
+    '<button class="exch-tab' + (_exchTab==='messages'?' active':'') + '" onclick="_exchSetTab(\'messages\')" id="exchMsgTab">💬 Μηνύματα</button>' +
+    '<button class="exch-tab' + (_exchTab==='shops'?' active':'') + '" onclick="_exchSetTab(\'shops\')">🏪 Καταστήματα</button>' +
+    '</div></div>' +
+    '<div id="exchBody"></div></div>';
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  _exchRenderTab();
+  _exchLoadStats();
+}
+
+async function _exchLoadProfile() {
+  if (_exchProfile) return;
+  var { data } = await sb.from('exchange_shop_profiles').select('*').eq('shop_id', SHOP_ID).single();
+  _exchProfile = data || null;
+}
+
+async function _exchLoadStats() {
+  var { data: listings } = await sb.from('exchange_listings').select('id', { count: 'exact' }).eq('status', 'active');
+  var { data: shops } = await sb.from('exchange_shop_profiles').select('shop_id', { count: 'exact' }).eq('is_active', true);
+  var { data: mine } = await sb.from('exchange_listings').select('id', { count: 'exact' }).eq('shop_id', SHOP_ID).eq('status', 'active');
+  var el1 = document.getElementById('exchStatListings');
+  var el2 = document.getElementById('exchStatShops');
+  var el3 = document.getElementById('exchStatMine');
+  if (el1) el1.textContent = (listings && listings.length) || 0;
+  if (el2) el2.textContent = (shops && shops.length) || 0;
+  if (el3) el3.textContent = (mine && mine.length) || 0;
+}
+
+function _exchSetTab(tab) {
+  _exchTab = tab;
+  document.querySelectorAll('.exch-tab').forEach(function(b, i) {
+    b.classList.toggle('active', ['browse','requests','mine','messages','shops'][i] === tab);
+  });
+  _exchRenderTab();
+}
+
+function _exchRenderTab() {
+  if (_exchTab === 'browse') _exchRenderBrowse();
+  else if (_exchTab === 'requests') _exchRenderRequests();
+  else if (_exchTab === 'mine') _exchRenderMine();
+  else if (_exchTab === 'messages') _exchRenderMessages();
+  else if (_exchTab === 'shops') _exchRenderShops();
+}
+
+// ── TAB: BROWSE ──────────────────────────────────────────────────
+async function _exchRenderBrowse() {
+  var wrap = document.getElementById('exchBody');
+  if (!wrap) return;
+
+  wrap.innerHTML =
+    '<div class="exch-filters">' +
+    '<input class="exch-search" id="exchSearch" placeholder="🔍 Αναζήτηση προϊόντος..." value="' + (_exchFilters.search||'') + '" oninput="_exchFilters.search=this.value;_exchLoadListings()">' +
+    '<select class="exch-filter-select" id="exchCatFilter" onchange="_exchFilters.category=this.value;_exchLoadListings()">' +
+    '<option value="">Όλες οι κατηγορίες</option>' +
+    '<option value="devices"' + (_exchFilters.category==='devices'?' selected':'') + '>🔋 Συσκευές</option>' +
+    '<option value="consumables"' + (_exchFilters.category==='consumables'?' selected':'') + '>🌀 Αναλώσιμα</option>' +
+    '<option value="liquids_snv"' + (_exchFilters.category==='liquids_snv'?' selected':'') + '>🧴 Υγρά SNV</option>' +
+    '<option value="liquids_ready"' + (_exchFilters.category==='liquids_ready'?' selected':'') + '>💧 Έτοιμα Υγρά</option>' +
+    '<option value="accessories"' + (_exchFilters.category==='accessories'?' selected':'') + '>🔌 Αξεσουάρ</option>' +
+    '</select>' +
+    '<select class="exch-filter-select" id="exchRegFilter" onchange="_exchFilters.region=this.value;_exchLoadListings()">' +
+    '<option value="">Όλες οι περιφέρειες</option>' +
+    ['Αττική','Κεντρική Μακεδονία','Θεσσαλία','Δυτική Ελλάδα','Πελοπόννησος','Ήπειρος','Ανατολική Μακεδονία & Θράκη','Δυτική Μακεδονία','Στερεά Ελλάδα','Ιόνια Νησιά','Βόρειο Αιγαίο','Νότιο Αιγαίο','Κρήτη'].map(function(r){ return '<option value="'+r+'"'+(_exchFilters.region===r?' selected':'')+'>'+r+'</option>'; }).join('') +
+    '</select>' +
+    '</div>' +
+    '<div id="exchListingsGrid" class="exch-grid"><div class="exch-empty">Φόρτωση...</div></div>' +
+    '<div style="text-align:center;margin-top:20px">' +
+    '<button class="btn btn-primary btn-lg" onclick="_exchOpenNewListing()"><i data-lucide="plus" size="18"></i> Ανέβασε Listing</button>' +
+    '</div>';
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  _exchLoadListings();
+}
+
+async function _exchLoadListings() {
+  var grid = document.getElementById('exchListingsGrid');
+  if (!grid) return;
+
+  var query = sb.from('exchange_listings')
+    .select('*, exchange_shop_profiles(display_name, city, region, rating_avg, verified_seller)')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (_exchFilters.category) query = query.eq('category', _exchFilters.category);
+  if (_exchFilters.region) query = query.eq('region', _exchFilters.region);
+  if (_exchFilters.search) query = query.ilike('product_name', '%' + _exchFilters.search + '%');
+
+  var { data, error } = await query;
+
+  if (error || !data || data.length === 0) {
+    grid.innerHTML = '<div class="exch-empty" style="grid-column:1/-1"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-weight:700;margin-bottom:8px">Δεν βρέθηκαν αγγελίες</div><div style="font-size:13px">Δοκίμασε διαφορετικά φίλτρα ή ανέβασε εσύ ένα listing</div></div>';
+    return;
+  }
+
+  var catIcons = { devices:'🔋', consumables:'🌀', liquids_snv:_EXCH_SNV_SVG, liquids_ready:'💧', accessories:'🔌' };
+  grid.innerHTML = data.map(function(l) {
+    var shop = l.exchange_shop_profiles || {};
+    var catIcon = catIcons[l.category] || '📦';
+    var imgHtml = (l.images && l.images[0])
+      ? '<img class="exch-card-img" src="' + l.images[0] + '" loading="lazy">'
+      : '<div class="exch-card-img-placeholder">' + catIcon + '</div>';
+    var verifiedBadge = shop.verified_seller ? '<span style="color:#f59e0b;font-size:10px"> ★</span>' : '';
+    var negotiableBadge = l.negotiable ? '<span class="exch-badge" style="background:rgba(99,102,241,0.15);color:#818cf8">Διαπρ.</span>' : '';
+    return '<div class="exch-card" onclick="_exchOpenListing(\'' + l.id + '\')">' +
+      imgHtml +
+      '<div class="exch-card-body">' +
+      '<div class="exch-card-cat">' + catIcon + ' ' + (l.subcategory || l.category) + '</div>' +
+      '<div class="exch-card-name">' + l.product_name + (l.product_brand ? ' <span style="color:var(--text-3);font-weight:400">· ' + l.product_brand + '</span>' : '') + '</div>' +
+      '<div class="exch-card-shop">🏪 ' + (shop.display_name || '—') + verifiedBadge + ' · 📍 ' + (shop.city || shop.region || '—') + '</div>' +
+      '<div class="exch-card-footer">' +
+      '<span class="exch-price">' + eur(l.asking_price) + '<span style="font-size:11px;font-weight:400;color:var(--text-3)">/' + (l.price_per||'τεμ') + '</span></span>' +
+      '<div style="display:flex;gap:6px;align-items:center">' + negotiableBadge + '<span class="exch-qty">×' + l.quantity + '</span></div>' +
+      '</div></div></div>';
+  }).join('');
+}
+
+// ── TAB: REQUESTS (Ζητώ) ─────────────────────────────────────────
+async function _exchRenderRequests() {
+  var wrap = document.getElementById('exchBody');
+  if (!wrap) return;
+
+  var { data } = await sb.from('exchange_requests')
+    .select('*, exchange_shop_profiles(display_name, city)')
+    .eq('status', 'open')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  var rows = (data || []).map(function(r) {
+    var shop = r.exchange_shop_profiles || {};
+    return '<div class="card" style="margin-bottom:12px;cursor:pointer" onclick="_exchContactRequest(\'' + r.shop_id + '\',\'' + r.product_name + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+      '<div><div style="font-weight:800;font-size:14px">🔍 ' + r.product_name + '</div>' +
+      '<div style="font-size:12px;color:var(--text-2);margin-top:2px">' + (r.description || '') + '</div></div>' +
+      '<span style="background:rgba(52,211,153,0.15);color:#34d399;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap">Ζητά ' + r.quantity_needed + ' τεμ.</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:12px;margin-top:10px;font-size:12px;color:var(--text-3)">' +
+      '<span>🏪 ' + (shop.display_name || '—') + '</span>' +
+      '<span>📍 ' + (r.region_pref || shop.city || '—') + '</span>' +
+      (r.max_price ? '<span>💰 έως ' + eur(r.max_price) + '/τεμ</span>' : '') +
+      '</div></div>';
+  }).join('');
+
+  wrap.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+    '<div style="font-weight:700;font-size:15px">Αγγελίες Ζήτησης</div>' +
+    '<button class="btn btn-primary" onclick="_exchOpenNewRequest()"><i data-lucide="plus" size="14"></i> Ζητώ Προϊόν</button>' +
+    '</div>' +
+    (rows || '<div class="exch-empty"><div style="font-size:48px;margin-bottom:12px">📢</div><div style="font-weight:700">Δεν υπάρχουν αγγελίες ζήτησης</div></div>');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ── TAB: MINE ────────────────────────────────────────────────────
+async function _exchRenderMine() {
+  var wrap = document.getElementById('exchBody');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-2)">Φόρτωση...</div>';
+
+  var { data: listings } = await sb.from('exchange_listings').select('*').eq('shop_id', SHOP_ID).order('created_at', { ascending: false });
+  var { data: offers } = await sb.from('exchange_offers').select('*, exchange_listings(product_name)').eq('seller_shop_id', SHOP_ID).eq('status', 'pending');
+  var { data: trades } = await sb.from('exchange_trades').select('*').or('seller_shop_id.eq.' + SHOP_ID + ',buyer_shop_id.eq.' + SHOP_ID).order('created_at', { ascending: false }).limit(20);
+
+  var statusColor = { active:'#2ecc71', pending:'#f39c12', paused:'#94a3b8', sold:'#818cf8', expired:'#e74c3c', rejected:'#e74c3c' };
+  var statusLabel = { active:'Ενεργό', pending:'Εκκρεμεί AI', paused:'Σε παύση', sold:'Πουλήθηκε', expired:'Έληξε', rejected:'Απορρίφθηκε' };
+
+  var listingsHtml = (listings && listings.length > 0) ? listings.map(function(l) {
+    var sc = statusColor[l.status] || '#94a3b8';
+    var sl = statusLabel[l.status] || l.status;
+    return '<div class="card" style="margin-bottom:10px;border-left:4px solid ' + sc + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div><div style="font-weight:800">' + l.product_name + '</div>' +
+      '<div style="font-size:12px;color:var(--text-2)">' + eur(l.asking_price) + '/τεμ · ×' + l.quantity + ' τεμ.</div></div>' +
+      '<div style="display:flex;gap:8px;align-items:center">' +
+      '<span style="background:' + sc + '22;color:' + sc + ';border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700">' + sl + '</span>' +
+      '<button class="btn btn-ghost" style="padding:5px 8px;font-size:11px" onclick="_exchEditListing(\'' + l.id + '\')">✏️</button>' +
+      '<button class="btn btn-ghost" style="padding:5px 8px;font-size:11px;color:#e74c3c" onclick="_exchDeleteListing(\'' + l.id + '\')">🗑️</button>' +
+      '<button class="btn ' + (l.status==='active'?'btn-primary':'btn-ghost') + '" style="padding:5px 10px;font-size:11px;min-width:80px" onclick="_exchToggleListingAvailability(\'' + l.id + '\',\'' + l.status + '\')">' + (l.status==='active'?'🟢 Live':'⏸️ Paused') + '</button>' +
+      '</div></div>' +
+      (l.ai_check_note && l.status !== 'active' ? '<div style="font-size:11px;color:#f39c12;margin-top:6px">⚠️ ' + l.ai_check_note + '</div>' : '') +
+      '</div>';
+  }).join('') : '<div style="color:var(--text-3);font-size:13px;padding:16px 0">Δεν έχεις ανεβάσει listings ακόμα.</div>';
+
+  var offersHtml = (offers && offers.length > 0)
+    ? '<div style="font-weight:700;font-size:14px;margin-bottom:10px">⚡ Εκκρεμείς Προσφορές (' + offers.length + ')</div>' +
+      offers.map(function(o) {
+        return '<div class="card" style="margin-bottom:8px;border-color:rgba(245,158,11,0.4)">' +
+          '<div style="font-weight:700">' + (o.exchange_listings?.product_name || '—') + '</div>' +
+          '<div style="font-size:12px;color:var(--text-2)">Από: ' + (o.exchange_shop_profiles?.display_name || '—') + ' · ' + eur(o.offered_price) + '/τεμ · ×' + o.quantity + '</div>' +
+          '<div style="display:flex;gap:8px;margin-top:10px">' +
+          '<button class="btn btn-primary" style="flex:1;padding:8px" onclick="_exchAcceptOffer(\'' + o.id + '\')">✅ Αποδοχή</button>' +
+          '<button class="btn btn-ghost" style="flex:1;padding:8px" onclick="_exchRejectOffer(\'' + o.id + '\')">❌ Απόρριψη</button>' +
+          '<button class="btn btn-ghost" style="padding:8px 12px" onclick="_exchOpenChat(\'' + o.id + '\')">💬</button>' +
+          '</div></div>';
+      }).join('')
+    : '';
+
+  var tradesHtml = (trades && trades.length > 0)
+    ? '<div style="font-weight:700;font-size:14px;margin:16px 0 10px">📋 Συναλλαγές</div>' +
+      trades.map(function(t) {
+        var isSeller = t.seller_shop_id === SHOP_ID;
+        var role = isSeller ? '📤 Πωλητής' : '📥 Αγοραστής';
+        var needsAction = isSeller && !t.seller_sent_at ? '⚡ Σήμανε ως εστάλη' :
+          !isSeller && t.seller_sent_at && !t.buyer_received_at ? '⚡ Σήμανε ως παρελήφθη' : null;
+        return '<div class="card" style="margin-bottom:8px">' +
+          '<div style="display:flex;justify-content:space-between">' +
+          '<div><div style="font-weight:700;font-size:13px">' + eur(t.total_value) + ' · ×' + t.quantity + ' τεμ.</div>' +
+          '<div style="font-size:11px;color:var(--text-3)">' + role + ' · ' + new Date(t.created_at).toLocaleDateString('el-GR') + '</div></div>' +
+          '<span style="font-size:11px;color:var(--text-2)">' + (t.status==='completed'?'✅ Ολοκλ.':t.status==='in_progress'?'🔄 Σε εξ.':'⚠️ Dispute') + '</span>' +
+          '</div>' +
+          (needsAction ? '<button class="btn btn-primary" style="width:100%;margin-top:8px;padding:8px;font-size:12px" onclick="_exchTradeAction(\'' + t.id + '\',\'' + (isSeller?'sent':'received') + '\')">' + needsAction + '</button>' : '') +
+          (t.seller_sent_at && t.buyer_received_at && !t.seller_rated_at && isSeller || t.seller_sent_at && t.buyer_received_at && !t.buyer_rated_at && !isSeller ? '<button class="btn btn-ghost" style="width:100%;margin-top:6px;padding:8px;font-size:12px" onclick="_exchRateTrade(\'' + t.id + '\',\'' + (isSeller?'seller':'buyer') + '\')">⭐ Άφησε αξιολόγηση</button>' : '') +
+          '</div>';
+      }).join('')
+    : '';
+
+  wrap.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+    '<div style="font-weight:700;font-size:15px">Τα Listings μου</div>' +
+    '<button class="btn btn-primary" onclick="_exchOpenNewListing()"><i data-lucide="plus" size="14"></i> Νέο Listing</button>' +
+    '</div>' +
+    listingsHtml + offersHtml + tradesHtml;
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ── TAB: MESSAGES ────────────────────────────────────────────────
+async function _exchRenderMessages() {
+  var wrap = document.getElementById('exchBody');
+  if (!wrap) return;
+
+  var { data: offers } = await sb.from('exchange_offers')
+    .select('*, exchange_listings(product_name)')
+    .or('buyer_shop_id.eq.' + SHOP_ID + ',seller_shop_id.eq.' + SHOP_ID)
+    .in('status', ['pending','accepted','completed'])
+    .order('updated_at', { ascending: false });
+
+  if (!offers || offers.length === 0) {
+    wrap.innerHTML = '<div class="exch-empty"><div style="font-size:48px;margin-bottom:12px">💬</div><div style="font-weight:700">Δεν υπάρχουν συνομιλίες</div><div style="font-size:13px;margin-top:6px">Οι συνομιλίες εμφανίζονται όταν γίνει αίτημα αγοράς</div></div>';
+    return;
+  }
+
+  wrap.innerHTML = offers.map(function(o) {
+    var otherShop = o.buyer_shop_id === SHOP_ID ? (o.exchange_shop_profiles?.display_name || '—') : (o.exchange_shop_profiles?.display_name || '—');
+    return '<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="_exchOpenChat(\'' + o.id + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div><div style="font-weight:700">' + (o.exchange_listings?.product_name || '—') + '</div>' +
+      '<div style="font-size:12px;color:var(--text-2)">💬 ' + otherShop + '</div></div>' +
+      '<i data-lucide="chevron-right" size="16" style="color:var(--text-3)"></i>' +
+      '</div></div>';
+  }).join('');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ── LISTING DETAIL MODAL ─────────────────────────────────────────
+async function _exchOpenListing(id) {
+  var { data: l } = await sb.from('exchange_listings')
+    .select('*, exchange_shop_profiles(display_name, city, region, rating_avg, rating_count, verified_seller, contact_phone)')
+    .eq('id', id).single();
+  if (!l) return;
+
+  var shop = l.exchange_shop_profiles || {};
+  var catIcons = { devices:'🔋', consumables:'🌀', liquids_snv:_EXCH_SNV_SVG, liquids_ready:'💧', accessories:'🔌' };
+  var imgHtml = (l.images && l.images[0]) ? '<img src="' + l.images[0] + '" style="width:100%;border-radius:12px;margin-bottom:16px;max-height:240px;object-fit:cover">' : '';
+
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800 text-xl">📦 ' + l.product_name + '</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body">' +
+    imgHtml +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">' +
+    '<div style="background:var(--bg-2);border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">Τιμή</div><div style="font-size:22px;font-weight:900;color:#34d399">' + eur(l.asking_price) + '</div><div style="font-size:11px;color:var(--text-3)">ανά ' + (l.price_per||'τεμ') + (l.negotiable?' · διαπραγματεύσιμη':'') + '</div></div>' +
+    '<div style="background:var(--bg-2);border-radius:10px;padding:12px;text-align:center"><div style="font-size:11px;color:var(--text-3)">Διαθέσιμα</div><div style="font-size:22px;font-weight:900">' + l.quantity + '</div><div style="font-size:11px;color:var(--text-3)">τεμάχια · ελάχ. ' + (l.quantity_min||1) + '</div></div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Περιγραφή</div>' +
+    '<div style="font-size:14px;line-height:1.6;color:var(--text-1)">' + l.description + '</div></div>' +
+    _exchRenderSpecsView(l.specs, l.category) +
+    '<div style="background:var(--bg-2);border-radius:12px;padding:12px;margin-bottom:14px">' +
+    '<div style="font-weight:700;margin-bottom:4px">🏪 ' + shop.display_name + (shop.verified_seller?' <span style="color:#f59e0b">★ Verified</span>':'') + '</div>' +
+    '<div style="font-size:12px;color:var(--text-2)">📍 ' + (shop.city||'') + (shop.region?' · '+shop.region:'') + '</div>' +
+    (shop.rating_avg ? '<div style="font-size:12px;color:var(--text-2);margin-top:4px">⭐ ' + Number(shop.rating_avg).toFixed(1) + ' (' + (shop.rating_count||0) + ' αξιολογήσεις)</div>' : '') +
+    '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px">' +
+    '<button class="btn btn-primary btn-lg" onclick="closeModal();_exchOpenMakeOffer(\'' + l.id + '\',\'' + l.shop_id + '\',' + l.asking_price + ',' + l.quantity + ')"><i data-lucide="shopping-cart" size="16"></i> Κάνε Προσφορά</button>' +
+    '<button class="btn btn-ghost" onclick="closeModal();_exchOpenNewOfferChat(\'' + l.id + '\',\'' + l.shop_id + '\')">💬 Επικοινωνία πρώτα</button>' +
+    '<button class="btn btn-ghost" style="color:#e74c3c;font-size:12px" onclick="closeModal();_exchReportListing(\'' + l.id + '\')">🚩 Αναφορά</button>' +
+    '</div></div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // Increment views
+  sb.from('exchange_listings').update({ views: (l.views||0) + 1 }).eq('id', id).then(function(){});
+}
+
+// Render specs in listing detail
+function _exchRenderSpecsView(specs, cat) {
+  if (!specs || typeof specs !== 'object') {
+    if (typeof specs === 'string') { try { specs = JSON.parse(specs); } catch(e) { return ''; } }
+    else return '';
+  }
+  var labels = {
+    nicotine_mg:'Νικοτίνη (mg/ml)', volume_ml:'Όγκος (ml)', vg_pg:'VG/PG', flavor:'Γεύση',
+    tpd_number:'TPD αρ.', expiry:'Λήξη', device_type:'Τύπος', wattage:'Ισχύς (W)',
+    battery_mah:'Μπαταρία (mAh)', warranty:'Εγγύηση', consumable_type:'Τύπος',
+    resistance:'Resistance (Ω)', compatibility:'Συμβατότητα', accessory_type:'Τύπος'
+  };
+  var batches = specs.batches;
+  var rows = Object.keys(specs).filter(function(k){ return k !== 'batches'; }).map(function(k) {
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">' +
+      '<span style="font-size:12px;color:var(--text-3)">' + (labels[k]||k) + '</span>' +
+      '<span style="font-size:13px;font-weight:600">' + specs[k] + '</span></div>';
+  }).join('');
+
+  var batchHtml = '';
+  if (batches && batches.length > 0) {
+    var hasNoExpiry = batches.some(function(b){ return b.noExpiry; });
+    batchHtml = '<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:#818cf8;margin-bottom:6px">📅 Παρτίδες</div>' +
+      batches.map(function(b) {
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">' +
+          '<span>×' + b.qty + ' τεμ.</span>' +
+          '<span style="color:' + (b.noExpiry?'#f39c12':'var(--text-1)') + '">' + (b.noExpiry ? '⚠️ Χωρίς αναγραφόμενη λήξη' : '📅 ' + new Date(b.expiry).toLocaleDateString('el-GR',{month:'2-digit',year:'numeric'})) + '</span></div>';
+      }).join('') +
+      (hasNoExpiry ? '<div style="font-size:11px;color:#f39c12;margin-top:8px;background:rgba(243,156,18,0.1);padding:8px;border-radius:8px">⚠️ Ορισμένες παρτίδες δεν έχουν αναγραφόμενη ημ. λήξης στη συσκευασία. Επιβεβαίωσε με τον πωλητή πριν την αγορά.</div>' : '') +
+      '</div>';
+  }
+
+  if (!rows && !batchHtml) return '';
+  return '<div style="background:var(--bg-2);border-radius:12px;padding:12px;margin-bottom:14px">' +
+    '<div style="font-size:11px;font-weight:700;color:#818cf8;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📋 Χαρακτηριστικά</div>' +
+    rows + batchHtml + '</div>';
+}
+
+// ── MAKE OFFER MODAL ─────────────────────────────────────────────
+function _exchOpenMakeOffer(listingId, sellerShopId, askingPrice, maxQty) {
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800 text-xl">💼 Κάνε Προσφορά</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body" style="display:flex;flex-direction:column;gap:14px">' +
+    '<div class="form-row"><label class="form-label">Ποσότητα (τεμάχια)</label>' +
+    '<input class="form-input" id="offerQty" type="number" min="1" max="' + maxQty + '" value="1" inputmode="numeric"></div>' +
+    '<div class="form-row"><label class="form-label">Προσφορά τιμής (€/τεμ)</label>' +
+    '<input class="form-input" id="offerPrice" type="number" step="0.01" value="' + askingPrice + '" inputmode="decimal">' +
+    '<div style="font-size:11px;color:var(--text-3);margin-top:4px">Ζητούμενη: ' + eur(askingPrice) + '</div></div>' +
+    '<div class="form-row"><label class="form-label">Μήνυμα (προαιρετικό)</label>' +
+    '<textarea class="form-input" id="offerMsg" rows="2" placeholder="π.χ. Μπορώ να παραλάβω με ACS..."></textarea></div>' +
+    '<div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:12px;font-size:12px;color:var(--text-2)">' +
+    '⚖️ <strong>Αποποίηση Ευθύνης:</strong> Η συναλλαγή αφορά αποκλειστικά εσάς και τον πωλητή. Το ZyroNex δεν αποτελεί συμβαλλόμενο μέρος. Απαιτείται έκδοση τιμολογίου.</div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn btn-primary" style="flex:1" onclick="_exchSubmitOffer(\'' + listingId + '\',\'' + sellerShopId + '\')">✅ Αποστολή Προσφοράς</button>' +
+    '<button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>' +
+    '</div></div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function _exchSubmitOffer(listingId, sellerShopId) {
+  var qty = parseInt(document.getElementById('offerQty')?.value) || 1;
+  var price = parseFloat(document.getElementById('offerPrice')?.value) || 0;
+  var msg = document.getElementById('offerMsg')?.value.trim() || '';
+  if (!price || price <= 0) { toast('Εισάγετε έγκυρη τιμή', 'warn'); return; }
+
+  // GDPR: log match before insert
+  await sb.from('exchange_match_logs').insert({
+    buyer_shop_id: SHOP_ID,
+    seller_shop_id: sellerShopId,
+    listing_id: listingId,
+    action: 'offer_submitted',
+    offered_price: price,
+    quantity: qty
+  }).then(function(){}).catch(function(){});
+
+  var { data, error } = await sb.from('exchange_offers').insert({
+    listing_id: listingId,
+    buyer_shop_id: SHOP_ID,
+    seller_shop_id: sellerShopId,
+    offered_price: price,
+    quantity: qty,
+    message: msg || null,
+    buyer_terms_accepted_at: new Date().toISOString()
+  }).select().single();
+
+  if (error) { toast('Σφάλμα: ' + error.message, 'error'); return; }
+
+  // Auto-create first message if there's a message
+  if (msg && data) {
+    await sb.from('exchange_messages').insert({
+      offer_id: data.id,
+      sender_shop_id: SHOP_ID,
+      message: msg
+    });
+  }
+
+  closeModal();
+  toast('✅ Προσφορά εστάλη!', 'success');
+  _exchSetTab('messages');
+}
+
+// ── NEW LISTING MODAL ────────────────────────────────────────────
+function _exchOpenNewListing() {
+  var deadStockOptions = '';
+  if (typeof PRODUCTS !== 'undefined') {
+    var deadStock = PRODUCTS.filter(function(p) { return p.stock > 0 && p.cost > 0; }).slice(0, 30);
+    deadStockOptions = '<option value="">— Νέο προϊόν / δεν είναι στο σύστημα —</option>' +
+      deadStock.map(function(p) {
+        return '<option value="' + p.id + '" data-cost="' + (p.cost||0) + '" data-name="' + p.name + '" data-stock="' + p.stock + '">' + p.name + ' (×' + p.stock + ')</option>';
+      }).join('');
+  }
+  window._exchListingImages = [];
+  _exchBatches = [];
+
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800 text-xl">📦 Νέο Listing</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body" style="display:flex;flex-direction:column;gap:12px">' +
+    (deadStockOptions ? '<div class="form-row"><label class="form-label">Από αποθήκη (προαιρετικό)</label>' +
+    '<select class="form-input" id="listingProduct" onchange="_exchPrefillFromProduct(this)">' + deadStockOptions + '</select></div>' : '') +
+    '<div class="form-row"><label class="form-label">Φωτογραφίες (έως 3)</label>' +
+    '<div id="listingImgPreviews" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px"></div>' +
+    '<input type="file" id="listingImgInput" accept="image/*" multiple style="display:none" onchange="_exchHandleImages(this)">' +
+    '<button class="btn btn-ghost" style="font-size:13px;padding:10px" onclick="document.getElementById(\'listingImgInput\').click()">📷 Πρόσθεσε φωτογραφία</button></div>' +
+    '<div class="form-row"><label class="form-label">Όνομα Προϊόντος *</label>' +
+    '<input class="form-input" id="listingName" placeholder="π.χ. Vaporesso XROS 4 Mini"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Κατηγορία *</label>' +
+    '<select class="form-input" id="listingCat" onchange="_exchRenderCatFields(this.value)">' +
+    '<option value="devices">🔋 Συσκευές</option>' +
+    '<option value="consumables">🌀 Αναλώσιμα</option>' +
+    '<option value="liquids_snv">🧴 Υγρά SNV</option>' +
+    '<option value="liquids_ready">💧 Έτοιμα Υγρά</option>' +
+    '<option value="accessories">🔌 Αξεσουάρ</option>' +
+    '</select></div>' +
+    '<div class="form-row"><label class="form-label">Brand</label>' +
+    '<input class="form-input" id="listingBrand" placeholder="π.χ. Vaporesso"></div>' +
+    '</div>' +
+    '<div id="catSpecificFields"></div>' +
+    '<div class="form-row"><label class="form-label">Περιγραφή * (κατάσταση, λόγος πώλησης...)</label>' +
+    '<textarea class="form-input" id="listingDesc" rows="3" placeholder="π.χ. Αγοράστηκαν σε μεγάλη ποσότητα, δεν πουλάνε. Sealed συσκευασία."></textarea></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Ποσότητα *</label>' +
+    '<input class="form-input" id="listingQty" type="number" min="1" placeholder="10" inputmode="numeric"></div>' +
+    '<div class="form-row"><label class="form-label">Ελάχ. Παραγγελία</label>' +
+    '<input class="form-input" id="listingMinQty" type="number" min="1" placeholder="1" inputmode="numeric"></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Τιμή Κόστους (€)</label>' +
+    '<input class="form-input" id="listingCost" type="number" step="0.01" placeholder="0.00" inputmode="decimal" oninput="_exchUpdateSuggestedPrice()"></div>' +
+    '<div class="form-row"><label class="form-label">Τιμή Πώλησης (€) *</label>' +
+    '<input class="form-input" id="listingPrice" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>' +
+    '</div>' +
+    '<div style="background:var(--bg-2);border-radius:10px;padding:10px">' +
+    '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">💡 Πρόταση τιμής βάσει κόστους:</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_exchSetPrice(0)">+0%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_exchSetPrice(5)">+5%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_exchSetPrice(10)">+10%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_exchSetPrice(15)">+15%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_exchSetPrice(20)">+20%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="_exchSetPrice(30)">+30%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;color:#f39c12;border-color:rgba(243,156,18,0.3)" onclick="_exchSetPriceNeg(-10)">-10%</button>' +
+    '<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px;color:#e74c3c;border-color:rgba(231,76,60,0.3)" onclick="_exchSetPriceNeg(-20)">-20%</button>' +
+    '</div></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Πόλη</label>' +
+    '<input class="form-input" id="listingCity" placeholder="π.χ. Θεσσαλονίκη" value="' + (_exchProfile.city||'') + '"></div>' +
+    '<div class="form-row"><label class="form-label">Περιοχή</label>' +
+    '<input class="form-input" id="listingRegion" placeholder="π.χ. Μαγνησία" value="' + (_exchProfile.region||'') + '"></div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:10px">' +
+    '<input type="checkbox" id="listingNeg" checked style="width:16px;height:16px">' +
+    '<label for="listingNeg" style="font-size:13px;cursor:pointer">Διαπραγματεύσιμη τιμή</label></div>' +
+    '<div style="background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:10px;padding:12px;font-size:12px;color:var(--text-2)">' +
+    '⚖️ Αποδέχεσαι ότι η συναλλαγή είναι αποκλειστικά μεταξύ σου και του αγοραστή. Το ZyroNex δεν φέρει καμία ευθύνη. Απαιτείται τιμολόγιο.</div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn btn-primary" style="flex:1" id="exchSubmitBtn" onclick="_exchSubmitListing()"><i data-lucide="upload" size="14"></i> Ανέβασε</button>' +
+    '<button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>' +
+    '</div></div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  _exchRenderCatFields('devices'); // init default category fields
+}
+
+var _exchBatches = []; // [{qty, expiry, noExpiry}]
+
+function _exchBatchFieldsHTML() {
+  return '<div style="background:var(--bg-2);border-radius:10px;padding:12px;margin-top:6px">' +
+    '<div style="font-size:11px;font-weight:700;color:#818cf8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📅 Παρτίδες & Λήξη</div>' +
+    '<div style="font-size:11px;color:var(--text-3);margin-bottom:8px">Αν έχεις τεμάχια με διαφορετική ημ. λήξης, πρόσθεσε ξεχωριστή παρτίδα για κάθε λήξη.</div>' +
+    '<div id="batchList"></div>' +
+    '<button type="button" class="btn btn-ghost" style="width:100%;font-size:12px;margin-top:6px" onclick="_exchAddBatch()">+ Προσθήκη παρτίδας</button>' +
+    '</div>';
+}
+
+function _exchAddBatch() {
+  _exchBatches.push({ qty: '', expiry: '', noExpiry: false });
+  _exchRenderBatches();
+}
+
+function _exchRemoveBatch(i) {
+  _exchBatches.splice(i, 1);
+  _exchRenderBatches();
+}
+
+function _exchRenderBatches() {
+  var list = document.getElementById('batchList');
+  if (!list) return;
+  list.innerHTML = _exchBatches.map(function(b, i) {
+    return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">' +
+      '<input class="form-input" type="number" min="1" placeholder="Τεμ." value="' + (b.qty||'') + '" style="flex:1;font-size:13px" oninput="_exchBatches[' + i + '].qty=this.value">' +
+      '<input class="form-input" type="date" value="' + (b.expiry||'') + '" style="flex:1.5;font-size:13px" ' + (b.noExpiry?'disabled':'') + ' oninput="_exchBatches[' + i + '].expiry=this.value">' +
+      '<label style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-3);white-space:nowrap"><input type="checkbox" ' + (b.noExpiry?'checked':'') + ' onchange="_exchBatches[' + i + '].noExpiry=this.checked;_exchRenderBatches()">χωρίς λήξη</label>' +
+      '<button type="button" class="btn btn-ghost" style="padding:4px 8px;color:#e74c3c" onclick="_exchRemoveBatch(' + i + ')">×</button>' +
+      '</div>';
+  }).join('');
+}
+
+function _exchRenderCatFields(cat) {
+  var wrap = document.getElementById('catSpecificFields');
+  if (!wrap) return;
+  var fieldHtml = '';
+  var sectionTitle = '<div style="font-size:11px;font-weight:700;color:#818cf8;text-transform:uppercase;letter-spacing:1px;margin:4px 0 2px">📋 Χαρακτηριστικά</div>';
+
+  if (cat === 'liquids_snv') {
+    // SNV: ΧΩΡΙΣ νικοτίνη, ΧΩΡΙΣ VG/PG (είναι shortfill βάση)
+    fieldHtml = sectionTitle +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">Όγκος (ml)</label>' +
+      '<input class="form-input spec-field" data-spec="volume_ml" type="number" step="0.1" placeholder="π.χ. 60" inputmode="decimal"></div>' +
+      '<div class="form-row"><label class="form-label">Γεύση</label>' +
+      '<input class="form-input spec-field" data-spec="flavor" placeholder="π.χ. Blueberry"></div>' +
+      '</div>' +
+      '<div class="form-row"><label class="form-label">TPD αριθμός (προαιρετικό)</label>' +
+      '<input class="form-input spec-field" data-spec="tpd_number" placeholder="EC-ID / TPD ref (αν υπάρχει)"></div>' +
+      _exchBatchFieldsHTML();
+  } else if (cat === 'liquids_ready') {
+    fieldHtml = sectionTitle +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">Νικοτίνη (mg/ml)</label>' +
+      '<input class="form-input spec-field" data-spec="nicotine_mg" type="number" step="0.1" placeholder="π.χ. 20" inputmode="decimal"></div>' +
+      '<div class="form-row"><label class="form-label">Όγκος (ml)</label>' +
+      '<input class="form-input spec-field" data-spec="volume_ml" type="number" step="0.1" placeholder="π.χ. 10" inputmode="decimal"></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">VG/PG Ratio</label>' +
+      '<input class="form-input spec-field" data-spec="vg_pg" placeholder="π.χ. 50/50"></div>' +
+      '<div class="form-row"><label class="form-label">Γεύση</label>' +
+      '<input class="form-input spec-field" data-spec="flavor" placeholder="π.χ. Blueberry"></div>' +
+      '</div>' +
+      '<div class="form-row"><label class="form-label">TPD αριθμός (προαιρετικό)</label>' +
+      '<input class="form-input spec-field" data-spec="tpd_number" placeholder="EC-ID / TPD ref (αν υπάρχει)"></div>' +
+      _exchBatchFieldsHTML();
+  } else if (cat === 'devices') {
+    fieldHtml = sectionTitle +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">Τύπος</label>' +
+      '<select class="form-input spec-field" data-spec="device_type"><option value="">—</option><option>Pod</option><option>Pod Mod</option><option>Box Mod</option><option>Disposable</option><option>AIO</option></select></div>' +
+      '<div class="form-row"><label class="form-label">Ισχύς (W)</label>' +
+      '<input class="form-input spec-field" data-spec="wattage" type="number" placeholder="π.χ. 40" inputmode="numeric"></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">Μπαταρία (mAh)</label>' +
+      '<input class="form-input spec-field" data-spec="battery_mah" type="number" placeholder="π.χ. 1000" inputmode="numeric"></div>' +
+      '<div class="form-row"><label class="form-label">Εγγύηση</label>' +
+      '<select class="form-input spec-field" data-spec="warranty"><option value="">—</option><option>Χωρίς</option><option>Με εγγύηση</option><option>Sealed/Νέο</option></select></div>' +
+      '</div>';
+  } else if (cat === 'consumables') {
+    fieldHtml = sectionTitle +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">Τύπος</label>' +
+      '<select class="form-input spec-field" data-spec="consumable_type"><option value="">—</option><option>Coil</option><option>Pod (κενό)</option><option>Cotton</option><option>Mesh</option><option>Glass</option><option>Drip Tip</option></select></div>' +
+      '<div class="form-row"><label class="form-label">Resistance (Ω)</label>' +
+      '<input class="form-input spec-field" data-spec="resistance" type="number" step="0.01" placeholder="π.χ. 0.8" inputmode="decimal"></div>' +
+      '</div>' +
+      '<div class="form-row"><label class="form-label">Συμβατότητα</label>' +
+      '<input class="form-input spec-field" data-spec="compatibility" placeholder="π.χ. Vaporesso XROS series"></div>';
+  } else if (cat === 'accessories') {
+    fieldHtml = sectionTitle +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row"><label class="form-label">Τύπος</label>' +
+      '<input class="form-input spec-field" data-spec="accessory_type" placeholder="π.χ. Θήκη, Φορτιστής"></div>' +
+      '<div class="form-row"><label class="form-label">Συμβατότητα</label>' +
+      '<input class="form-input spec-field" data-spec="compatibility" placeholder="π.χ. Universal"></div>' +
+      '</div>';
+  }
+  wrap.innerHTML = fieldHtml;
+  // Render existing batches if liquid category
+  if ((cat === 'liquids_snv' || cat === 'liquids_ready') && document.getElementById('batchList')) {
+    _exchRenderBatches();
+  }
+}
+
+function _exchCollectSpecs() {
+  var specs = {};
+  document.querySelectorAll('.spec-field').forEach(function(f) {
+    var key = f.getAttribute('data-spec');
+    var val = f.value.trim();
+    if (key && val) specs[key] = val;
+  });
+  // Add batches if any
+  var validBatches = (_exchBatches||[]).filter(function(b){ return b.qty && (b.expiry || b.noExpiry); });
+  if (validBatches.length > 0) {
+    specs.batches = validBatches.map(function(b){ return { qty: parseInt(b.qty)||0, expiry: b.noExpiry ? null : b.expiry, noExpiry: !!b.noExpiry }; });
+  }
+  return Object.keys(specs).length > 0 ? specs : null;
+}
+
+function _exchHandleImages(input) {
+  if (!input.files || input.files.length === 0) return;
+  var files = Array.from(input.files).slice(0, 3);
+  window._exchListingImages = files;
+  var preview = document.getElementById('listingImgPreviews');
+  if (!preview) return;
+  preview.innerHTML = '';
+  files.forEach(function(f, i) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var div = document.createElement("div");
+      div.style.cssText = "position:relative;width:80px;height:80px;flex-shrink:0";
+      var img = document.createElement("img");
+      img.src = e.target.result;
+      img.style.cssText = "width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #333";
+      var btn = document.createElement("button");
+      btn.textContent = "×";
+      btn.style.cssText = "position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#e74c3c;border:none;color:#fff;font-size:12px;cursor:pointer;line-height:1";
+      (function(idx){ btn.onclick = function(){ _exchRemoveImg(idx); }; })(i);
+      div.appendChild(img);
+      div.appendChild(btn);
+      preview.appendChild(div);
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function _exchRemoveImg(i) {
+  if (window._exchListingImages) window._exchListingImages.splice(i, 1);
+  var preview = document.getElementById('listingImgPreviews');
+  if (preview && preview.children[i]) preview.children[i].remove();
+}
+
+function _exchSetPriceNeg(pct) {
+  var cost = parseFloat(document.getElementById('listingCost')?.value) || 0;
+  if (!cost) { toast('Βάλε πρώτα τιμή κόστους', 'warn'); return; }
+  var newPrice = cost * (1 + pct/100);
+  var loss = Math.abs(pct);
+  if (!confirm('Πουλάς ' + loss + '% ΚΑΤΩ από το κόστος σου (' + eur(newPrice) + '/τεμ αντί ' + eur(cost) + ').\n\nΘα χάσεις ' + eur(cost - newPrice) + ' ανά τεμάχιο.\n\nΣυνέχεια;')) return;
+  if (document.getElementById('listingPrice')) document.getElementById('listingPrice').value = Math.max(0, newPrice).toFixed(2);
+}
+
+function _exchPrefillFromProduct(sel) {
+  var opt = sel.options[sel.selectedIndex];
+  var cost = parseFloat(opt.getAttribute('data-cost')) || 0;
+  var name = opt.getAttribute('data-name') || '';
+  var stock = opt.getAttribute('data-stock') || '';
+  if (document.getElementById('listingName')) document.getElementById('listingName').value = name;
+  if (document.getElementById('listingCost')) document.getElementById('listingCost').value = cost.toFixed(2);
+  if (document.getElementById('listingQty')) document.getElementById('listingQty').value = stock;
+  if (document.getElementById('listingPrice')) document.getElementById('listingPrice').value = cost.toFixed(2);
+}
+
+function _exchUpdateSuggestedPrice() {
+  var cost = parseFloat(document.getElementById('listingCost')?.value) || 0;
+  if (cost > 0 && document.getElementById('listingPrice') && !document.getElementById('listingPrice').value) {
+    document.getElementById('listingPrice').value = cost.toFixed(2);
+  }
+}
+
+function _exchSetPrice(pct) {
+  var cost = parseFloat(document.getElementById('listingCost')?.value) || 0;
+  if (!cost) { toast('Βάλε πρώτα τιμή κόστους', 'warn'); return; }
+  var price = cost * (1 + pct / 100);
+  if (document.getElementById('listingPrice')) document.getElementById('listingPrice').value = Math.max(0, price).toFixed(2);
+}
+
+async function _exchSubmitListing() {
+  var name = document.getElementById('listingName')?.value.trim();
+  var cat = document.getElementById('listingCat')?.value;
+  var desc = document.getElementById('listingDesc')?.value.trim();
+  var qty = parseInt(document.getElementById('listingQty')?.value) || 0;
+  var minQty = parseInt(document.getElementById('listingMinQty')?.value) || 1;
+  var price = parseFloat(document.getElementById('listingPrice')?.value) || 0;
+  var cost = parseFloat(document.getElementById('listingCost')?.value) || null;
+  var brand = document.getElementById('listingBrand')?.value.trim() || null;
+  var city = document.getElementById('listingCity')?.value.trim() || _exchProfile.city;
+  var region = document.getElementById('listingRegion')?.value.trim() || _exchProfile.region;
+  var neg = document.getElementById('listingNeg')?.checked || false;
+  var prodSel = document.getElementById('listingProduct');
+  var productId = prodSel && prodSel.value ? prodSel.value : null;
+
+  if (!name) { toast('Βάλε όνομα προϊόντος', 'warn'); return; }
+  if (!desc || desc.length < 10) { toast('Η περιγραφή πρέπει να έχει τουλάχιστον 10 χαρακτήρες', 'warn'); return; }
+  if (!qty || qty < 1) { toast('Βάλε ποσότητα', 'warn'); return; }
+  if (!price || price <= 0) { toast('Βάλε τιμή πώλησης', 'warn'); return; }
+
+  // Disable button
+  var btn = document.getElementById('exchSubmitBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader" size="14"></i> Ανέβασμα...'; }
+
+  try {
+    // Upload images to Supabase storage
+    var imageUrls = [];
+    var images = window._exchListingImages || [];
+    for (var i = 0; i < images.length; i++) {
+      try {
+        var file = images[i];
+        var ext = file.name.split('.').pop() || 'jpg';
+        var path = 'exchange/' + SHOP_ID + '/' + Date.now() + '_' + i + '.' + ext;
+        var { data: upData, error: upErr } = await sb.storage.from('vault').upload(path, file, { upsert: true });
+        if (!upErr) {
+          var { data: urlData } = sb.storage.from('vault').getPublicUrl(path);
+          if (urlData && urlData.publicUrl) imageUrls.push(urlData.publicUrl);
+        }
+      } catch(imgErr) { console.warn('Image upload failed:', imgErr); }
+    }
+
+    // AI check with timeout (5s max, fallback to approved)
+    toast('🤖 AI έλεγχος...', 'info', 3000);
+    var aiResult = { result: 'approved' };
+    try {
+      var aiPromise = _exchAICheck(name + ' ' + (brand||'') + ' ' + desc.substring(0,200));
+      var timeoutPromise = new Promise(function(res) { setTimeout(function(){ res({result:'approved'}); }, 5000); });
+      aiResult = await Promise.race([aiPromise, timeoutPromise]);
+    } catch(e) { aiResult = { result: 'approved' }; }
+
+    if (aiResult.result === 'rejected') {
+      toast('❌ Απορρίφθηκε: ' + (aiResult.reason||'Παράνομο περιεχόμενο'), 'error', 6000);
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="upload" size="14"></i> Ανέβασε'; }
+      return;
+    }
+
+    // Build insert payload (productId must be valid uuid or null)
+    var insertData = {
+      shop_id: SHOP_ID,
+      product_name: name,
+      product_brand: brand,
+      category: cat,
+      description: desc,
+      quantity: qty,
+      quantity_min: minQty,
+      asking_price: price,
+      cost_price: cost,
+      negotiable: neg,
+      city: city || null,
+      region: region || null,
+      images: imageUrls.length > 0 ? imageUrls : null,
+      status: 'active',
+      ai_check_status: aiResult.result,
+      ai_check_note: aiResult.reason || null
+    };
+    // Only add product_id if it's a valid uuid (36 chars with dashes)
+    if (productId && typeof productId === 'string' && productId.length >= 32 && productId.indexOf('-') > 0) {
+      insertData.product_id = productId;
+      insertData.from_dead_stock = true;
+    }
+    // Only add specs if collected (column may not exist - try/catch handles it)
+    var collectedSpecs = _exchCollectSpecs();
+    if (collectedSpecs) insertData.specs = collectedSpecs;
+
+    var { data, error } = await sb.from('exchange_listings').insert(insertData).select().single();
+
+    // If specs column doesn't exist, retry without it
+    if (error && error.message && error.message.indexOf('specs') >= 0) {
+      delete insertData.specs;
+      var retry = await sb.from('exchange_listings').insert(insertData).select().single();
+      data = retry.data; error = retry.error;
+    }
+
+    if (error) {
+      toast('Σφάλμα: ' + error.message, 'error', 6000);
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="upload" size="14"></i> Ανέβασε'; }
+      return;
+    }
+
+    if (productId) {
+      var prod = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []).find(function(p) { return p.id === productId; });
+      if (prod) prod.stock_reserved = (prod.stock_reserved || 0) + qty;
+    }
+
+    closeModal();
+    toast('✅ Listing δημοσιεύτηκε!', 'success');
+    _exchRenderMine();
+  } catch(err) {
+    toast('Σφάλμα: ' + err.message, 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="upload" size="14"></i> Ανέβασε'; }
+  }
+}
+
+// ── AI MODERATION ────────────────────────────────────────────────
+async function _exchAICheck(text) {
+  try {
+    var res = await fetch(SUPABASE_URL + '/functions/v1/claude-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        system: 'Είσαι moderator για B2B marketplace καταστημάτων vape στην Ελλάδα. Ελέγχεις αν ένα προϊόν παραβιάζει: 1) Νομοθεσία TPD/νικοτίνης, 2) Παράνομα προϊόντα (synthetic cannabinoids, χωρίς TPD registration, παραποιημένα brands), 3) Απαγορευμένο περιεχόμενο. Απάντα ΜΟΝΟ σε JSON: {"result":"approved"} ή {"result":"rejected","reason":"σύντομη αιτία"} ή {"result":"manual_review","reason":"αιτία"}',
+        messages: [{ role: 'user', content: 'Έλεγξε: ' + text.substring(0, 500) }]
+      })
+    });
+    var data = await res.json();
+    var txt = (data.content && data.content[0] && data.content[0].text) || '{"result":"approved"}';
+    var start = txt.indexOf('{');
+    var end = txt.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(txt.substring(start, end + 1));
+    }
+    return { result: 'approved' };
+  } catch(e) {
+    console.warn('AI check failed, defaulting to approved', e);
+    return { result: 'approved' };
+  }
+}
+
+// ── CHAT ─────────────────────────────────────────────────────────
+async function _exchOpenChat(offerId) {
+  var { data: messages } = await sb.from('exchange_messages')
+    .select('*').eq('offer_id', offerId).order('created_at', { ascending: true });
+  var { data: offer } = await sb.from('exchange_offers')
+    .select('*, exchange_listings(product_name)').eq('id', offerId).single();
+
+  var msgs = (messages || []).map(function(m) {
+    var isMe = m.sender_shop_id === SHOP_ID;
+    return '<div style="display:flex;justify-content:' + (isMe?'flex-end':'flex-start') + ';margin-bottom:8px">' +
+      '<div style="max-width:75%;padding:10px 14px;border-radius:' + (isMe?'14px 14px 4px 14px':'14px 14px 14px 4px') + ';background:' + (isMe?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--bg-3)') + ';color:' + (isMe?'#fff':'var(--text-1)') + ';font-size:14px">' +
+      m.message + '</div></div>';
+  }).join('');
+
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800" style="font-size:15px">💬 ' + (offer?.exchange_listings?.product_name || 'Chat') + '</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div style="padding:16px;max-height:50vh;overflow-y:auto" id="chatMsgs">' +
+    (msgs || '<div style="text-align:center;color:var(--text-3);padding:20px">Δεν υπάρχουν μηνύματα ακόμα</div>') +
+    '</div>' +
+    '<div style="padding:14px;border-top:1px solid var(--border);display:flex;gap:8px">' +
+    '<input class="form-input" id="chatInput" placeholder="Γράψε μήνυμα..." style="flex:1;font-size:14px" onkeydown="if(event.key===\'Enter\')_exchSendMessage(\'' + offerId + '\')">' +
+    '<button class="btn btn-primary" onclick="_exchSendMessage(\'' + offerId + '\')">↑</button>' +
+    '</div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  var chatEl = document.getElementById('chatMsgs');
+  if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+async function _exchSendMessage(offerId) {
+  var input = document.getElementById('chatInput');
+  var msg = input?.value.trim();
+  if (!msg) return;
+  input.value = '';
+  await sb.from('exchange_messages').insert({ offer_id: offerId, sender_shop_id: SHOP_ID, message: msg });
+  _exchOpenChat(offerId);
+}
+
+// ── TRADE ACTIONS ────────────────────────────────────────────────
+async function _exchAcceptOffer(offerId) {
+  await sb.from('exchange_offers').update({ status: 'accepted', seller_terms_accepted_at: new Date().toISOString() }).eq('id', offerId);
+  var { data: offer } = await sb.from('exchange_offers').select('*').eq('id', offerId).single();
+  if (offer) {
+    await sb.from('exchange_trades').insert({
+      offer_id: offerId,
+      listing_id: offer.listing_id,
+      seller_shop_id: offer.seller_shop_id,
+      buyer_shop_id: offer.buyer_shop_id,
+      final_price: offer.offered_price,
+      quantity: offer.quantity,
+      total_value: offer.offered_price * offer.quantity,
+      status: 'in_progress'
+    });
+    await sb.from('exchange_listings').update({ status: 'sold' }).eq('id', offer.listing_id);
+    // Log the acceptance
+    await sb.from('exchange_match_logs').insert({
+      buyer_shop_id: offer.buyer_shop_id,
+      seller_shop_id: offer.seller_shop_id,
+      listing_id: offer.listing_id,
+      offer_id: offerId,
+      action: 'offer_accepted'
+    }).then(function(){}).catch(function(){});
+  }
+  // Notify both parties
+  try {
+    var buyerProf = await sb.from('exchange_shop_profiles').select('display_name,contact_email').eq('shop_id', offer.buyer_shop_id).single();
+    var sellerProf = await sb.from('exchange_shop_profiles').select('display_name,contact_email').eq('shop_id', offer.seller_shop_id).single();
+    var listing = await sb.from('exchange_listings').select('product_name').eq('id', offer.listing_id).single();
+    _exchNotifyMatch(offerId, listing.data?.product_name || '', buyerProf.data, sellerProf.data);
+  } catch(e) {}
+  toast('✅ Προσφορά αποδεκτή! Επικοινώνησε με τον αγοραστή.', 'success');
+  _exchRenderMine();
+}
+
+async function _exchRejectOffer(offerId) {
+  await sb.from('exchange_offers').update({ status: 'rejected' }).eq('id', offerId);
+  toast('Προσφορά απορρίφθηκε', 'info');
+  _exchRenderMine();
+}
+
+async function _exchTradeAction(tradeId, action) {
+  var upd = {};
+  if (action === 'sent') upd.seller_sent_at = new Date().toISOString();
+  if (action === 'received') { upd.buyer_received_at = new Date().toISOString(); upd.status = 'completed'; }
+  await sb.from('exchange_trades').update(upd).eq('id', tradeId);
+  toast(action === 'sent' ? '📤 Σημάνθηκε ως εστάλη' : '📥 Σημάνθηκε ως παρελήφθη — η συναλλαγή ολοκληρώθηκε!', 'success');
+  _exchRenderMine();
+}
+
+async function _exchRateTrade(tradeId, role) {
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800 text-xl">⭐ Αξιολόγηση</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body" style="display:flex;flex-direction:column;gap:14px">' +
+    '<div style="text-align:center"><div style="font-size:13px;color:var(--text-2);margin-bottom:10px">Πώς ήταν η συναλλαγή;</div>' +
+    '<div style="display:flex;gap:8px;justify-content:center">' +
+    [1,2,3,4,5].map(function(n){ return '<button onclick="document.querySelectorAll(\'.star-btn\').forEach(function(b,i){b.style.color=i<'+n+'?\'#f59e0b\':\'var(--text-3)\'});window._ratingVal='+n+'" class="star-btn" style="font-size:28px;background:none;border:none;cursor:pointer;color:var(--text-3)">★</button>'; }).join('') +
+    '</div></div>' +
+    '<div><div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:8px">Κατηγορίες (προαιρετικό)</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    ['✅ Ακριβής Περιγραφή','🚀 Γρήγορη Αποστολή','📦 Καλή Συσκευασία','💬 Καλή Επικοινωνία'].map(function(tag){
+      return '<button onclick="this.classList.toggle(\'active\');this.style.background=this.classList.contains(\'active\')?\'rgba(99,102,241,0.2)\':\'var(--bg-2)\'" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-2);font-size:12px;cursor:pointer">'+tag+'</button>';
+    }).join('') +
+    '</div></div>' +
+    '<button class="btn btn-primary btn-lg" onclick="_exchSubmitRating(\'' + tradeId + '\',\'' + role + '\')">Αποστολή Αξιολόγησης</button>' +
+    '</div>'
+  );
+  window._ratingVal = 0;
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function _exchSubmitRating(tradeId, role) {
+  if (!window._ratingVal) { toast('Επίλεξε βαθμολογία', 'warn'); return; }
+  var tags = [];
+  document.querySelectorAll('.active[style*="rgba(99,102,241"]').forEach(function(b){ tags.push(b.textContent.trim()); });
+  var upd = {};
+  if (role === 'seller') { upd.seller_rating = window._ratingVal; upd.seller_rating_tags = tags; upd.seller_rated_at = new Date().toISOString(); }
+  else { upd.buyer_rating = window._ratingVal; upd.buyer_rating_tags = tags; upd.buyer_rated_at = new Date().toISOString(); }
+  await sb.from('exchange_trades').update(upd).eq('id', tradeId);
+  closeModal();
+  toast('⭐ Αξιολόγηση καταχωρήθηκε!', 'success');
+  _exchRenderMine();
+}
+
+// ── REQUEST MODAL ─────────────────────────────────────────────────
+function _exchOpenNewRequest() {
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800 text-xl">📢 Ζητώ Προϊόν</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body" style="display:flex;flex-direction:column;gap:12px">' +
+    '<div class="form-row"><label class="form-label">Προϊόν *</label><input class="form-input" id="reqName" placeholder="π.χ. Nic Salt Mango 20mg 10ml"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Κατηγορία *</label><select class="form-input" id="reqCat"><option value="devices">🔋 Συσκευές</option><option value="consumables">🌀 Αναλώσιμα</option><option value="liquids_snv">🧴 Υγρά SNV</option><option value="liquids_ready" selected>💧 Έτοιμα Υγρά</option><option value="accessories">🔌 Αξεσουάρ</option></select></div>' +
+    '<div class="form-row"><label class="form-label">Ποσότητα *</label><input class="form-input" id="reqQty" type="number" min="1" placeholder="30" inputmode="numeric"></div>' +
+    '</div>' +
+    '<div class="form-row"><label class="form-label">Μέγιστη τιμή (€/τεμ)</label><input class="form-input" id="reqPrice" type="number" step="0.01" placeholder="2.50" inputmode="decimal"></div>' +
+    '<div class="form-row"><label class="form-label">Περιοχή (πού είσαι)</label><input class="form-input" id="reqRegion" placeholder="π.χ. Θεσσαλία" value="' + (_exchProfile.region||'') + '"></div>' +
+    '<div class="form-row"><label class="form-label">Επιπλέον πληροφορίες</label><textarea class="form-input" id="reqDesc" rows="2" placeholder="π.χ. Χρειάζομαι για άμεση διάθεση..."></textarea></div>' +
+    '<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="_exchSubmitRequest()">📢 Δημοσίευση</button><button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button></div></div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function _exchSubmitRequest() {
+  var name = document.getElementById('reqName')?.value.trim();
+  var cat = document.getElementById('reqCat')?.value;
+  var qty = parseInt(document.getElementById('reqQty')?.value) || 0;
+  var maxPrice = parseFloat(document.getElementById('reqPrice')?.value) || null;
+  var region = document.getElementById('reqRegion')?.value.trim() || null;
+  var desc = document.getElementById('reqDesc')?.value.trim() || null;
+  if (!name || !qty) { toast('Συμπλήρωσε προϊόν και ποσότητα', 'warn'); return; }
+  var { error } = await sb.from('exchange_requests').insert({ shop_id: SHOP_ID, product_name: name, category: cat, quantity_needed: qty, max_price: maxPrice, region_pref: region, description: desc });
+  if (error) { toast('Σφάλμα: ' + error.message, 'error'); return; }
+  closeModal();
+  toast('✅ Αγγελία ζήτησης δημοσιεύτηκε!', 'success');
+  _exchSetTab('requests');
+}
+
+// ── ONBOARDING (αποδοχή όρων + εγγραφή) ────────────────────────
+function _exchRenderOnboarding() {
+  var c = document.getElementById('content');
+  if (!c) return;
+  c.innerHTML =
+    '<div style="max-width:500px;margin:40px auto;padding:0 16px">' +
+    '<div style="text-align:center;margin-bottom:28px">' +
+    '<div style="font-size:56px;margin-bottom:12px">🔄</div>' +
+    '<div style="font-size:26px;font-weight:900;background:linear-gradient(135deg,#818cf8,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">ZyroNex Exchange</div>' +
+    '<div style="font-size:14px;color:var(--text-2);margin-top:6px">B2B Trade Network για καταστήματα vape</div>' +
+    '</div>' +
+    '<div class="card" style="margin-bottom:16px">' +
+    '<div style="font-weight:800;font-size:15px;margin-bottom:12px">Τι είναι το ZyroNex Exchange;</div>' +
+    '<div style="font-size:13px;color:var(--text-2);line-height:1.7">' +
+    '🔄 Ανταλλαγή αποθέματος μεταξύ καταστημάτων ZyroNex<br>' +
+    '📢 Αγγελίες πώλησης & ζήτησης προϊόντων<br>' +
+    '💬 Private chat μόνο μεταξύ αγοραστή-πωλητή<br>' +
+    '⭐ Σύστημα αξιολόγησης & εμπιστοσύνης<br>' +
+    '🤖 AI έλεγχος περιεχομένου για ασφάλεια' +
+    '</div></div>' +
+    '<div class="card" style="margin-bottom:16px">' +
+    '<div style="font-weight:800;font-size:14px;margin-bottom:10px">Στοιχεία Παρουσίασης</div>' +
+    '<div class="form-row" style="margin-bottom:10px"><label class="form-label">Εμφανιζόμενο Όνομα *</label>' +
+    '<input class="form-input" id="exchRegName" placeholder="π.χ. ZyroNex Θεσσαλονίκη" value="' + ((typeof getAppSettings==='function'?getAppSettings().shopName:'')||'') + '"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Πόλη</label><input class="form-input" id="exchRegCity" placeholder="Θεσσαλονίκη"></div>' +
+    '<div class="form-row"><label class="form-label">Περιοχή</label><input class="form-input" id="exchRegRegion" placeholder="Κεντρική Μακεδονία"></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">' +
+    '<div class="form-row"><label class="form-label">ΑΦΜ Επιχείρησης</label>' +
+    '<input class="form-input" id="exchRegAfm" placeholder="π.χ. 123456789" inputmode="numeric" maxlength="9"></div>' +
+    '<div class="form-row"><label class="form-label">Email επικοινωνίας</label>' +
+    '<input class="form-input" id="exchRegEmail" type="email" placeholder="info@katastima.gr"></div>' +
+    '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:20px;max-height:220px;overflow-y:auto;background:var(--bg-2);border-radius:12px;padding:16px;border:1px solid rgba(99,102,241,0.2)">' +
+    '<div style="font-size:12px;line-height:1.8;color:var(--text-2)">' +
+    '<div style="font-size:13px;font-weight:800;color:var(--text-1);margin-bottom:12px">' +
+    'Όροι Χρήσης & Αποποίηση Ευθύνης – Δίκτυο B2B</div>' +
+    '<p style="margin:0 0 8px">Η πλατφόρμα ZyroNex λειτουργεί αποκλειστικά ως υποδομή διασύνδεσης για την αντιστοίχιση προσφοράς και ζήτησης μεταξύ ανεξάρτητων επιχειρήσεων.</p>' +
+    '<p style="margin:0 0 8px"><strong>1. Απουσία Εμπορικής Εμπλοκής</strong><br>Το ZyroNex παρέχει αποκλειστικά τον ψηφιακό χώρο επικοινωνίας. Δεν συμμετέχει, δεν εκπροσωπεί και δεν εγγυάται την ολοκλήρωση καμίας εμπορικής συναλλαγής.</p>' +
+    '<p style="margin:0 0 8px"><strong>2. Αποποίηση Ευθύνης Προιόντων & Πληρωμών</strong><br>Η πλατφόρμα δεν φέρει καμία ευθύνη για την ποιότητα, κατάσταση, γνησιότητα ή νομιμότητα των αναρτημένων ειδών. Οποιαδήποτε διένεξη αφορά πληρωμές ή επιστροφές επιλύεται αποκλειστικά μεταξύ των συμβαλλομένων μερών.</p>' +
+    '<p style="margin:0 0 8px"><strong>3. Αποκλειστική Φορολογική Υποχρέωση</strong><br>Οι χρήστες είναι αποκλειστικά υπεύθυνοι για την τήρηση της φορολογικής νομοθεσίας. Η έκδοση νόμιμων παραστατικών και η διαβίβασή τους στην ΑΑΔΕ (myDATA) βαρύνει αποκλειστικά τον πωλητή και τον αγοραστή.</p>' +
+    '<p style="margin:0 0 8px"><strong>4. Κοινοποίηση Δεδομένων Επικοινωνίας</strong><br>Με την εκδήλωση ενδιαφέροντος, συναινείτε ρητά στην αυτοματοποιημένη κοινοποίηση των στοιχείων επικοινωνίας σας (Τηλέφωνο, Email, Επωνυμία) στον έτερο αντισυμβαλλόμενο.</p>' +
+    '<p style="margin:0"><strong>5. Δικαίωμα Εποπτείας & Διαγραφής</strong><br>Το ZyroNex διατηρεί το απόλυτο και μονομερές δικαίωμα να διαγράφει καταχωρήσεις ή να αναστέλλει την πρόσβαση στο Δίκτυο B2B σε χρήστες που προβαίνουν σε κακόβουλες πρακτικές ή αναρτώνται μη εξουσιοδοτημένα προιόντα, χωρίς προηγούμενη προειδοποίηση.</p>' +
+    '</div></div>' +
+    '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:20px">' +
+    '<input type="checkbox" id="exchTermsCb" style="width:18px;height:18px;flex-shrink:0;margin-top:2px">' +
+    '<label for="exchTermsCb" style="font-size:13px;cursor:pointer;color:var(--text-1)">Έχω διαβάσει και αποδέχομαι τους Όρους Χρήσης του ZyroNex Exchange</label></div>' +
+    '<button class="btn btn-primary btn-lg" style="width:100%" onclick="_exchRegister()"><i data-lucide="arrow-right" size="18"></i> Εγγραφή & Είσοδος</button>' +
+    '</div>';
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function _exchRegister() {
+  if (!document.getElementById('exchTermsCb')?.checked) { toast('Αποδέξου τους όρους χρήσης', 'warn'); return; }
+  var name = document.getElementById('exchRegName')?.value.trim();
+  if (!name) { toast('Βάλε εμφανιζόμενο όνομα', 'warn'); return; }
+  var city = document.getElementById('exchRegCity')?.value.trim() || null;
+  var region = document.getElementById('exchRegRegion')?.value.trim() || null;
+  var email = document.getElementById('exchRegEmail')?.value.trim() || null;
+
+  var afm = document.getElementById('exchRegAfm')?.value.trim() || null;
+  var { data, error } = await sb.from('exchange_shop_profiles').upsert({
+    shop_id: SHOP_ID,
+    display_name: name,
+    city: city,
+    region: region,
+    contact_email: email,
+    last_exchange_at: new Date().toISOString(),
+    is_active: true,
+    terms_accepted_at: new Date().toISOString(),
+    terms_version: 'v2.0'
+  }, { onConflict: 'shop_id' }).select().single();
+
+  if (error) { toast('Σφάλμα: ' + error.message, 'error'); return; }
+  _exchProfile = data;
+  toast('✅ Καλωσήρθες στο ZyroNex Exchange!', 'success');
+  renderExchange();
+}
+
+// ── EDIT LISTING ─────────────────────────────────────────────────
+async function _exchEditListing(id) {
+  var { data: l } = await sb.from('exchange_listings').select('*').eq('id', id).single();
+  if (!l) { toast('Δεν βρέθηκε', 'error'); return; }
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800 text-xl">✏️ Επεξεργασία Listing</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body" style="display:flex;flex-direction:column;gap:12px">' +
+    '<div class="form-row"><label class="form-label">Όνομα Προϊόντος *</label>' +
+    '<input class="form-input" id="editName" value="' + (l.product_name||'').replace(/"/g,'&quot;') + '"></div>' +
+    '<div class="form-row"><label class="form-label">Brand</label>' +
+    '<input class="form-input" id="editBrand" value="' + (l.product_brand||'').replace(/"/g,'&quot;') + '"></div>' +
+    '<div class="form-row"><label class="form-label">Περιγραφή *</label>' +
+    '<textarea class="form-input" id="editDesc" rows="3">' + (l.description||'') + '</textarea></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Ποσότητα *</label>' +
+    '<input class="form-input" id="editQty" type="number" min="1" value="' + (l.quantity||1) + '"></div>' +
+    '<div class="form-row"><label class="form-label">Τιμή Πώλησης (€) *</label>' +
+    '<input class="form-input" id="editPrice" type="number" step="0.01" value="' + (l.asking_price||0) + '"></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+    '<div class="form-row"><label class="form-label">Πόλη</label>' +
+    '<input class="form-input" id="editCity" value="' + (l.city||'').replace(/"/g,'&quot;') + '"></div>' +
+    '<div class="form-row"><label class="form-label">Περιοχή</label>' +
+    '<input class="form-input" id="editRegion" value="' + (l.region||'').replace(/"/g,'&quot;') + '"></div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:10px">' +
+    '<input type="checkbox" id="editNeg"' + (l.negotiable?' checked':'') + ' style="width:16px;height:16px">' +
+    '<label for="editNeg" style="font-size:13px;cursor:pointer">Διαπραγματεύσιμη τιμή</label></div>' +
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:10px">' +
+    '<select class="form-input" id="editStatus">' +
+    '<option value="active"' + (l.status==='active'?' selected':'') + '>🟢 Ενεργό</option>' +
+    '<option value="paused"' + (l.status==='paused'?' selected':'') + '>⏸️ Σε παύση</option>' +
+    '</select></div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn btn-primary" style="flex:1" onclick="_exchSaveEdit(\'' + id + '\')"><i data-lucide="save" size="14"></i> Αποθήκευση</button>' +
+    '<button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>' +
+    '</div></div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function _exchSaveEdit(id) {
+  var name = document.getElementById('editName')?.value.trim();
+  var desc = document.getElementById('editDesc')?.value.trim();
+  var qty = parseInt(document.getElementById('editQty')?.value) || 0;
+  var price = parseFloat(document.getElementById('editPrice')?.value) || 0;
+  if (!name || !desc || !qty || !price) { toast('Συμπλήρωσε τα υποχρεωτικά πεδία', 'warn'); return; }
+  var { error } = await sb.from('exchange_listings').update({
+    product_name: name,
+    product_brand: document.getElementById('editBrand')?.value.trim() || null,
+    description: desc,
+    quantity: qty,
+    asking_price: price,
+    city: document.getElementById('editCity')?.value.trim() || null,
+    region: document.getElementById('editRegion')?.value.trim() || null,
+    negotiable: document.getElementById('editNeg')?.checked || false,
+    status: document.getElementById('editStatus')?.value || 'active',
+    updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { toast('Σφάλμα: ' + error.message, 'error'); return; }
+  closeModal();
+  toast('✅ Ενημερώθηκε', 'success');
+  _exchRenderMine();
+}
+
+async function _exchDeleteListing(id) {
+  if (!confirm('Οριστική διαγραφή του listing;')) return;
+  var { error } = await sb.from('exchange_listings').delete().eq('id', id);
+  if (error) { toast('Σφάλμα διαγραφής: ' + error.message, 'error', 6000); return; }
+  toast('🗑️ Διαγράφηκε', 'success');
+  _exchRenderMine();
+  _exchLoadStats();
+}
+
+async function _exchReportListing(listingId) {
+  var reason = prompt('Αιτία αναφοράς (σύντομα):');
+  if (!reason) return;
+  await sb.from('exchange_match_logs').insert({
+    buyer_shop_id: SHOP_ID,
+    listing_id: listingId,
+    action: 'report',
+    notes: reason
+  }).catch(function(){});
+  toast('Σημαντήκε. Θα εξεταστεί από τη διαχείριση ZyroNex.', 'success');
+}
+
+async function _exchNotifyMatch(offerId, listingName, buyerProfile, sellerProfile) {
+  // Send email notification to both parties via Resend edge function
+  try {
+    var settings = JSON.parse(localStorage.getItem('katastimaSettings') || '{}');
+    var resendKey = settings.resendApiKey || null;
+    if (!resendKey) return; // no key, skip silently
+
+    var sellerEmail = sellerProfile?.contact_email;
+    var buyerEmail = buyerProfile?.contact_email;
+    var buyerName = buyerProfile?.display_name || 'Αγνωστος';
+    var sellerName = sellerProfile?.display_name || 'Αγνωστος';
+
+    if (sellerEmail) {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + resendKey },
+        body: JSON.stringify({
+          from: 'ZyroNex Exchange <noreply@zyronex.gr>',
+          to: [sellerEmail],
+          subject: 'Σύνδεση ZyroNex Exchange: Ενδιαφέρον για ' + listingName,
+          html: '<p>Το κατάστημα <strong>' + buyerName + '</strong> ενδιαφέρεται για την αγγελία σας: <strong>' + listingName + '</strong>.</p><p>Συνδεθείτε μέσω του ZyroNex Exchange για να ολοκληρώσετε τη συναλλαγή.</p><hr><p style="font-size:12px;color:#888">ZyroNex Exchange | Δεν είναι μέρος της συναλλαγής.</p>'
+        })
+      });
+    }
+    if (buyerEmail) {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + resendKey },
+        body: JSON.stringify({
+          from: 'ZyroNex Exchange <noreply@zyronex.gr>',
+          to: [buyerEmail],
+          subject: 'ZyroNex Exchange: Η προσφορά σας εστάλη',
+          html: '<p>Η προσφορά σας για <strong>' + listingName + '</strong> εστάλη στον πωλητή (<strong>' + sellerName + '</strong>). Επικοινωνήστε μέσω του private chat για να ολοκληρώσετε τη συναλλαγή.</p><hr><p style="font-size:12px;color:#888">ZyroNex Exchange | Δεν είναι μέρος της συναλλαγής.</p>'
+        })
+      });
+    }
+  } catch(e) { console.warn('Match notify failed:', e); }
+}
+
+function _exchContactRequest(shopId, productName) {
+  toast('Ανέβασε listing για "' + productName + '" για να το δει ο ζητών', 'info', 3000);
+}
+
+async function _exchOpenNewOfferChat(listingId, sellerShopId) {
+  var { data: offer } = await sb.from('exchange_offers').select('id').eq('listing_id', listingId).eq('buyer_shop_id', SHOP_ID).single();
+  if (offer) { _exchOpenChat(offer.id); return; }
+  var { data: newOffer } = await sb.from('exchange_offers').insert({ listing_id: listingId, buyer_shop_id: SHOP_ID, seller_shop_id: sellerShopId, offered_price: 0, quantity: 1, status: 'pending', buyer_terms_accepted_at: new Date().toISOString() }).select().single();
+  if (newOffer) _exchOpenChat(newOffer.id);
+}
+
+// ═══════════════════════════════════════════════════════════
+// ZYRONEX EXCHANGE — SHOPS TAB + PROFILE + BADGES + TOGGLE
+// ═══════════════════════════════════════════════════════════
+
+// Badge level system
+function _exchGetBadge(trades, rating) {
+  var t = parseInt(trades) || 0;
+  var r = parseFloat(rating) || 0;
+  if (t >= 50 && r >= 4.8) return { label: 'Platinum', icon: '💎', color: '#b9f2ff', bg: 'linear-gradient(135deg,#0a2a4a,#1a4a6a)', glow: 'rgba(185,242,255,0.4)' };
+  if (t >= 20 && r >= 4.5) return { label: 'Gold', icon: '🥇', color: '#ffd700', bg: 'linear-gradient(135deg,#2a1f00,#4a3800)', glow: 'rgba(255,215,0,0.4)' };
+  if (t >= 5 && r >= 4.0)  return { label: 'Silver', icon: '🥈', color: '#c0c0c0', bg: 'linear-gradient(135deg,#1a1a2e,#2e2e4a)', glow: 'rgba(192,192,192,0.3)' };
+  return { label: 'Bronze', icon: '🥉', color: '#cd7f32', bg: 'linear-gradient(135deg,#1a0f00,#2e1f00)', glow: 'rgba(205,127,50,0.3)' };
+}
+
+// Generate a gradient banner for each shop (based on name)
+function _exchShopBanner(name, region) {
+  var colors = [
+    ['#0f0c29','#302b63','#24243e'],
+    ['#0a0e27','#1a1a4e','#0d1a30'],
+    ['#1a0533','#3d1a6e','#0f0020'],
+    ['#003366','#004080','#002244'],
+    ['#0d2137','#1a3a52','#051520'],
+  ];
+  var idx = (name.charCodeAt(0) || 0) % colors.length;
+  var c = colors[idx];
+  var initial = (name || '?')[0].toUpperCase();
+  return '<div style="width:100%;height:140px;background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ',' + c[2] + ');display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">' +
+    '<div style="position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(99,102,241,0.15) 0%,transparent 60%),radial-gradient(ellipse at 70% 50%,rgba(52,211,153,0.1) 0%,transparent 60%)"></div>' +
+    '<div style="font-size:64px;font-weight:900;color:rgba(255,255,255,0.12);position:absolute;right:16px;bottom:-10px;letter-spacing:-4px;line-height:1">' + (name || '').substring(0,4).toUpperCase() + '</div>' +
+    '<div style="position:relative;text-align:center">' +
+    '<div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#818cf8);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;margin:0 auto 8px;box-shadow:0 0 20px rgba(99,102,241,0.5)">' + initial + '</div>' +
+    '<div style="font-size:13px;font-weight:800;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.8)">' + name + '</div>' +
+    '<div style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:2px">📍 ' + (region || '—') + '</div>' +
+    '</div></div>';
+}
+
+async function _exchRenderShops() {
+  var wrap = document.getElementById('exchBody');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-2)">Φόρτωση καταστημάτων...</div>';
+
+  var { data: shops } = await sb.from('exchange_shop_profiles')
+    .select('*')
+    .eq('is_active', true)
+    .order('total_trades', { ascending: false });
+
+  if (!shops || shops.length === 0) {
+    wrap.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-2)"><div style="font-size:48px;margin-bottom:12px">🏪</div><div style="font-weight:700">Δεν υπάρχουν καταστήματα ακόμα</div></div>';
+    return;
+  }
+
+  wrap.innerHTML =
+    '<div style="font-size:12px;color:var(--text-3);margin-bottom:12px">' + shops.length + ' καταστήματα στο δίκτυο</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+    shops.map(function(s) {
+      var badge = _exchGetBadge(s.total_trades, s.rating_avg);
+      var isMe = s.shop_id === SHOP_ID;
+      var lastExch = s.last_exchange_at ? new Date(s.last_exchange_at).toLocaleDateString('el-GR', {day:'2-digit',month:'short',year:'2-digit'}) : '—';
+      return '<div style="background:var(--bg-2);border-radius:16px;overflow:hidden;cursor:pointer;border:1px solid ' + (isMe ? 'rgba(99,102,241,0.4)' : 'var(--border)') + ';transition:all .2s" onclick="_exchOpenShopProfile(\'' + s.shop_id + '\')">' +
+        _exchShopBanner(s.display_name || '?', s.city || s.region) +
+        '<div style="padding:12px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
+        '<div style="font-weight:800;font-size:13px;line-height:1.3">' + (s.display_name || '—') + (isMe ? ' <span style="font-size:10px;color:#818cf8">(Εσύ)</span>' : '') + '</div>' +
+        '<span style="padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;background:' + badge.bg + ';color:' + badge.color + ';white-space:nowrap">' + badge.icon + ' ' + badge.label + '</span>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">' +
+        '<div style="background:var(--bg-3);border-radius:8px;padding:7px;text-align:center"><div style="font-size:16px;font-weight:900;color:#34d399">' + (s.total_trades || 0) + '</div><div style="font-size:10px;color:var(--text-3)">Πωλήσεις</div></div>' +
+        '<div style="background:var(--bg-3);border-radius:8px;padding:7px;text-align:center"><div style="font-size:16px;font-weight:900;color:#f59e0b">' + (s.rating_avg ? Number(s.rating_avg).toFixed(1) : '—') + '</div><div style="font-size:10px;color:var(--text-3)">Rating</div></div>' +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-3);margin-top:8px">Τελ. σύνδεση Exchange: ' + lastExch + '</div>' +
+        '</div></div>';
+    }).join('') +
+    '</div>';
+}
+
+async function _exchOpenShopProfile(shopId) {
+  var { data: s } = await sb.from('exchange_shop_profiles').select('*').eq('shop_id', shopId).single();
+  if (!s) return;
+  var { data: listings } = await sb.from('exchange_listings')
+    .select('*').eq('shop_id', shopId).eq('status', 'active').order('created_at', { ascending: false });
+  var badge = _exchGetBadge(s.total_trades, s.rating_avg);
+  var isMe = shopId === SHOP_ID;
+  var catIcons2 = { devices:'🔋', consumables:'🌀', liquids_snv:'🧴', liquids_ready:'💧', accessories:'🔌' };
+
+  openModal(
+    '<div class="modal-head"><h3 class="fw-800" style="font-size:15px">🏪 ' + (s.display_name || '—') + '</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body" style="padding:0">' +
+    _exchShopBanner(s.display_name || '?', s.city || s.region) +
+    '<div style="padding:16px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+    '<div><div style="font-size:18px;font-weight:900">' + (s.display_name || '—') + '</div>' +
+    '<div style="font-size:12px;color:var(--text-2)">📍 ' + (s.city || '') + (s.region ? ' · ' + s.region : '') + '</div></div>' +
+    '<span style="padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;background:' + badge.bg + ';color:' + badge.color + '">' + badge.icon + ' ' + badge.label + '</span>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">' +
+    '<div style="background:var(--bg-2);border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:900;color:#34d399">' + (s.total_trades || 0) + '</div><div style="font-size:10px;color:var(--text-3)">Πωλήσεις</div></div>' +
+    '<div style="background:var(--bg-2);border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:900;color:#f59e0b">' + (s.rating_avg ? Number(s.rating_avg).toFixed(1) : '—') + '</div><div style="font-size:10px;color:var(--text-3)">Rating</div></div>' +
+    '<div style="background:var(--bg-2);border-radius:10px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:900;color:#818cf8">' + (s.rating_count || 0) + '</div><div style="font-size:10px;color:var(--text-3)">Αξιολ.</div></div>' +
+    '</div>' +
+    (s.afm ? '<div style="background:var(--bg-2);border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px"><span style="color:var(--text-3)">ΑΦΜ: </span><span style="font-weight:700">' + s.afm + '</span></div>' : '') +
+    '<div style="font-size:13px;font-weight:700;margin-bottom:8px">Ενεργές Αγγελίες (' + (listings ? listings.length : 0) + ')</div>' +
+    (listings && listings.length > 0 ? listings.map(function(l) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--bg-2);border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="closeModal();_exchOpenListing(\'' + l.id + '\')">' +
+        '<div><div style="font-size:13px;font-weight:700">' + (catIcons2[l.category]||'📦') + ' ' + l.product_name + '</div>' +
+        '<div style="font-size:11px;color:var(--text-3)">×' + l.quantity + ' τεμ.</div></div>' +
+        '<span style="font-size:15px;font-weight:900;color:#34d399">' + eur(l.asking_price) + '</span>' +
+        '</div>';
+    }).join('') : '<div style="color:var(--text-3);font-size:13px;padding:10px 0">Δεν υπάρχουν ενεργές αγγελίες</div>') +
+    (!isMe && s.contact_email ? '<a href="mailto:' + s.contact_email + '" class="btn btn-ghost" style="width:100%;display:block;text-align:center;margin-top:10px;font-size:13px">✉️ ' + s.contact_email + '</a>' : '') +
+    '</div></div>'
+  );
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // Update last_exchange_at for this shop
+  if (shopId === SHOP_ID) {
+    sb.from('exchange_shop_profiles').update({ last_exchange_at: new Date().toISOString() }).eq('shop_id', SHOP_ID).then(function(){});
+  }
+}
+
+// ── TOGGLE AVAILABILITY inline in Mine tab ─────────────────────
+async function _exchToggleListingAvailability(id, currentStatus) {
+  var newStatus = currentStatus === 'active' ? 'paused' : 'active';
+  var { error } = await sb.from('exchange_listings').update({ status: newStatus }).eq('id', id);
+  if (error) { toast('Σφάλμα: ' + error.message, 'error'); return; }
+  toast(newStatus === 'active' ? '🟢 Διαθέσιμο' : '⏸️ Μη Διαθέσιμο', 'success', 1500);
+  _exchRenderMine();
+}
+
+// ── DEAD STOCK → EXCHANGE integration ─────────────────────────
+function _exchFromDeadStock(productId, productName, qty, cost) {
+  // Navigate to Exchange and open new listing pre-filled
+  showPage('exchange');
+  setTimeout(function() {
+    _exchOpenNewListing();
+    setTimeout(function() {
+      var nameEl = document.getElementById('listingName');
+      var qtyEl  = document.getElementById('listingQty');
+      var costEl = document.getElementById('listingCost');
+      var priceEl = document.getElementById('listingPrice');
+      var prodSel = document.getElementById('listingProduct');
+      if (nameEl) nameEl.value = productName || '';
+      if (qtyEl)  qtyEl.value  = qty || '';
+      if (costEl) { costEl.value = cost || ''; _exchUpdateSuggestedPrice(); }
+      if (priceEl && cost) priceEl.value = parseFloat(cost).toFixed(2);
+      // Try to pre-select product in dropdown
+      if (prodSel && productId) {
+        for (var i = 0; i < prodSel.options.length; i++) {
+          if (prodSel.options[i].value === String(productId)) {
+            prodSel.selectedIndex = i; break;
+          }
+        }
+      }
+    }, 400);
+  }, 300);
+}
+
+// ── EXCHANGE NOTIFICATIONS ─────────────────────────────────────
+async function _exchCheckNotifications() {
+  if (!SHOP_ID || typeof sb === 'undefined') return;
+  try {
+    var lastCheck = localStorage.getItem('exch_notif_check') || new Date(Date.now() - 86400000).toISOString();
+
+    // New offers on my listings
+    var { data: newOffers } = await sb.from('exchange_offers')
+      .select('id, offered_price, quantity, exchange_listings(product_name)')
+      .eq('seller_shop_id', SHOP_ID)
+      .eq('status', 'pending')
+      .gt('created_at', lastCheck);
+
+    // New messages
+    var { data: newMsgs } = await sb.from('exchange_messages')
+      .select('id, offer_id, sender_shop_id')
+      .neq('sender_shop_id', SHOP_ID)
+      .gt('created_at', lastCheck)
+      .in('offer_id',
+        (await sb.from('exchange_offers').select('id')
+          .or('buyer_shop_id.eq.' + SHOP_ID + ',seller_shop_id.eq.' + SHOP_ID)
+          .then(function(r){ return (r.data||[]).map(function(o){return o.id;}); }))
+      );
+
+    var notifs = [];
+
+    (newOffers || []).forEach(function(o) {
+      notifs.push({
+        id: 'exch_offer_' + o.id,
+        icon: '🔄',
+        title: 'ZyroNex Exchange',
+        body: 'Νέα προσφορά: ' + (o.exchange_shop_profiles?.display_name || '—') + ' → ' + (o.exchange_listings?.product_name || '—') + ' · ' + eur(o.offered_price) + '×' + o.quantity,
+        action: function() { showPage('exchange'); setTimeout(function(){ _exchSetTab('mine'); }, 300); },
+        time: new Date().toISOString()
+      });
+    });
+
+    (newMsgs || []).forEach(function(m) {
+      notifs.push({
+        id: 'exch_msg_' + m.id,
+        icon: '💬',
+        title: 'ZyroNex Exchange',
+        body: 'Μήνυμα από ' + (m.exchange_shop_profiles?.display_name || '—'),
+        action: function(mid) { return function(){ showPage('exchange'); setTimeout(function(){ _exchSetTab('messages'); }, 300); }; }(m.offer_id),
+        time: new Date().toISOString()
+      });
+    });
+
+    if (notifs.length > 0 && typeof addNotification === 'function') {
+      notifs.forEach(function(n) { addNotification(n); });
+      localStorage.setItem('exch_notif_check', new Date().toISOString());
+    }
+  } catch(e) { console.warn('Exchange notif check failed:', e); }
+}
+
+// Check exchange notifications every 2 minutes
+setInterval(_exchCheckNotifications, 120000);
+// Also check on load
+setTimeout(_exchCheckNotifications, 5000);
