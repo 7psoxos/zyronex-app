@@ -41382,7 +41382,7 @@ ZBUI.bind = function(){
   const bk=c.querySelector('#zbBack'); if(bk) bk.onclick=ZBUI.exit;
   const sv=c.querySelector('#zbSave'); if(sv) sv.onclick=ZBUI.saveNow;
   // Mobile tabs
-  c.querySelectorAll('.zbui-mtab').forEach(function(b){ b.onclick=function(){ ZBUI.setMobileView(b.getAttribute('data-mview')); }; });
+  c.querySelectorAll('.zbui-mtab').forEach(function(b){ b.onclick=function(){ var v=b.getAttribute('data-mview'); ZBUI.setMobileView((ZBUI.state.mview===v && v!=='canvas') ? 'canvas' : v); }; });
 };
 
 // ── ACTIONS ──────────────────────────────────────────────────────────────
