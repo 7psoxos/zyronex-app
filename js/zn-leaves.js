@@ -14576,7 +14576,7 @@ function updateShiftTasksBanner(){
         <strong style="color:${color}">${isUrgent?`${overdue.length} εκπρόθεσμα tasks!`:`${pending.length} εκκρεμή tasks`}</strong>
         <span style="color:var(--text-2);margin-left:6px">Επόμενο: ${next.text}${next.scheduledTime?` (${next.scheduledTime})`:''}</span>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="showPage('shifts')" style="font-size:12px;padding:4px 10px">Δες όλα</button>
+      <button class="btn btn-ghost btn-sm" onclick="openTasksView()" style="font-size:12px;padding:4px 10px;min-height:44px">Δες όλα</button>
       <button onclick="dismissShiftTasksBanner()" aria-label="Κλείσιμο" title="Κλείσιμο" style="background:transparent;border:1px solid ${color};color:${color};border-radius:6px;width:28px;height:28px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;-webkit-tap-highlight-color:transparent">✕</button>
     </div>
   `;
@@ -14591,6 +14591,86 @@ function dismissShiftTasksBanner(){
     sessionStorage.setItem('shiftTasksBannerDismissedAt', Date.now().toString());
   } catch(_){}
 }
+
+function openTasksView(){
+  if(!CURRENT_USER) return;
+  if((CURRENT_USER.perms||[]).includes('*') || (typeof can === 'function' && can('users'))){
+    showPage('shifts');
+  } else {
+    openMyTasksModal();
+  }
+}
+
+function openMyTasksModal(){
+  const activeShift = (SHIFTS_CACHE||[]).find(s => s.user_id===CURRENT_USER.id && !s.ended_at);
+
+  if(!activeShift){
+    openModal(`
+      <div class="modal-head"><h3 class="fw-800 text-xl">Τα tasks μου</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>
+      <div class="modal-body" style="padding:32px 16px;text-align:center">
+        <i data-lucide="clock" size="32" style="color:var(--text-3);margin-bottom:12px"></i>
+        <div style="color:var(--text-2)">Δεν έχεις ενεργή βάρδια</div>
+      </div>
+    `);
+    return;
+  }
+
+  _renderMyTasksModalContent(activeShift);
+}
+
+function _renderMyTasksModalContent(shift){
+  const tasks = shift.tasks || [];
+  const done = tasks.filter(t=>t.done).length;
+  const phaseLabel = {start:'Έναρξη', during:'Διάρκεια', end:'Λήξη'};
+  const priorityColor = {high:'#ef4444', medium:'#f59e0b', low:'var(--text-2)'};
+  const now = new Date();
+  const currentHHMM = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+
+  const tasksHTML = tasks.length === 0
+    ? `<div style="padding:24px;text-align:center;color:var(--text-2)">Δεν υπάρχουν καθήκοντα για αυτή τη βάρδια.</div>`
+    : tasks.map((t,i) => {
+        const isOverdue = !t.done && t.scheduledTime && t.scheduledTime <= currentHHMM;
+        return `
+        <label style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;background:var(--bg-1);border-radius:10px;cursor:pointer;${t.done?'opacity:0.55':''}${isOverdue?';border-left:3px solid #ef4444':''};-webkit-tap-highlight-color:transparent" onclick="toggleShiftTask(${shift.id},${i});setTimeout(()=>_refreshMyTasksModal(${shift.id}),250)">
+          <input type="checkbox" ${t.done?'checked':''} style="width:20px;height:20px;min-width:20px;margin-top:2px;cursor:pointer;accent-color:var(--accent)" onclick="event.stopPropagation();" onchange="toggleShiftTask(${shift.id},${i});setTimeout(()=>_refreshMyTasksModal(${shift.id}),250)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;${t.done?'text-decoration:line-through':''}${isOverdue?';color:#ef4444':''}">${t.text}</div>
+            <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+              ${t.phase ? `<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:var(--bg-2);color:var(--text-2)">${phaseLabel[t.phase]||t.phase}</span>` : ''}
+              ${t.scheduledTime ? `<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:var(--bg-2);color:${isOverdue?'#ef4444':'var(--text-2)'}">${t.scheduledTime}${isOverdue?' ⚠️':''}</span>` : ''}
+              ${t.priority && t.priority!=='medium' ? `<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:var(--bg-2);color:${priorityColor[t.priority]||'var(--text-2)'}">${t.priority}</span>` : ''}
+            </div>
+          </div>
+        </label>`;
+      }).join('');
+
+  const html = `
+    <div class="modal-head" style="border-bottom:1px solid var(--border)">
+      <div>
+        <h3 class="fw-800 text-xl">Τα tasks μου</h3>
+        <div style="font-size:12px;color:var(--text-2);margin-top:2px">${done}/${tasks.length} ολοκληρωμένα</div>
+      </div>
+      <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
+    </div>
+    <div class="modal-body" style="padding:12px 16px;max-height:65vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom,16px)">
+      <div style="display:flex;flex-direction:column;gap:8px">${tasksHTML}</div>
+    </div>
+  `;
+  openModal(html);
+}
+
+function _refreshMyTasksModal(shiftId){
+  const shift = (SHIFTS_CACHE||[]).find(s=>s.id===shiftId);
+  if(!shift) return;
+  const host = document.getElementById('modalHost');
+  if(!host || !host.innerHTML) return;
+  _renderMyTasksModalContent(shift);
+  updateShiftTasksBanner();
+}
+
+window.openTasksView = openTasksView;
+window.openMyTasksModal = openMyTasksModal;
+window._refreshMyTasksModal = _refreshMyTasksModal;
 
 // Restart ticker on page visibility change
 document.addEventListener('visibilitychange', () => {
