@@ -26498,16 +26498,133 @@ function applyDiscount(forcePct){
 }
 
 function aiOfferSuggest(){
-  if(CART.length===0){toast('Πρόσθεσε προϊόντα πρώτα','warn');return}
-  openModal(`<div style="padding:24px">
-    <div class="ai-header"><span class="ai-badge">AI</span><h3 class="fw-800 text-xl">Έξυπνη Πρόταση</h3></div>
-    <p class="mt-3">Βάσει του καλαθιού, προτείνεται:</p>
-    <div class="ai-suggestion mt-3"><i data-lucide="gift" style="color:var(--accent)" size="20"></i>
-      <div><div class="fw-700">Έκπτωση 8% στο σύνολο</div><div class="text-sm muted mt-2">Περιθώριο κέρδους παραμένει 42%. Ο πελάτης θα εξοικονομήσει ${eur(CART.reduce((a,b)=>a+b.price*b.qty,0)*0.08)}. Προτείνεται λόγω όγκου καλαθιού.</div></div></div>
-    <div class="ai-suggestion"><i data-lucide="shopping-bag" style="color:var(--info)" size="20"></i>
-      <div><div class="fw-700">Προτεινόμενη προσθήκη</div><div class="text-sm muted mt-2">Η Θήκη μεταφοράς vape (4,50 €) συνδυάζεται συχνά με τα προϊόντα που έχεις επιλέξει.</div></div></div>
-    <div class="flex gap-2 mt-4"><button class="btn btn-primary" onclick="closeModal()">Εφαρμογή</button><button class="btn btn-ghost" onclick="closeModal()">Όχι τώρα</button></div></div>`);
+  if(CART.length===0){toast('Πρόσθεσε προϊόντα πρώτα','warn');return;}
+
+  // Static fallback (shown on parse error or network failure)
+  function _staticFallback(){
+    var subtotal = CART.reduce(function(a,b){return a+b.price*b.qty;},0);
+    openModal('<div style="padding:20px;min-width:280px">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
+        '<span class="ai-badge">AI</span><h3 class="fw-800 text-xl" style="margin:0">Έξυπνη Πρόταση</h3>'+
+        '<button class="icon-btn" onclick="closeModal()" style="margin-left:auto;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center"><i data-lucide="x" size="18"></i></button>'+
+      '</div>'+
+      '<div class="ai-suggestion" style="margin-bottom:12px"><i data-lucide="gift" style="color:var(--accent)" size="20"></i>'+
+        '<div><div class="fw-700">Έκπτωση 8% στο σύνολο</div>'+
+        '<div class="text-sm muted mt-2">Βάσει όγκου καλαθιού. Ο πελάτης εξοικονομεί '+eur(subtotal*0.08)+'.</div></div></div>'+
+      '<div class="flex gap-2 mt-4" style="flex-wrap:wrap">'+
+        '<button class="btn btn-primary" style="min-height:44px;font-size:16px;flex:1" onclick="applyDiscount(8)">✓ Εφαρμογή 8%</button>'+
+        '<button class="btn btn-ghost" style="min-height:44px;font-size:16px" onclick="closeModal()">Όχι τώρα</button>'+
+      '</div></div>');
+    try{lucide.createIcons();}catch(_){}
+  }
+
+  // Show loading modal immediately
+  openModal('<div style="padding:24px;text-align:center;min-width:260px" id="aiOfferModalBody">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;justify-content:center">'+
+      '<span class="ai-badge">AI</span><h3 class="fw-800 text-xl" style="margin:0">Έξυπνη Πρόταση</h3>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;align-items:center;gap:12px">'+
+      '<div style="width:36px;height:36px;border:3px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>'+
+      '<div style="color:var(--text-2);font-size:15px">Δημιουργία προσφοράς...</div>'+
+    '</div>'+
+    '<button class="btn btn-ghost" style="min-height:44px;font-size:16px;margin-top:20px;width:100%" onclick="closeModal()">Ακύρωση</button>'+
+    '</div>'+
+    '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>');
+  try{lucide.createIcons();}catch(_){}
+
+  // Build context
+  var c = window.SELECTED_CUSTOMER_ID ? (CUSTOMERS||[]).find(function(x){return x.id===window.SELECTED_CUSTOMER_ID;}) : null;
+  var subtotal = CART.reduce(function(a,b){return a+b.price*b.qty;},0);
+  var cartItems = CART.map(function(i){return (i.name||'?')+(i.category?' ['+i.category+']':'');}).join(', ');
+  var custCtx = c
+    ? 'Tier:'+( c.loyaltyTier||'bronze')+', Πόντοι:'+( c.loyaltyPoints||0)+', Σύνολο αγορών:'+Math.round(c.totalSpent||0)+'€, Επισκέψεις:'+(c.visits||0)+', Τελευταία:'+(c.lastVisit||'–')
+    : 'Επισκέπτης (χωρίς στοιχεία)';
+
+  var systemPrompt = 'Είσαι σύστημα έξυπνων προσφορών για κατάστημα vape. Αναλύεις το καλάθι και τα στοιχεία πελάτη και επιστρέφεις ΑΠΟΚΛΕΙΣΤΙΚΑ raw JSON, χωρίς markdown, χωρίς εξήγηση, χωρίς κείμενο εκτός JSON. Σχήμα: {"discountPct":<ακέραιος 0-15>,"crossSellName":"<όνομα προϊόντος ή κενό>","reason":"<σύντομη αιτιολογία στα ελληνικά, max 15 λέξεις>"}. Κανόνες: discountPct έως 15%, ανάλογα αξίας/tier πελάτη. crossSellName μόνο αν έχει νόημα με αυτό το καλάθι, αλλιώς κενό string. Reason σύντομα.';
+  var userMsg = 'Καλάθι: '+cartItems+'. Σύνολο: '+eur(subtotal)+'. Πελάτης: '+custCtx;
+
+  askClaude([{role:'user',content:userMsg}], systemPrompt, 300)
+    .then(function(raw){
+      // Check modal still open
+      if(!document.getElementById('aiOfferModalBody')) return;
+
+      // Parse — strip code fences, extract JSON
+      var txt = (raw||'').trim().replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+      var offer = null;
+      try{ offer = JSON.parse(txt); }catch(_){}
+      if(!offer || typeof offer.discountPct === 'undefined'){
+        // Try extracting first JSON object
+        var m = txt.match(/\{[\s\S]*\}/);
+        if(m){ try{ offer = JSON.parse(m[0]); }catch(_){} }
+      }
+      if(!offer){ _staticFallback(); return; }
+
+      // Validate + clamp
+      var discPct = Math.max(0, Math.min(15, Math.round(Number(offer.discountPct)||0)));
+      var reason = String(offer.reason||'').slice(0,120);
+
+      // Match cross-sell product case-insensitively
+      var crossName = String(offer.crossSellName||'').trim();
+      var crossProduct = null;
+      if(crossName){
+        var cn = crossName.toLowerCase();
+        crossProduct = (PRODUCTS||[]).find(function(p){
+          return (p.name||'').toLowerCase().indexOf(cn) !== -1 || cn.indexOf((p.name||'').toLowerCase()) !== -1;
+        }) || null;
+      }
+
+      // Build result modal
+      var crossHTML = crossProduct
+        ? '<div class="ai-suggestion" style="margin-bottom:12px"><i data-lucide="shopping-bag" style="color:var(--info)" size="20"></i>'+
+            '<div><div class="fw-700">Προτεινόμενη προσθήκη</div>'+
+            '<div class="text-sm muted mt-1">'+crossProduct.name+' — '+eur(crossProduct.price||0)+'</div></div></div>'
+        : '';
+
+      var applyFn = 'window._aiOfferApply('+discPct+',' + (crossProduct?crossProduct.id:'null') + ')';
+
+      var html = '<div style="padding:20px;min-width:280px">'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'+
+          '<span class="ai-badge">AI</span><h3 class="fw-800 text-xl" style="margin:0">Έξυπνη Πρόταση</h3>'+
+          '<button class="icon-btn" onclick="closeModal()" style="margin-left:auto;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center"><i data-lucide="x" size="18"></i></button>'+
+        '</div>'+
+        (discPct > 0
+          ? '<div class="ai-suggestion" style="margin-bottom:12px"><i data-lucide="gift" style="color:var(--accent)" size="20"></i>'+
+              '<div><div class="fw-700">Έκπτωση '+discPct+'% στο σύνολο</div>'+
+              '<div class="text-sm muted mt-1">'+reason+'</div>'+
+              '<div class="text-sm mt-1" style="color:var(--accent)">Εξοικονόμηση: '+eur(subtotal*discPct/100)+'</div></div></div>'
+          : '<div class="ai-suggestion" style="margin-bottom:12px"><i data-lucide="info" style="color:var(--text-2)" size="20"></i>'+
+              '<div><div class="fw-700">Χωρίς έκπτωση αυτή τη φορά</div>'+
+              '<div class="text-sm muted mt-1">'+reason+'</div></div></div>'
+        )+
+        crossHTML+
+        '<div class="flex gap-2 mt-4" style="flex-wrap:wrap">'+
+          '<button class="btn btn-primary" style="min-height:44px;font-size:16px;flex:1" onclick="'+applyFn+'">✓ Εφαρμογή</button>'+
+          '<button class="btn btn-ghost" style="min-height:44px;font-size:16px" onclick="closeModal()">Όχι τώρα</button>'+
+        '</div>'+
+        '</div>';
+
+      openModal(html);
+      try{lucide.createIcons();}catch(_){}
+    })
+    .catch(function(){ if(document.getElementById('aiOfferModalBody')) _staticFallback(); });
 }
+
+window._aiOfferApply = function(discPct, crossProductId){
+  closeModal();
+  if(discPct > 0){
+    window.CART_DISCOUNT = discPct;
+    if(typeof renderCart === 'function') renderCart();
+    toast('Έκπτωση '+discPct+'% εφαρμόστηκε ✓','success');
+  }
+  if(crossProductId){
+    var p = (PRODUCTS||[]).find(function(x){return x.id===crossProductId;});
+    if(p && typeof addToCart === 'function'){
+      addToCart(p.id, p.name, p.price, p.category, p.image||p.img||'', p.cost, null, p);
+      toast('Προστέθηκε: '+p.name,'success');
+    }
+  }
+  if(discPct===0 && !crossProductId) toast('Καμία αλλαγή εφαρμόστηκε','info');
+};
 
 function openCustomerPicker(){
   openModal(`<div style="padding:20px"><div style="display:flex;justify-content:space-between;align-items:center"><h3 class="fw-800 text-xl" style="margin:0">Επιλογή Πελάτη</h3><button class="icon-btn" onclick="closeModal()" style="padding:8px;min-width:0;border-radius:50%"><i data-lucide="x" size="20"></i></button></div>
