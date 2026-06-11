@@ -16173,6 +16173,10 @@ function znHubForPage(id){
   return (window.ZN_PAGE_TO_TAB||{})[id] || null;
 }
 
+// NAV CONTRACT — DO NOT BREAK:
+// History is captured ONLY at the top of _showPageInternal (the single render chokepoint).
+// znGoBack closes the current page and re-opens its section hub menu (znHubForPage -> open panel),
+// falling back to dashboard only if no hub. Never move capture elsewhere; never make X hardcode dashboard.
 window.znGoBack = function(){
   var cur = window._znCurView;
   var hub = (typeof znHubForPage==='function') ? znHubForPage(cur) : null;
@@ -16195,6 +16199,10 @@ window.znGoBack = function(){
 })();
 
 window.znDiagUpdate = function(extra){
+  if(location.search.indexOf('diag=1') === -1){
+    var _d=document.getElementById('znDiag'); if(_d&&_d.parentNode) _d.parentNode.removeChild(_d);
+    return;
+  }
   var el = document.getElementById('znDiag');
   if(!el){
     el = document.createElement('div');
@@ -16239,6 +16247,10 @@ function _updatePageCloseBtn(p){
   } catch(_){}
 }
 
+// NAV CONTRACT — DO NOT BREAK:
+// History is captured ONLY at the top of _showPageInternal (the single render chokepoint).
+// znGoBack closes the current page and re-opens its section hub menu (znHubForPage -> open panel),
+// falling back to dashboard only if no hub. Never move capture elsewhere; never make X hardcode dashboard.
 function _showPageInternal(p){
   if(!window._znViewHist) window._znViewHist=[];
   if(window._znBackNav){ window._znBackNav=false; }
