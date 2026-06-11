@@ -16002,10 +16002,10 @@ function showPage(p, _navOpts) {
     const activeModal = document.getElementById('activeModal');
     if(activeModal) closeModal();
   }
-  // Close hub panel if open
-  if(typeof znHubClose === 'function' && _znHubOpen) znHubClose(true);
 
   // Guard: if data not loaded yet, defer (max 30 retries = 3 sec)
+  // NOTE: hub close is intentionally AFTER this guard so that a pending retry
+  // triggered before the user tapped X cannot dismiss a hub opened by znGoBack.
   if (!CURRENT_USER || !PRODUCTS || PRODUCTS.length === 0) {
     const _r = (showPage._r = (showPage._r || 0) + 1);
     if (_r > 30) { showPage._r = 0; return; } // give up — session restore will call showPage
@@ -16014,6 +16014,8 @@ function showPage(p, _navOpts) {
     return;
   }
   showPage._r = 0;
+  // Close hub panel only when actually rendering a new page (data is ready)
+  if(typeof znHubClose === 'function' && _znHubOpen) znHubClose(true);
   
   // FORCE SIDEBAR CLOSE
   const sidebar = document.querySelector('.sidebar');
@@ -16175,8 +16177,10 @@ window.znGoBack = function(){
   var cur = window.CURRENT_PAGE_ID;
   var hub = znHubForPage(cur);
   if (hub && typeof znHubOpen==='function') {
-    znHubOpen(hub);
-    if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
+    setTimeout(function(){
+      znHubOpen(hub);
+      if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
+    }, 0);
     return;
   }
   var prev = ZN_NAV_STACK && ZN_NAV_STACK.pop();
@@ -16187,7 +16191,7 @@ window.znGoBack = function(){
 // Central page-close button wiring (click handler set once; survives #content rewrites)
 (function(){
   var btn = document.getElementById('znPageClose');
-  if(btn) btn.addEventListener('click', function(){ if(typeof znGoBack === 'function') znGoBack(); });
+  if(btn) btn.addEventListener('click', function(e){ e.stopPropagation(); if(typeof znGoBack === 'function') znGoBack(); });
 })();
 
 // Pages where X should be hidden: tab home pages + dashboard
@@ -25871,6 +25875,7 @@ function znSyncTabBar(page, forceTab){
 // Close hub on backdrop tap (outside hub area)
 document.addEventListener('click', function(e){
   if(!_znHubOpen) return;
+  if(e.target && e.target.closest && e.target.closest('#znPageClose')) return;
   var panel = document.getElementById('znHubPanel');
   var tabBar = document.getElementById('znTabBar');
   if(panel && !panel.contains(e.target) && tabBar && !tabBar.contains(e.target)){
