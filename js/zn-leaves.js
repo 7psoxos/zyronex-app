@@ -3821,6 +3821,15 @@ function _setLoyaltyTab(tab){
     var body=document.getElementById('loyBody_'+t);
     if(body){ body.style.display=t===tab?'':'none'; }
   }
+  // Lazy-render settings tab content only when that tab becomes active
+  if(tab==='settings'){
+    var settingsBody=document.getElementById('loyBody_settings');
+    if(settingsBody && !settingsBody.hasAttribute('data-rendered')){
+      settingsBody.innerHTML='<div class="mt-4">'+_renderLoyaltyRatesUI()+'</div>';
+      settingsBody.setAttribute('data-rendered','1');
+      if(typeof lucide!=='undefined') lucide.createIcons();
+    }
+  }
 }
 
 function renderLoyalty(){
@@ -3848,9 +3857,9 @@ function renderLoyalty(){
     +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📋</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Δραστηριότητα</div><div class="muted" style="font-size:16px">Σύντομα — loyalty ledger, earn/redeem ιστορικό, εξαγωγή CSV.</div></div>'
     +'</div>'
     +'<div id="loyBody_settings" style="'+(t!=='settings'?'display:none':'')+'">'
-    +'<div class="mt-4">'+_renderLoyaltyRatesUI()+'</div>'
     +'</div>';
   if(typeof lucide!=='undefined') lucide.createIcons();
+  if(t==='settings') _setLoyaltyTab('settings');
 }
 
 // ===== MAIN RENDERER =====
@@ -28189,7 +28198,7 @@ function _renderLoyaltyRatesUI(){
             <div style="font-size:16px;font-weight:700">🛵 Πόντοι σε online παραγγελίες (efood / Wolt / πλατφόρμες)</div>
             <div style="font-size:12px;color:var(--muted,#888);margin-top:2px">Όταν είναι κλειστό, οι online παραγγελίες μετράνε τζίρο/επισκέψεις αλλά δεν δίνουν πόντους.</div>
           </div>
-          <input type="checkbox" id="spOnlineEarns" ${s.onlineEarnsPoints!==false?'checked':''} onchange="_spSaveRates()" style="width:44px;height:28px;cursor:pointer;flex-shrink:0;transform:scale(1.3)">
+          <input type="checkbox" id="spOnlineEarns" ${s.onlineEarnsPoints!==false?'checked':''} onchange="_spSaveRates()" style="width:22px;height:22px;cursor:pointer;flex-shrink:0">
         </label>
       </div>
     </div>
