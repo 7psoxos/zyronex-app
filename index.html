@@ -25824,6 +25824,15 @@ function znHubClose(instant){
       panel.classList.remove('open');
       panel.style.animation = '';
     }, 180);
+    var cEl = document.getElementById('content');
+    if(cEl && cEl.style.display === 'none'){
+      var prev = (window.ZN_NAV_STACK && window.ZN_NAV_STACK.pop()) || null;
+      setTimeout(function(){
+        if(typeof showPage === 'function'){
+          if(prev){ showPage(prev, {fromBack:true}); } else { showPage('dashboard'); }
+        }
+      }, 180);
+    }
   }
 }
 
@@ -25884,6 +25893,23 @@ document.addEventListener('click', function(e){
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape' && _znHubOpen) znHubClose();
 });
+
+// Outer ZN_NAV_STACK wrapper — installed AFTER INSPECTOR's monkey-patch (~line 13025)
+// so this is the outermost window.showPage, capturing CURRENT_PAGE_ID before the
+// monkey-patch clobbers it with the new page.
+(function(){
+  var _sp = window.showPage;
+  if(typeof _sp !== 'function') return;
+  window.showPage = function(p, opts){
+    var prev = window.CURRENT_PAGE_ID;
+    if(prev && prev !== p && !(opts && opts.fromBack)){
+      if(!window.ZN_NAV_STACK) window.ZN_NAV_STACK = [];
+      window.ZN_NAV_STACK.push(prev);
+      if(window.ZN_NAV_STACK.length > 30) window.ZN_NAV_STACK.shift();
+    }
+    return _sp.apply(this, arguments);
+  };
+})();
 
 /* ============================================================
    USERS
