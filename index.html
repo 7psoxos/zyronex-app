@@ -563,6 +563,7 @@ if(window.navigator && window.navigator.share){
     animation:hubBackdropIn 0.2s ease;
   }
   #znHubBackdrop.open{display:block;}
+  #znHubBackdrop.zn-menu-opaque{background:#000;-webkit-backdrop-filter:none;backdrop-filter:none;}
   @keyframes hubBackdropIn{ from{opacity:0;} to{opacity:1;} }
   #znHubPanel{
     display:none;
@@ -16224,6 +16225,8 @@ window.znGoBack = function(){
   if(hub){
     if(typeof showPage==='function') showPage('dashboard');
     setTimeout(function(){
+      var _bd=document.getElementById('znHubBackdrop');
+      if(_bd) _bd.classList.add('zn-menu-opaque');
       if(typeof znHubOpen==='function') znHubOpen(hub);
       if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
     }, 0);
@@ -25893,6 +25896,7 @@ function znHubClose(instant){
   var panel = document.getElementById('znHubPanel');
   var backdrop = document.getElementById('znHubBackdrop');
   if(backdrop) backdrop.classList.remove('open');
+  if(backdrop) backdrop.classList.remove('zn-menu-opaque');
   if(!panel) return;
   if(instant){
     panel.classList.remove('open');
