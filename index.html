@@ -15983,7 +15983,7 @@ function initNavSections() {
 }
 
 // ── Browser Back / Forward Navigation ───────────────────────
-function showPage(p) {
+function showPage(p, _navOpts) {
   // 🛡️ Validate page parameter
   if (!p || typeof p !== 'string') {
     console.warn('⚠️ Invalid page parameter, fallback to dashboard:', p);
@@ -16027,6 +16027,13 @@ function showPage(p) {
   // Mark navigation in progress so the hashchange handler doesn't double-fire
   // showPage() off our own push/replaceState calls (prevents back-stack corruption).
   window._navInProgress = true;
+  if (!(_navOpts && _navOpts.fromBack)) {
+    var _prv = window.CURRENT_PAGE_ID;
+    if (_prv && _prv !== p) {
+      ZN_NAV_STACK.push(_prv);
+      if (ZN_NAV_STACK.length > 30) ZN_NAV_STACK.shift();
+    }
+  }
   _showPageInternal(p);
 
   // ── SINGLE SOURCE OF TRUTH: _pageHistory stack ──
@@ -16157,11 +16164,20 @@ window.ZNNav = {
 
 // ── In-app back navigation — bulletproof simple version ──
 window._pageHistory = [];
+var ZN_NAV_STACK = [];
+
+window.znGoBack = function(){
+  var prev = ZN_NAV_STACK.pop();
+  if (prev) { showPage(prev, {fromBack:true}); return; }
+  var hub = (window.ZN_PAGE_TO_TAB||{})[window.CURRENT_PAGE_ID];
+  if (hub && typeof znHubOpen==='function') { znHubOpen(hub); if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub); return; }
+  showPage('dashboard');
+};
 
 // Central page-close button wiring (click handler set once; survives #content rewrites)
 (function(){
   var btn = document.getElementById('znPageClose');
-  if(btn) btn.addEventListener('click', function(){ if(typeof showPage === 'function') showPage('dashboard'); });
+  if(btn) btn.addEventListener('click', function(){ if(typeof znGoBack === 'function') znGoBack(); });
 })();
 
 // Pages where X should be hidden: tab home pages + dashboard
@@ -25401,7 +25417,7 @@ function renderAlerts(){
     </div>
     <div class="flex gap-2" style="flex-shrink:0;align-items:center;flex-wrap:wrap">
       ${totalAll>0?`<button class="btn btn-ghost" style="font-size:13px;padding:6px 12px" onclick="dismissAllAlerts()"><i data-lucide="check-check" size="15"></i> Διαγραφή Όλων</button>`:''}
-      <button class="icon-btn" onclick="window._pageHistory&&window._pageHistory.length>=2?goBack():showPage('dashboard')" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center"><i data-lucide="x" size="20"></i></button>
+      <button class="icon-btn" onclick="znGoBack()" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center"><i data-lucide="x" size="20"></i></button>
     </div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:4px 0">
