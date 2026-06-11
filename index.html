@@ -6078,8 +6078,8 @@ var HELPDESK_CONTENT = {
         <div class="hd-step"><div class="hd-step-num">1</div><div class="hd-step-body"><strong>Σύνδεσε πελάτη στο POS</strong></div></div>
         <div class="hd-step"><div class="hd-step-num">2</div><div class="hd-step-body"><strong>Πάτα "Εξαργύρωση Πόντων" δίπλα στο σύνολο</strong></div></div>
         <div class="hd-step"><div class="hd-step-num">3</div><div class="hd-step-body"><strong>Επίλεξε ποσό → Αφαιρείται αυτόματα από το σύνολο</strong></div></div>
-        <div class="hd-tip">💡 Ρύθμισε το rate (πόντοι/€) από Ρυθμίσεις → Loyalty.</div>
-        <div class="hd-tip">🛵 Online παραγγελίες (efood/Wolt): Ρυθμίσεις → Πληρωμές &amp; Πόντοι → "Πόντοι σε online παραγγελίες" (ενεργό by default — απενεργοποίησε αν τα commission της πλατφόρμας δεν το δικαιολογούν).</div>
+        <div class="hd-tip">💡 Ρύθμισε το rate (πόντοι/€) από <strong>Loyalty → Ρυθμίσεις Προγράμματος</strong>.</div>
+        <div class="hd-tip">🛵 Online παραγγελίες (efood/Wolt): <strong>Loyalty → Ρυθμίσεις Προγράμματος</strong> → "Πόντοι σε online παραγγελίες" (ενεργό by default — απενεργοποίησε αν τα commission της πλατφόρμας δεν το δικαιολογούν).</div>
       `,en:`
         <div class="article-icon">🎁</div>
         <h1>Loyalty Points</h1>
@@ -6097,7 +6097,7 @@ var HELPDESK_CONTENT = {
         <div class="hd-step"><div class="hd-step-num">2</div><div class="hd-step-body"><strong>Tap "Redeem Points" next to the total</strong></div></div>
         <div class="hd-step"><div class="hd-step-num">3</div><div class="hd-step-body"><strong>Choose amount → Automatically deducted from total</strong></div></div>
         <div class="hd-tip">💡 Set the rate (points/€) from Settings → Loyalty.</div>
-        <div class="hd-tip">🛵 Online orders (efood/Wolt): Settings → Payments &amp; Points → "Points for online orders" (on by default — turn off if platform commissions don't justify awarding points).</div>
+        <div class="hd-tip">🛵 Online orders (efood/Wolt): <strong>Loyalty → Program Settings</strong> → "Points for online orders" (on by default — turn off if platform commissions don't justify awarding points).</div>
       `}
     },
 
@@ -6111,14 +6111,14 @@ var HELPDESK_CONTENT = {
         <div class="article-sub">Όλα για το πρόγραμμα πιστότητας σε ένα μέρος</div>
         <p>Βρες το Loyalty Panel στο hub <strong>Πελάτες</strong>. Περιέχει 5 καρτέλες: Επισκόπηση, Μέλη, Προσφορές &amp; Ανταμοιβές, Δραστηριότητα, Ρυθμίσεις Προγράμματος.</p>
         <h2>Ρυθμίσεις Πόντων</h2>
-        <p>Ορισμός earning rate ανά tier, thresholds και toggle για online παραγγελίες από Ρυθμίσεις → Πληρωμές &amp; Πόντοι.</p>
+        <p>Ορισμός earning rate ανά tier, thresholds και toggle για online παραγγελίες από την καρτέλα <strong>Ρυθμίσεις Προγράμματος</strong> του Loyalty Panel.</p>
       `,en:`
         <div class="article-icon">🎁</div>
         <h1>Loyalty Panel</h1>
         <div class="article-sub">Everything about the loyalty program in one place</div>
         <p>Find the Loyalty Panel in the <strong>Customers</strong> hub. It has 5 tabs: Overview, Members, Offers &amp; Rewards, Activity, Program Settings.</p>
         <h2>Points Settings</h2>
-        <p>Set earning rate per tier, tier thresholds and the online orders toggle from Settings → Payments &amp; Points.</p>
+        <p>Set earning rate per tier, tier thresholds and the online orders toggle from the <strong>Program Settings</strong> tab inside the Loyalty Panel.</p>
       `}
     },
 
@@ -30001,7 +30001,7 @@ async function renderWarRoom(){
     </div>
     ${loyaltyMetrics && loyaltyMetrics.atRiskCustomers > 0 ? `
     <div style="margin-top:12px;padding:10px 14px;background:rgba(231,76,60,0.08);border-radius:8px;font-size:13px">
-      ⚠️ <strong>${loyaltyMetrics.atRiskCustomers} πελάτες</strong> έχουν burn rate >25%. Εξέτασε να μειώσεις τους ρυθμούς επιβράβευσης από <strong>Settings → Πληρωμές & Πόντοι</strong>.
+      ⚠️ <strong>${loyaltyMetrics.atRiskCustomers} πελάτες</strong> έχουν burn rate >25%. Εξέτασε να μειώσεις τους ρυθμούς επιβράβευσης από <strong>Loyalty → Ρυθμίσεις Προγράμματος</strong>.
     </div>` : ''}
   </div>` : ''}
 

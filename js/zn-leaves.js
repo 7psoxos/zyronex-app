@@ -3806,6 +3806,11 @@ function ciFlavorFamily(productName){
 // ===== LOYALTY PANEL =====
 var _LOYALTY_TAB = 'overview';
 
+function _goLoyaltySettings(){
+  _LOYALTY_TAB = 'settings';
+  if(typeof showPage === 'function') showPage('loyalty');
+}
+
 function _setLoyaltyTab(tab){
   _LOYALTY_TAB = tab;
   var ids = ['overview','members','offers','activity','settings'];
@@ -3843,7 +3848,7 @@ function renderLoyalty(){
     +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📋</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Δραστηριότητα</div><div class="muted" style="font-size:16px">Σύντομα — loyalty ledger, earn/redeem ιστορικό, εξαγωγή CSV.</div></div>'
     +'</div>'
     +'<div id="loyBody_settings" style="'+(t!=='settings'?'display:none':'')+'">'
-    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">⚙️</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Ρυθμίσεις Προγράμματος</div><div class="muted" style="font-size:16px">Σύντομα — earning rate, tier thresholds, έκπτωση ανά tier, online παραγγελίες.</div></div>'
+    +'<div class="mt-4">'+_renderLoyaltyRatesUI()+'</div>'
     +'</div>';
   if(typeof lucide!=='undefined') lucide.createIcons();
 }
@@ -28138,7 +28143,7 @@ async function _spFinalize(){
   await _doCheckout();
 }
 
-function renderPointRatesSettings(){
+function _renderLoyaltyRatesUI(){
   const rates = getPointRates();
   const s = typeof getSettings==='function' ? getSettings() : {};
   return `
@@ -28187,16 +28192,25 @@ function renderPointRatesSettings(){
           <input type="checkbox" id="spOnlineEarns" ${s.onlineEarnsPoints!==false?'checked':''} onchange="_spSaveRates()" style="width:44px;height:28px;cursor:pointer;flex-shrink:0;transform:scale(1.3)">
         </label>
       </div>
-
-      <div style="margin-top:14px;padding:12px;background:var(--bg-1);border-radius:8px">
-        <div class="fw-700 text-sm mb-2">🔌 Payment APIs</div>
-        <div class="text-sm muted mb-3">Η διαχείριση payment providers (Viva Wallet, Piraeus Pay, Stripe, Coinbase Commerce) έχει μεταφερθεί στην ενότητα Τράπεζες.</div>
-        <button class="btn btn-ghost btn-sm" onclick="showPage('banking');setTimeout(()=>switchBankingTab('payment_apis'),300)">
-          <i data-lucide="credit-card" size="14"></i> Πήγαινε στα Payment APIs →
-        </button>
-      </div>
     </div>
   `;
+}
+
+function renderPointRatesSettings(){
+  return '<div style="padding:16px;background:var(--bg-2);border-radius:14px;border:1px solid var(--border);margin-bottom:14px">'
+    +'<div class="fw-700 mb-2">🎁 Πρόγραμμα Loyalty</div>'
+    +'<div class="text-sm muted mb-3">Οι ρυθμίσεις πόντων &amp; εξαργύρωσης μεταφέρθηκαν στο Πρόγραμμα Loyalty (Πελάτες).</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="_goLoyaltySettings()" style="min-height:44px">'
+    +'🎁 Άνοιξε τις Ρυθμίσεις Loyalty →'
+    +'</button>'
+    +'</div>'
+    +'<div style="padding:12px;background:var(--bg-1);border-radius:8px">'
+    +'<div class="fw-700 text-sm mb-2">🔌 Payment APIs</div>'
+    +'<div class="text-sm muted mb-3">Η διαχείριση payment providers (Viva Wallet, Piraeus Pay, Stripe, Coinbase Commerce) έχει μεταφερθεί στην ενότητα Τράπεζες.</div>'
+    +'<button class="btn btn-ghost btn-sm" onclick="showPage(\'banking\');setTimeout(function(){if(typeof switchBankingTab===\'function\')switchBankingTab(\'payment_apis\');},300)">'
+    +'Πήγαινε στα Payment APIs →'
+    +'</button>'
+    +'</div>';
 }
 
 function _spSaveRates(){
