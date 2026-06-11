@@ -16174,11 +16174,18 @@ function znHubForPage(id){
 }
 
 window.znGoBack = function(){
-  var prev=(window._znViewHist&&window._znViewHist.length)?window._znViewHist.pop():null;
-  window._znBackNav=true;
-  if(typeof window.znDiagUpdate==='function') window.znDiagUpdate('BACK pressed -> target: '+(prev||'dashboard(fallback)'));
-  if(prev&&typeof showPage==='function') showPage(prev);
-  else if(typeof showPage==='function') showPage('dashboard');
+  var cur = window._znCurView;
+  var hub = (typeof znHubForPage==='function') ? znHubForPage(cur) : null;
+  if(typeof window.znDiagUpdate==='function') window.znDiagUpdate('X -> section menu: ' + (hub || 'dashboard-fallback'));
+  if(hub){
+    if(typeof showPage==='function') showPage('dashboard');
+    setTimeout(function(){
+      if(typeof znHubOpen==='function') znHubOpen(hub);
+      if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
+    }, 0);
+  } else if(typeof showPage==='function'){
+    showPage('dashboard');
+  }
 };
 
 // Central page-close button wiring (click handler set once; survives #content rewrites)
