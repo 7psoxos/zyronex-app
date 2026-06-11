@@ -16167,10 +16167,15 @@ window._pageHistory = [];
 var ZN_NAV_STACK = [];
 
 window.znGoBack = function(){
+  var currentPage = window.CURRENT_PAGE_ID;
+  var hub = (window.ZN_PAGE_TO_TAB||{})[currentPage];
+  if (hub && typeof znHubOpen==='function') {
+    znHubOpen(hub);
+    if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
+    return;
+  }
   var prev = ZN_NAV_STACK.pop();
   if (prev) { showPage(prev, {fromBack:true}); return; }
-  var hub = (window.ZN_PAGE_TO_TAB||{})[window.CURRENT_PAGE_ID];
-  if (hub && typeof znHubOpen==='function') { znHubOpen(hub); if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub); return; }
   showPage('dashboard');
 };
 
