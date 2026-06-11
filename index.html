@@ -6062,6 +6062,7 @@ var HELPDESK_CONTENT = {
         <div class="hd-step"><div class="hd-step-num">2</div><div class="hd-step-body"><strong>Πάτα "Εξαργύρωση Πόντων" δίπλα στο σύνολο</strong></div></div>
         <div class="hd-step"><div class="hd-step-num">3</div><div class="hd-step-body"><strong>Επίλεξε ποσό → Αφαιρείται αυτόματα από το σύνολο</strong></div></div>
         <div class="hd-tip">💡 Ρύθμισε το rate (πόντοι/€) από Ρυθμίσεις → Loyalty.</div>
+        <div class="hd-tip">🛵 Online παραγγελίες (efood/Wolt): Ρυθμίσεις → Πληρωμές &amp; Πόντοι → "Πόντοι σε online παραγγελίες" (ενεργό by default — απενεργοποίησε αν τα commission της πλατφόρμας δεν το δικαιολογούν).</div>
       `,en:`
         <div class="article-icon">🎁</div>
         <h1>Loyalty Points</h1>
@@ -6079,6 +6080,7 @@ var HELPDESK_CONTENT = {
         <div class="hd-step"><div class="hd-step-num">2</div><div class="hd-step-body"><strong>Tap "Redeem Points" next to the total</strong></div></div>
         <div class="hd-step"><div class="hd-step-num">3</div><div class="hd-step-body"><strong>Choose amount → Automatically deducted from total</strong></div></div>
         <div class="hd-tip">💡 Set the rate (points/€) from Settings → Loyalty.</div>
+        <div class="hd-tip">🛵 Online orders (efood/Wolt): Settings → Payments &amp; Points → "Points for online orders" (on by default — turn off if platform commissions don't justify awarding points).</div>
       `}
     },
 
@@ -37054,39 +37056,38 @@ async function olProcessOrder(platform, payload) {
   try {
     var order = olNormalizePayload(platform, payload);
 
-    // 1. Customer matching
+    // 1. Customer matching (read-only — writes follow after onlineOrderId is known)
     var customerId = null;
+    var _existingCust = null;
+    var _earnsPoints = (typeof _olEarnsPoints === 'function') ? _olEarnsPoints() : true;
     if (order.customer_phone || order.customer_name) {
-      var custQuery = _dbCached('customers_'+SHOP_ID, 30000, ()=>sb.from('customers').select('id,name,phone,total_spent,loyalty_points').eq('shop_id', SHOP_ID));
+      var custQ = sb.from('customers')
+        .select('id,name,phone,total_spent,loyalty_points,visits')
+        .eq('shop_id', SHOP_ID);
       if (order.customer_phone) {
-        custQuery = custQuery.eq('phone', order.customer_phone);
+        custQ = custQ.eq('phone', order.customer_phone);
       } else {
-        custQuery = custQuery.ilike('name', order.customer_name);
+        custQ = custQ.ilike('name', order.customer_name);
       }
-      var custRes = await custQuery.limit(1);
+      var custRes = await custQ.limit(1);
       if (custRes.data && custRes.data.length > 0) {
         customerId = custRes.data[0].id;
-        // Update customer total_spent
-        var existing = custRes.data[0];
-        await _dbInvalidate('customers_'); sb.from('customers').update({
-          total_spent: (existing.total_spent || 0) + order.total,
-          last_visit: new Date().toISOString(),
-          visits: (existing.visits || 0) + 1,
-        }).eq('id', customerId);
+        _existingCust = custRes.data[0];
       } else if (order.customer_name) {
-        // Create new customer
-        var newCust = await _dbInvalidate('customers_'); sb.from('customers').insert({
+        // Create new customer now so customerId is ready for online_orders row
+        await _dbInvalidate('customers_');
+        var _ins = await sb.from('customers').insert({
           shop_id: SHOP_ID,
           name: order.customer_name,
           phone: order.customer_phone || null,
           email: order.customer_email || null,
-          total_spent: order.total,
-          visits: 1,
+          total_spent: _earnsPoints ? 0 : order.total,
+          visits: _earnsPoints ? 0 : 1,
           loyalty_points: 0,
           source: platform,
           last_visit: new Date().toISOString(),
         }).select('id').single();
-        if (newCust.data) customerId = newCust.data.id;
+        if (_ins && _ins.data && _ins.data.id) customerId = _ins.data.id;
       }
     }
 
@@ -37111,6 +37112,27 @@ async function olProcessOrder(platform, payload) {
     }).select('id').single();
 
     var onlineOrderId = savedOrder ? savedOrder.id : null;
+
+    // 2b. Stable saleId for loyalty idempotency (online_orders UUID preferred)
+    var olSaleId = onlineOrderId || order.platform_order_id || null;
+
+    // 2c. Customer loyalty write — deferred to here so olSaleId is available for the ledger guard
+    if (_existingCust) {
+      await _dbInvalidate('customers_');
+      if (_earnsPoints) {
+        await sb.from('customers').update({ last_visit: new Date().toISOString() }).eq('id', customerId);
+        await _loyaltyAward({ customerId: customerId, subtotal: order.total, saleId: olSaleId, shopId: SHOP_ID });
+      } else {
+        await sb.from('customers').update({
+          total_spent: (_existingCust.total_spent || 0) + order.total,
+          visits: (_existingCust.visits || 0) + 1,
+          last_visit: new Date().toISOString(),
+        }).eq('id', customerId);
+      }
+    } else if (customerId && _earnsPoints) {
+      // New customer created with total_spent=0,visits=0 — _loyaltyAward does the write
+      await _loyaltyAward({ customerId: customerId, subtotal: order.total, saleId: olSaleId, shopId: SHOP_ID });
+    }
 
     // 3. Auto stock update
     var settings = ONLINE_ORDERS.settings || await olLoadSettings();

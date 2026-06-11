@@ -26839,6 +26839,10 @@ function getPointRates(){
   };
 }
 
+function _olEarnsPoints(){
+  try{ var s=JSON.parse(localStorage.getItem('katastimaSettings')||'{}'); return s.onlineEarnsPoints!==false; }catch(e){ return true; }
+}
+
 
 function getPointValue(tier, rates){
   // simple mode: always bronze rate
@@ -28129,6 +28133,16 @@ function renderPointRatesSettings(){
         </div>
       </div>
 
+      <div style="margin-top:16px;padding:12px 14px;background:var(--bg-1);border-radius:8px">
+        <label style="display:flex;align-items:center;justify-content:space-between;min-height:44px;gap:12px;cursor:pointer">
+          <div>
+            <div style="font-size:16px;font-weight:700">🛵 Πόντοι σε online παραγγελίες (efood / Wolt / πλατφόρμες)</div>
+            <div style="font-size:12px;color:var(--muted,#888);margin-top:2px">Όταν είναι κλειστό, οι online παραγγελίες μετράνε τζίρο/επισκέψεις αλλά δεν δίνουν πόντους.</div>
+          </div>
+          <input type="checkbox" id="spOnlineEarns" ${s.onlineEarnsPoints!==false?'checked':''} onchange="_spSaveRates()" style="width:44px;height:28px;cursor:pointer;flex-shrink:0;transform:scale(1.3)">
+        </label>
+      </div>
+
       <div style="margin-top:14px;padding:12px;background:var(--bg-1);border-radius:8px">
         <div class="fw-700 text-sm mb-2">🔌 Payment APIs</div>
         <div class="text-sm muted mb-3">Η διαχείριση payment providers (Viva Wallet, Piraeus Pay, Stripe, Coinbase Commerce) έχει μεταφερθεί στην ενότητα Τράπεζες.</div>
@@ -28148,6 +28162,8 @@ function _spSaveRates(){
   s.pointRateSilver = parseFloat(document.getElementById('spRateSilver')?.value)||0.012;
   s.pointRateGold = parseFloat(document.getElementById('spRateGold')?.value)||0.015;
   s.pointRatePlatinum = parseFloat(document.getElementById('spRatePlatinum')?.value)||0.020;
+  var _olChk = document.getElementById('spOnlineEarns');
+  s.onlineEarnsPoints = _olChk ? _olChk.checked : true;
   localStorage.setItem('katastimaSettings', JSON.stringify(s));
   // Toggle tiered UI
   const tiered = document.getElementById('spTieredRates');
