@@ -25593,7 +25593,7 @@ function openNotifications(){showPage('alerts');}
 var ZN_PAGE_TO_TAB = {
   // POS tab
   dashboard:'pos', pos:'pos', reservations:'pos',
-  'online-orders':'pos', 'gift-cards':'pos', exchange:'pos',
+  'online-orders':'pos', 'gift-cards':'pos', exchange:'pos', documents:'pos',
   // Inventory tab
   inventory:'inventory', suppliers:'inventory', purchases:'inventory',
   shipments:'pos', waste:'inventory', batches:'inventory',
@@ -25605,7 +25605,7 @@ var ZN_PAGE_TO_TAB = {
   // Finance tab
   cashbook:'finance', banking:'finance', reports:'finance', vat:'finance',
   taxagent:'finance',
-  balance:'finance', bi:'finance', 'expense-calendar':'finance', documents:'finance',
+  balance:'finance', bi:'finance', 'expense-calendar':'finance', 'energy-tracker':'finance',
   warroom:'finance', breakeven:'finance', 'compliance-calendar':'finance',
   // System tab
   shifts:'system', users:'system', settings:'system', alerts:'system',
@@ -25618,7 +25618,7 @@ var ZN_PAGE_TO_TAB = {
   // Smart features — system tab
   'dosage-tracker':'system', 'remember-this':'system',
   'supplier-scorecard':'system', 'shop-changelog':'system',
-  'age-log':'system', 'seasonal-intel':'system', 'energy-tracker':'system',
+  'age-log':'system', 'seasonal-intel':'system',
 };
 
 // Hub definitions — pages shown in hub panel per tab
@@ -25631,6 +25631,7 @@ var ZN_HUBS = {
       {icon:'📦', label:'Wolt / efood / Skroutz', page:'online-orders'},
       {icon:'🔄', label:'ZyroNex Exchange', page:'exchange', hot:true},
       {icon:'📋', label:'Αποστολές', page:'shipments'},
+      {icon:'📄', label:'Έγγραφα', page:'documents'},
     ]
   },
   inventory: {
@@ -25671,7 +25672,7 @@ var ZN_HUBS = {
       {icon:'⚖️', label:'Ισοζύγια', page:'balance'},
       {icon:'📊', label:'Επιχειρηματική Ανάλυση', page:'bi', plan:'pro'},
       {icon:'🧭', label:'Συνολική Εικόνα', page:'warroom', hot:true},
-      {icon:'📄', label:'Έγγραφα', page:'documents'},
+      {icon:'⚡', label:'Ενέργεια & Λογαριασμοί', page:'energy-tracker', plan:'pro'},
     ]
   },
   system: {
@@ -25689,7 +25690,6 @@ var ZN_HUBS = {
       {icon:'🏆', label:'Βαθμολογία Προμηθευτών', page:'supplier-scorecard', plan:'pro'},
       {icon:'💭', label:'Θυμάσαι αυτό;', page:'remember-this', plan:'pro'},
       {icon:'💨', label:'Παρακολούθηση Νικοτίνης', page:'dosage-tracker', plan:'pro'},
-      {icon:'⚡', label:'Ενέργεια & Λογαριασμοί', page:'energy-tracker', plan:'pro'},
       {icon:'🛡️', label:'Συμμόρφωση TPD', page:'compliance', plan:'pro'},
       {icon:'💰', label:'Πόλεμος Τιμών', page:'pricewar', plan:'pro'},
       {icon:'✨', label:'ZyroNex AI', page:'ai', plan:'pro'},
