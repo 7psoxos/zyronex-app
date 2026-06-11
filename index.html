@@ -34835,11 +34835,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   await window._supabaseReady;
   console.log('Supabase ready, calling init()');
   
-  // Add timeout to init - if it takes more than 10s, force show error
+  // Add timeout to init - if it takes more than 20s, force show error
   const initTimeout = setTimeout(() => {
     console.error('❌ init() timeout - stuck somewhere');
     alert('⚠️ Εφαρμογή κολλημένη - προσπάθησε refresh');
-  }, 10000);
+  }, 20000);
   
   try {
     await init();
