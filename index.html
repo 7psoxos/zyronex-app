@@ -16177,8 +16177,10 @@ window.znGoBack = function(){
   var cur = window.CURRENT_PAGE_ID;
   var hub = znHubForPage(cur);
   if (hub && typeof znHubOpen==='function') {
-    znHubOpen(hub);
-    if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
+    setTimeout(function(){
+      znHubOpen(hub);
+      if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
+    }, 0);
     return;
   }
   var prev = ZN_NAV_STACK && ZN_NAV_STACK.pop();
@@ -25873,6 +25875,7 @@ function znSyncTabBar(page, forceTab){
 // Close hub on backdrop tap (outside hub area)
 document.addEventListener('click', function(e){
   if(!_znHubOpen) return;
+  if(e.target && e.target.closest && e.target.closest('#znPageClose')) return;
   var panel = document.getElementById('znHubPanel');
   var tabBar = document.getElementById('znTabBar');
   if(panel && !panel.contains(e.target) && tabBar && !tabBar.contains(e.target)){
