@@ -3811,6 +3811,172 @@ function _goLoyaltySettings(){
   if(typeof showPage === 'function') showPage('loyalty');
 }
 
+// ===== LOYALTY OVERVIEW KPIs =====
+var _loyOvChart = null;
+
+async function _renderLoyaltyOverview(){
+  var body = document.getElementById('loyBody_overview');
+  if(!body || body.hasAttribute('data-rendered')) return;
+  body.innerHTML = '<div class="mt-4" style="text-align:center;padding:40px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></div></div>';
+
+  // In-memory data (CUSTOMERS already loaded at login)
+  var members = window.CUSTOMERS || [];
+  var totalM = members.length;
+  var outstanding = 0;
+  var tiers = {bronze:0, silver:0, gold:0, platinum:0};
+  for(var i = 0; i < members.length; i++){
+    var m = members[i];
+    outstanding += (m.loyaltyPoints || 0);
+    var tr = (m.loyaltyTier || 'bronze').toLowerCase();
+    if(tiers.hasOwnProperty(tr)) tiers[tr]++; else tiers.bronze++;
+  }
+
+  // Server-side aggregates: SUM(delta) per type — no full-table fetch
+  var totalIssued = 0, totalRedeemed = 0, ledgerOk = false;
+  try {
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(sbC && typeof SHOP_ID !== 'undefined'){
+      var earnR = await sbC.from('loyalty_ledger').select('delta.sum()').eq('type','earn').eq('shop_id',SHOP_ID);
+      var redR  = await sbC.from('loyalty_ledger').select('delta.sum()').eq('type','redeem').eq('shop_id',SHOP_ID);
+      if(!earnR.error && earnR.data && earnR.data[0])
+        totalIssued = Math.max(0, Math.round(earnR.data[0].sum || 0));
+      if(!redR.error && redR.data && redR.data[0])
+        totalRedeemed = Math.abs(Math.round(redR.data[0].sum || 0));
+      ledgerOk = !earnR.error;
+    }
+  } catch(e){ console.warn('[loy-overview]', e); }
+
+  var redemptionPct = (totalIssued > 0) ? Math.min(100, Math.round(totalRedeemed / totalIssued * 100)) : 0;
+
+  body.innerHTML = '<div class="mt-4">'
+    + _loyOvHTMLInner(totalM, outstanding, totalIssued, totalRedeemed, redemptionPct, tiers, ledgerOk)
+    + '</div>';
+  body.setAttribute('data-rendered','1');
+  setTimeout(function(){ _loyGaugeRender(redemptionPct, ledgerOk); }, 60);
+}
+
+function _loyFmtPts(n){
+  n = Math.round(n || 0);
+  if(n >= 1000000) return (n/1000000).toFixed(1)+'M';
+  if(n >= 1000)    return (n/1000).toFixed(1)+'k';
+  return String(n);
+}
+
+function _loyOvCard(label, val, sub, subCol){
+  return '<div class="card" style="padding:16px 14px">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-2,#6b7283);margin-bottom:6px">'+label+'</div>'
+    +'<div style="font-size:26px;font-weight:800;line-height:1;color:var(--text-0)">'+val+'</div>'
+    +(sub ? '<div style="font-size:12px;color:'+(subCol||'var(--text-2,#6b7283)')+';margin-top:5px">'+sub+'</div>' : '')
+    +'</div>';
+}
+
+function _loyOvHTMLInner(totalM, outstanding, issued, redeemed, pct, tiers, ledgerOk){
+  var tierCfg = [
+    {key:'platinum', label:'Platinum', color:'#a78bfa', emoji:'💎'},
+    {key:'gold',     label:'Gold',     color:'#fbbf24', emoji:'🥇'},
+    {key:'silver',   label:'Silver',   color:'#94a3b8', emoji:'🥈'},
+    {key:'bronze',   label:'Bronze',   color:'#cd7f32', emoji:'🥉'}
+  ];
+  var denom = Math.max(totalM, 1);
+
+  // KPI cards (2-col grid, stacks on narrow)
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
+  html += _loyOvCard('Μέλη', totalM || 0,
+    totalM === 0 ? '— ξεκίνα σήμερα' : totalM + ' εγγεγραμμένοι', '');
+  html += _loyOvCard('Πόντοι σε Κυκλοφορία', _loyFmtPts(outstanding),
+    outstanding === 0 ? '— ακόμα μηδέν' : '⭐ διαθέσιμοι', outstanding > 0 ? '#f59e0b' : '');
+  if(ledgerOk){
+    html += _loyOvCard('Εκδόθηκαν', _loyFmtPts(issued),
+      issued === 0 ? '— καμία συναλλαγή' : '↑ κερδήθηκαν ποτέ', issued > 0 ? '#4ade80' : '');
+    html += _loyOvCard('Εξαργυρώθηκαν', _loyFmtPts(redeemed),
+      redeemed === 0 ? '— καμία χρήση ακόμα' : '↓ χρησιμοποιήθηκαν', redeemed > 0 ? '#fb923c' : '');
+  }
+  html += '</div>';
+
+  // Tier stack bars
+  html += '<div class="card" style="padding:16px 14px;margin-bottom:12px">'
+    +'<div style="font-size:13px;font-weight:700;margin-bottom:14px">🏆 Κατανομή Tier</div>';
+  if(totalM === 0){
+    html += '<div style="text-align:center;padding:16px 0;color:var(--text-2,#6b7283);font-size:13px">Κανένα μέλος ακόμα — τα tiers θα εμφανιστούν καθώς μπαίνουν πελάτες.</div>';
+  } else {
+    for(var i = 0; i < tierCfg.length; i++){
+      var tc = tierCfg[i];
+      var cnt = tiers[tc.key] || 0;
+      var pctT = Math.round(cnt / denom * 100);
+      html += '<div style="margin-bottom:11px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
+        +'<span style="font-size:13px;font-weight:600">'+tc.emoji+' '+tc.label+'</span>'
+        +'<span style="font-size:13px">'+cnt+'&thinsp;<span style="font-size:11px;color:var(--text-2,#6b7283)">('+pctT+'%)</span></span>'
+        +'</div>'
+        +'<div style="height:7px;background:var(--bg-3,#1a2135);border-radius:99px;overflow:hidden">'
+        +'<div style="height:100%;width:'+pctT+'%;background:'+tc.color+';border-radius:99px;transition:width 0.7s ease"></div>'
+        +'</div>'
+        +'</div>';
+    }
+  }
+  html += '</div>';
+
+  // Redemption gauge (only when ledger data available)
+  if(ledgerOk){
+    var gc = pct < 10 ? '#6b7283' : pct < 30 ? '#f59e0b' : pct < 60 ? '#4ade80' : '#d4ff3a';
+    var gl = pct === 0 ? 'Καμία εξαργύρωση ακόμα'
+           : pct < 10  ? 'Πολύ χαμηλή — ενθάρρυνε χρήση'
+           : pct < 30  ? 'Χαμηλή — δοκίμασε reminder campaigns'
+           : pct < 60  ? 'Καλή — healthy engagement'
+           : pct < 80  ? 'Υψηλή — πολύ active members'
+           : 'Εξαιρετική — top engagement!';
+    html += '<div class="card" style="padding:16px 14px">'
+      +'<div style="font-size:13px;font-weight:700;margin-bottom:4px">📊 Αποδοτικότητα Εξαργύρωσης</div>'
+      +'<div style="font-size:12px;color:var(--text-2,#6b7283);margin-bottom:14px">Ποσοστό εκδοθέντων πόντων που χρησιμοποιήθηκαν</div>'
+      +'<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">'
+      +'<div style="position:relative;width:130px;height:75px;flex-shrink:0">'
+      +'<canvas id="loyGaugeCanvas" width="130" height="75" style="display:block"></canvas>'
+      +'<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:22px;font-weight:800;line-height:1;color:'+gc+'">'
+      +pct+'<span style="font-size:12px;font-weight:400;color:var(--text-2,#6b7283)">%</span></div>'
+      +'</div>'
+      +'<div style="flex:1;min-width:120px">'
+      +'<div style="font-size:14px;font-weight:700;color:'+gc+';margin-bottom:8px">'+gl+'</div>'
+      +'<div style="font-size:12px;color:var(--text-2,#6b7283);line-height:1.8">'
+      +'Εκδόθηκαν: <span style="font-weight:700;color:var(--text-0)">'+_loyFmtPts(issued)+'</span><br>'
+      +'Εξαργυρώθηκαν: <span style="font-weight:700;color:var(--text-0)">'+_loyFmtPts(redeemed)+'</span>'
+      +'</div>'
+      +'</div>'
+      +'</div>'
+      +'</div>';
+  }
+
+  return html;
+}
+
+function _loyGaugeRender(pct, ledgerOk){
+  if(!ledgerOk) return;
+  var canvas = document.getElementById('loyGaugeCanvas');
+  if(!canvas || typeof Chart === 'undefined') return;
+  if(_loyOvChart){ try{ _loyOvChart.destroy(); }catch(e){} _loyOvChart = null; }
+  var existing = (Chart.getChart) ? Chart.getChart(canvas) : null;
+  if(existing){ try{ existing.destroy(); }catch(e){} }
+  var color = pct < 10 ? '#6b7283' : pct < 30 ? '#f59e0b' : pct < 60 ? '#4ade80' : '#d4ff3a';
+  _loyOvChart = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [Math.max(pct, 0), Math.max(100 - pct, 0)],
+        backgroundColor: [color, 'rgba(255,255,255,0.07)'],
+        borderWidth: 0,
+        borderRadius: 3
+      }]
+    },
+    options: {
+      circumference: 180,
+      rotation: -90,
+      cutout: '74%',
+      responsive: false,
+      plugins: { legend:{display:false}, tooltip:{enabled:false} },
+      animation: { duration:700, easing:'easeOutQuart' }
+    }
+  });
+}
+
 function _setLoyaltyTab(tab){
   _LOYALTY_TAB = tab;
   var ids = ['overview','members','offers','activity','settings'];
@@ -3821,7 +3987,13 @@ function _setLoyaltyTab(tab){
     var body=document.getElementById('loyBody_'+t);
     if(body){ body.style.display=t===tab?'':'none'; }
   }
-  // Lazy-render settings tab content only when that tab becomes active
+  // Lazy-render overview + settings tabs only when active
+  if(tab==='overview'){
+    var ovBody=document.getElementById('loyBody_overview');
+    if(ovBody && !ovBody.hasAttribute('data-rendered')){
+      if(typeof _renderLoyaltyOverview==='function') _renderLoyaltyOverview();
+    }
+  }
   if(tab==='settings'){
     var settingsBody=document.getElementById('loyBody_settings');
     if(settingsBody && !settingsBody.hasAttribute('data-rendered')){
@@ -3835,6 +4007,8 @@ function _setLoyaltyTab(tab){
 function renderLoyalty(){
   var content=document.getElementById('content');
   if(!content) return;
+  // Destroy any lingering gauge chart from previous render
+  if(_loyOvChart){ try{ _loyOvChart.destroy(); }catch(e){} _loyOvChart=null; }
   var t=_LOYALTY_TAB;
   content.innerHTML='<div class="page-head"><div><div class="page-title">🎁 Loyalty</div><div class="page-sub">Πρόγραμμα πιστότητας πελατών</div></div></div>'
     +'<div class="shifts-tabs-bar">'
@@ -3845,7 +4019,6 @@ function renderLoyalty(){
     +'<button id="loyTab_settings" class="shifts-tab'+(t==='settings'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'settings\')">Ρυθμίσεις Προγράμματος</button>'
     +'</div>'
     +'<div id="loyBody_overview" style="'+(t!=='overview'?'display:none':'')+'">'
-    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📊</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Επισκόπηση</div><div class="muted" style="font-size:16px">Σύντομα — στατιστικά προγράμματος, τζίρος από πόντους, top members.</div></div>'
     +'</div>'
     +'<div id="loyBody_members" style="'+(t!=='members'?'display:none':'')+'">'
     +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">👥</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Μέλη</div><div class="muted" style="font-size:16px">Σύντομα — κατάλογος μελών ανά tier, φίλτρα, bulk actions.</div></div>'
@@ -3860,6 +4033,7 @@ function renderLoyalty(){
     +'</div>';
   if(typeof lucide!=='undefined') lucide.createIcons();
   if(t==='settings') _setLoyaltyTab('settings');
+  if(t==='overview') _setLoyaltyTab('overview');
 }
 
 // ===== MAIN RENDERER =====
