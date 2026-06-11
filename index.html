@@ -16176,6 +16176,7 @@ function znHubForPage(id){
 window.znGoBack = function(){
   var prev=(window._znViewHist&&window._znViewHist.length)?window._znViewHist.pop():null;
   window._znBackNav=true;
+  if(typeof window.znDiagUpdate==='function') window.znDiagUpdate('BACK pressed -> target: '+(prev||'dashboard(fallback)'));
   if(prev&&typeof showPage==='function') showPage(prev);
   else if(typeof showPage==='function') showPage('dashboard');
 };
@@ -16185,6 +16186,22 @@ window.znGoBack = function(){
   var btn = document.getElementById('znPageClose');
   if(btn) btn.addEventListener('click', function(e){ e.stopPropagation(); if(typeof znGoBack === 'function') znGoBack(); });
 })();
+
+window.znDiagUpdate = function(extra){
+  var el = document.getElementById('znDiag');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'znDiag';
+    el.style.cssText = 'position:fixed;left:6px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:2147483600;background:rgba(0,0,0,.82);color:#39FF14;font:11px/1.35 ui-monospace,Menlo,monospace;padding:5px 8px;border-radius:8px;max-width:92vw;white-space:pre-wrap;word-break:break-word;pointer-events:auto;';
+    el.addEventListener('click', function(){
+      if(el.dataset.mini === '1'){ el.dataset.mini = '0'; window.znDiagUpdate(); }
+      else { el.dataset.mini = '1'; el.textContent = 'DIAG'; }
+    });
+    document.body.appendChild(el);
+  }
+  if(el.dataset.mini === '1') return;
+  el.textContent = 'DIAG3  cur=' + (window._znCurView||'none') + '\nhist=[' + ((window._znViewHist||[]).join(' > ')) + ']' + (extra ? '\n'+extra : '');
+};
 
 // Pages where X should be hidden: tab home pages + dashboard
 var _PRIMARY_PAGES = ['dashboard', 'pos', 'inventory', 'customers', 'reports', 'settings', 'sitebuilder'];
@@ -16356,6 +16373,7 @@ function _showPageInternal(p){
   } catch(_){}
   // Update central page-close button visibility
   try { _updatePageCloseBtn(p); } catch(_){}
+  if(typeof window.znDiagUpdate==='function') window.znDiagUpdate();
 }
 
 // Επαναφορά σελίδας από URL hash ή localStorage στο load
