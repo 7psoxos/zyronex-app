@@ -16174,9 +16174,10 @@ function znHubForPage(id){
 }
 
 window.znGoBack = function(){
-  var prev = (window.ZN_NAV_STACK && window.ZN_NAV_STACK.length) ? window.ZN_NAV_STACK.pop() : null;
-  if(prev && typeof showPage==='function'){ showPage(prev, {fromBack:true}); }
-  else if(typeof showPage==='function'){ showPage('dashboard'); }
+  var prev=(window._znViewHist&&window._znViewHist.length)?window._znViewHist.pop():null;
+  window._znBackNav=true;
+  if(prev&&typeof showPage==='function') showPage(prev);
+  else if(typeof showPage==='function') showPage('dashboard');
 };
 
 // Central page-close button wiring (click handler set once; survives #content rewrites)
@@ -16215,6 +16216,10 @@ function _updatePageCloseBtn(p){
 }
 
 function _showPageInternal(p){
+  if(!window._znViewHist) window._znViewHist=[];
+  if(window._znBackNav){ window._znBackNav=false; }
+  else if(window._znCurView && window._znCurView!==p){ window._znViewHist.push(window._znCurView); if(window._znViewHist.length>30) window._znViewHist.shift(); }
+  window._znCurView=p;
   // 🛡️ AUDIT MODE LOCK GUARD — when audit mode is active, ONLY allow audit page
   // (prevents navigation while inspector is using the tablet)
   if(typeof AUDIT_STATE !== 'undefined' && AUDIT_STATE && AUDIT_STATE.active && p !== 'audit'){
@@ -25879,22 +25884,6 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Escape' && _znHubOpen) znHubClose();
 });
 
-(function(){
-  var _sp = window.showPage;
-  if(typeof _sp !== 'function') return;
-  var _znCurPage = null;
-  window.showPage = function(p, opts){
-    if(_znCurPage === null) _znCurPage = window.CURRENT_PAGE_ID || null;
-    var prev = _znCurPage;
-    if(prev && prev !== p && !(opts && opts.fromBack)){
-      if(!window.ZN_NAV_STACK) window.ZN_NAV_STACK = [];
-      window.ZN_NAV_STACK.push(prev);
-      if(window.ZN_NAV_STACK.length > 30) window.ZN_NAV_STACK.shift();
-    }
-    _znCurPage = p;
-    return _sp.apply(this, arguments);
-  };
-})();
 
 /* ============================================================
    USERS
