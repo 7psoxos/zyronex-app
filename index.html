@@ -12849,9 +12849,9 @@ var INSPECTOR = {
     // 5. Κάθε φορά που φορτώνεται σελίδα, καταχώρισε το page name
     const origShowPage = window.showPage;
     if(typeof origShowPage === 'function'){
-      window.showPage = (p)=>{
+      window.showPage = (p, ...rest)=>{
         window.CURRENT_PAGE_ID = p;
-        try{ return origShowPage(p); }
+        try{ return origShowPage(p, ...rest); }
         catch(err){
           this.log('critical','js_error',`Σφάλμα render σελίδας "${p}"`, err.message, {stack: err.stack});
           throw err;
@@ -16166,16 +16166,21 @@ window.ZNNav = {
 window._pageHistory = [];
 var ZN_NAV_STACK = [];
 
+function znHubForPage(id){
+  try{ for(var k in window.ZN_HUBS){ var ps=(window.ZN_HUBS[k].pages)||[]; for(var i=0;i<ps.length;i++){ if(ps[i] && ps[i].page===id) return k; } } }catch(e){}
+  return (window.ZN_PAGE_TO_TAB||{})[id] || null;
+}
+
 window.znGoBack = function(){
-  var currentPage = window.CURRENT_PAGE_ID;
-  var hub = (window.ZN_PAGE_TO_TAB||{})[currentPage];
+  var cur = window.CURRENT_PAGE_ID;
+  var hub = znHubForPage(cur);
   if (hub && typeof znHubOpen==='function') {
     znHubOpen(hub);
     if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
     return;
   }
-  var prev = ZN_NAV_STACK.pop();
-  if (prev) { showPage(prev, {fromBack:true}); return; }
+  var prev = ZN_NAV_STACK && ZN_NAV_STACK.pop();
+  if (prev) { showPage(prev); return; }
   showPage('dashboard');
 };
 
