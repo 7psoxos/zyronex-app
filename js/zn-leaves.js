@@ -3803,6 +3803,51 @@ function ciFlavorFamily(productName){
   return 'Άλλο';
 }
 
+// ===== LOYALTY PANEL =====
+var _LOYALTY_TAB = 'overview';
+
+function _setLoyaltyTab(tab){
+  _LOYALTY_TAB = tab;
+  var ids = ['overview','members','offers','activity','settings'];
+  for(var i=0;i<ids.length;i++){
+    var t=ids[i];
+    var btn=document.getElementById('loyTab_'+t);
+    if(btn){ btn.className='shifts-tab'+(t===tab?' active':''); }
+    var body=document.getElementById('loyBody_'+t);
+    if(body){ body.style.display=t===tab?'':'none'; }
+  }
+}
+
+function renderLoyalty(){
+  var content=document.getElementById('content');
+  if(!content) return;
+  var t=_LOYALTY_TAB;
+  content.innerHTML='<div class="page-head"><div><div class="page-title">🎁 Loyalty</div><div class="page-sub">Πρόγραμμα πιστότητας πελατών</div></div></div>'
+    +'<div class="shifts-tabs-bar">'
+    +'<button id="loyTab_overview" class="shifts-tab'+(t==='overview'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'overview\')">Επισκόπηση</button>'
+    +'<button id="loyTab_members" class="shifts-tab'+(t==='members'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'members\')">Μέλη</button>'
+    +'<button id="loyTab_offers" class="shifts-tab'+(t==='offers'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'offers\')">Προσφορές &amp; Ανταμοιβές</button>'
+    +'<button id="loyTab_activity" class="shifts-tab'+(t==='activity'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'activity\')">Δραστηριότητα</button>'
+    +'<button id="loyTab_settings" class="shifts-tab'+(t==='settings'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'settings\')">Ρυθμίσεις Προγράμματος</button>'
+    +'</div>'
+    +'<div id="loyBody_overview" style="'+(t!=='overview'?'display:none':'')+'">'
+    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📊</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Επισκόπηση</div><div class="muted" style="font-size:16px">Σύντομα — στατιστικά προγράμματος, τζίρος από πόντους, top members.</div></div>'
+    +'</div>'
+    +'<div id="loyBody_members" style="'+(t!=='members'?'display:none':'')+'">'
+    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">👥</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Μέλη</div><div class="muted" style="font-size:16px">Σύντομα — κατάλογος μελών ανά tier, φίλτρα, bulk actions.</div></div>'
+    +'</div>'
+    +'<div id="loyBody_offers" style="'+(t!=='offers'?'display:none':'')+'">'
+    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">🎟️</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Προσφορές &amp; Ανταμοιβές</div><div class="muted" style="font-size:16px">Σύντομα — δημιουργία προσφορών, ανταμοιβές ανά tier, campaigns.</div></div>'
+    +'</div>'
+    +'<div id="loyBody_activity" style="'+(t!=='activity'?'display:none':'')+'">'
+    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📋</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Δραστηριότητα</div><div class="muted" style="font-size:16px">Σύντομα — loyalty ledger, earn/redeem ιστορικό, εξαγωγή CSV.</div></div>'
+    +'</div>'
+    +'<div id="loyBody_settings" style="'+(t!=='settings'?'display:none':'')+'">'
+    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">⚙️</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Ρυθμίσεις Προγράμματος</div><div class="muted" style="font-size:16px">Σύντομα — earning rate, tier thresholds, έκπτωση ανά tier, online παραγγελίες.</div></div>'
+    +'</div>';
+  if(typeof lucide!=='undefined') lucide.createIcons();
+}
+
 // ===== MAIN RENDERER =====
 async function renderCustomerIntel(){
   const content = document.getElementById('content');

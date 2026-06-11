@@ -618,7 +618,7 @@ if(window.navigator && window.navigator.share){
   }
   .zn-hub-grid{
     display:grid;grid-template-columns:repeat(3,1fr);
-    gap:8px;padding:12px 12px 16px;
+    gap:8px;padding:12px 12px calc(16px + env(safe-area-inset-bottom,0px));
   }
   @media(min-width:480px){
     .zn-hub-grid{grid-template-columns:repeat(4,1fr);}
@@ -2989,6 +2989,23 @@ var HELP_CONTENT = {
         {icon:'🏆', title:'Loyalty Tiers', body:`<p>Customers level up based on total spent:</p><ul><li><b>🥉 Bronze</b>: €0-99 (no discount)</li><li><b>🥈 Silver</b>: €100-299 (3% off)</li><li><b>🥇 Gold</b>: €300-699 (5%)</li><li><b>💎 Platinum</b>: €700+ (10%)</li></ul><p>Discount applies automatically at POS.</p>`},
         {icon:'🧬', title:'Customer DNA', body:`<p>Auto-generated tags from behavior: "fruit lover", "high nicotine", "weekend buyer" etc. Visible in customer profile.</p>`},
         {icon:'📧', title:'Campaigns & Birthdays', body:`<p>From Home Action Cards you can send:</p><ul><li>Email to inactive customers with offer</li><li>Birthday wishes with auto discount code</li></ul>`}
+      ]
+    }
+  },
+
+  loyalty: {
+    el: {
+      title: 'Loyalty — Πρόγραμμα Πιστότητας',
+      sections: [
+        {icon:'🎁', title:'Τι είναι το Loyalty Panel', body:`<p>Κεντρικό σημείο διαχείρισης του προγράμματος πιστότητας: στατιστικά, μέλη ανά tier, ιστορικό earn/redeem και ρυθμίσεις.</p>`},
+        {icon:'⚙️', title:'Ρυθμίσεις', body:`<p>Μετάβαση στην καρτέλα "Ρυθμίσεις Προγράμματος" για να ορίσεις earning rates, tier thresholds και εάν οι online παραγγελίες κερδίζουν πόντους.</p>`}
+      ]
+    },
+    en: {
+      title: 'Loyalty — Loyalty Program',
+      sections: [
+        {icon:'🎁', title:'What is the Loyalty Panel', body:`<p>Central hub for managing the loyalty program: statistics, members by tier, earn/redeem history and settings.</p>`},
+        {icon:'⚙️', title:'Settings', body:`<p>Go to "Program Settings" tab to configure earning rates, tier thresholds and whether online orders earn points.</p>`}
       ]
     }
   },
@@ -6081,6 +6098,27 @@ var HELPDESK_CONTENT = {
         <div class="hd-step"><div class="hd-step-num">3</div><div class="hd-step-body"><strong>Choose amount → Automatically deducted from total</strong></div></div>
         <div class="hd-tip">💡 Set the rate (points/€) from Settings → Loyalty.</div>
         <div class="hd-tip">🛵 Online orders (efood/Wolt): Settings → Payments &amp; Points → "Points for online orders" (on by default — turn off if platform commissions don't justify awarding points).</div>
+      `}
+    },
+
+    'loyalty-panel': {
+      icon:'🎁',
+      title:{el:'Loyalty Panel', en:'Loyalty Panel'},
+      excerpt:{el:'Κεντρική διαχείριση προγράμματος πιστότητας — μέλη, στατιστικά, ρυθμίσεις.', en:'Central loyalty program management — members, stats, settings.'},
+      body:{el:`
+        <div class="article-icon">🎁</div>
+        <h1>Loyalty Panel</h1>
+        <div class="article-sub">Όλα για το πρόγραμμα πιστότητας σε ένα μέρος</div>
+        <p>Βρες το Loyalty Panel στο hub <strong>Πελάτες</strong>. Περιέχει 5 καρτέλες: Επισκόπηση, Μέλη, Προσφορές &amp; Ανταμοιβές, Δραστηριότητα, Ρυθμίσεις Προγράμματος.</p>
+        <h2>Ρυθμίσεις Πόντων</h2>
+        <p>Ορισμός earning rate ανά tier, thresholds και toggle για online παραγγελίες από Ρυθμίσεις → Πληρωμές &amp; Πόντοι.</p>
+      `,en:`
+        <div class="article-icon">🎁</div>
+        <h1>Loyalty Panel</h1>
+        <div class="article-sub">Everything about the loyalty program in one place</div>
+        <p>Find the Loyalty Panel in the <strong>Customers</strong> hub. It has 5 tabs: Overview, Members, Offers &amp; Rewards, Activity, Program Settings.</p>
+        <h2>Points Settings</h2>
+        <p>Set earning rate per tier, tier thresholds and the online orders toggle from Settings → Payments &amp; Points.</p>
       `}
     },
 
@@ -16310,6 +16348,7 @@ function _showPageInternal(p){
     'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,taxagent:renderTaxAgent,
     balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,
     mixology:renderMixology,
+    loyalty:renderLoyalty,
     'customer-intel':renderCustomerIntel,
     documents:renderDocuments,users:renderUsers,settings:renderSettings,inspector:renderInspector,
     vault:renderVault,
@@ -25666,7 +25705,7 @@ var ZN_PAGE_TO_TAB = {
   compliance:'inventory',
   // Customers tab
   customers:'customers', 'customer-intel':'customers', mixology:'customers',
-  pulse:'customers', dypa:'customers', campaigns:'customers',
+  pulse:'customers', dypa:'customers', campaigns:'customers', loyalty:'customers',
   // Finance tab
   cashbook:'finance', banking:'finance', reports:'finance', vat:'finance',
   taxagent:'finance',
@@ -25718,6 +25757,7 @@ var ZN_HUBS = {
     icon:'👥', label:'Πελάτες', color:'#ec4899',
     pages:[
       {icon:'👤', label:'Πελάτες', page:'customers', hot:true},
+      {icon:'🎁', label:'Loyalty', page:'loyalty', hot:true},
       {icon:'🧠', label:'Ανάλυση Πελατών', page:'customer-intel', plan:'pro'},
       {icon:'📣', label:'Καμπάνιες & Προσφορές', page:'campaigns', plan:'pro'},
       {icon:'✨', label:'ZyroNex Pulse', page:'pulse', plan:'pro', hot:true},
