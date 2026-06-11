@@ -16175,17 +16175,13 @@ function znHubForPage(id){
 
 window.znGoBack = function(){
   var cur = window.CURRENT_PAGE_ID;
-  var hub = znHubForPage(cur);
+  var hub = (typeof znHubForPage==='function') ? znHubForPage(cur) : null;
+  var c = document.getElementById('content'); if(c){ c.innerHTML=''; c.style.display='none'; }
+  var x = document.getElementById('znPageClose'); if(x) x.style.display='none';
+  window.CURRENT_PAGE_ID = null;
   if (hub && typeof znHubOpen==='function') {
-    setTimeout(function(){
-      znHubOpen(hub);
-      if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
-    }, 0);
-    return;
+    setTimeout(function(){ znHubOpen(hub); if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub); }, 0);
   }
-  var prev = ZN_NAV_STACK && ZN_NAV_STACK.pop();
-  if (prev) { showPage(prev); return; }
-  showPage('dashboard');
 };
 
 // Central page-close button wiring (click handler set once; survives #content rewrites)
@@ -16224,6 +16220,7 @@ function _updatePageCloseBtn(p){
 }
 
 function _showPageInternal(p){
+  var _c = document.getElementById('content'); if(_c && _c.style.display === 'none') _c.style.display = '';
   // 🛡️ AUDIT MODE LOCK GUARD — when audit mode is active, ONLY allow audit page
   // (prevents navigation while inspector is using the tablet)
   if(typeof AUDIT_STATE !== 'undefined' && AUDIT_STATE && AUDIT_STATE.active && p !== 'audit'){
