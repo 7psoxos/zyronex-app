@@ -5061,6 +5061,192 @@ function _loyOffersToast(msg, type){
   else { console.log('[loyalty-offers]', msg); }
 }
 
+// ===== LOYALTY ACTIVITY TAB =====
+var _loyActRows = [];
+var _loyActFilter = 'all';
+
+function _loyActFmtDate(d){
+  if(!d) return '';
+  var dt = new Date(d);
+  if(isNaN(dt.getTime())) return '';
+  return (dt.getDate()<10?'0':'')+dt.getDate()+'/'+(dt.getMonth()<9?'0':'')+(dt.getMonth()+1)+'/'+dt.getFullYear();
+}
+
+function _loyActTypeLabel(type, delta){
+  if(type === 'earn')     return 'Κέρδος';
+  if(type === 'redeem')   return 'Εξαργύρωση';
+  if(type === 'backfill') return 'Αρχικό υπόλοιπο';
+  if(type === 'adjust')   return 'Προσαρμογή';
+  var d = Number(delta);
+  if(d > 0) return 'Κέρδος';
+  if(d < 0) return 'Εξαργύρωση';
+  return 'Κίνηση';
+}
+
+function _loyActFilter2Rows(rows, filter){
+  if(filter === 'earn')   return rows.filter(function(r){ return Number(r.delta) > 0; });
+  if(filter === 'redeem') return rows.filter(function(r){ return Number(r.delta) < 0; });
+  return rows;
+}
+
+function _loyActFeedHTML(rows){
+  if(!rows.length){
+    return '<div style="text-align:center;padding:32px 20px;color:var(--text-2,#6b7283);font-size:15px">Καμία κίνηση ακόμα.</div>';
+  }
+  var cs = window.CUSTOMERS || [];
+  var nameMap = {};
+  for(var j = 0; j < cs.length; j++){ nameMap[String(cs[j].id)] = cs[j].name || '—'; }
+  var h = '';
+  for(var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    var delta = Number(r.delta) || 0;
+    var lbl = _loyActTypeLabel(r.type, delta);
+    var name = nameMap[String(r.customer_id)] || '—';
+    var dStr = _loyActFmtDate(r.created_at);
+    var col = delta > 0 ? '#16a34a' : (delta < 0 ? '#dc2626' : 'var(--text-2,#6b7283)');
+    var sign = delta > 0 ? '+' : '';
+    var sep = i > 0 ? 'border-top:1px solid var(--border,#e5e7eb)' : '';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;'+sep+'">'
+      +'<div style="flex:1;min-width:0;margin-right:10px">'
+      +'<div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+      +_loyOffersEsc(name)+'</div>'
+      +'<div style="font-size:13px;color:var(--text-2,#6b7283)">'+lbl
+      +(dStr ? ' · '+dStr : '')
+      +(r.note ? ' · <span style="font-style:italic">'+_loyOffersEsc(r.note)+'</span>' : '')
+      +'</div>'
+      +'</div>'
+      +'<div style="text-align:right;flex-shrink:0">'
+      +'<div style="font-size:16px;font-weight:800;color:'+col+'">'+sign+delta+'</div>'
+      +'<div style="font-size:11px;color:var(--text-2,#6b7283)">υπόλοιπο: '+_loyFmtPts(Number(r.balance_after)||0)+'</div>'
+      +'</div></div>';
+  }
+  return h;
+}
+
+function _loyActExportCSV(rows){
+  var cs = window.CUSTOMERS || [];
+  var nameMap = {};
+  for(var j = 0; j < cs.length; j++){ nameMap[String(cs[j].id)] = cs[j].name || '—'; }
+  var lines = ['﻿' + 'Ημερομηνία,Πελάτης,Τύπος,Πόντοι,Υπόλοιπο,Σημείωση'];
+  for(var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    var csvEsc = function(v){ return '"'+String(v||'').replace(/"/g,'""')+'"'; };
+    lines.push([
+      csvEsc(_loyActFmtDate(r.created_at)),
+      csvEsc(nameMap[String(r.customer_id)] || '—'),
+      csvEsc(_loyActTypeLabel(r.type, r.delta)),
+      csvEsc(Number(r.delta)||0),
+      csvEsc(Number(r.balance_after)||0),
+      csvEsc(r.note||'')
+    ].join(','));
+  }
+  var csv = lines.join('\r\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var today = new Date();
+  var fname = 'loyalty_activity_'+today.getFullYear()+'-'
+    +(today.getMonth()<9?'0':'')+(today.getMonth()+1)+'-'
+    +(today.getDate()<10?'0':'')+today.getDate()+'.csv';
+  var a = document.createElement('a');
+  a.href = url; a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+  if(typeof toast === 'function') toast('Εξαγωγή ολοκληρώθηκε','success');
+}
+
+async function _renderLoyaltyActivity(){
+  var body = document.getElementById('loyBody_activity');
+  if(!body || body.hasAttribute('data-rendered')) return;
+
+  body.innerHTML = '<div class="mt-4" style="text-align:center;padding:40px">'
+    +'<div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);'
+    +'border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></div></div>';
+
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  var hasConn = sbC && typeof SHOP_ID !== 'undefined';
+
+  // Fetch ledger rows and summary in parallel
+  var rows = [], issued = 0, redeemed = 0;
+  if(hasConn){
+    try{
+      var lr = await sbC.from('loyalty_ledger')
+        .select('id,customer_id,type,delta,balance_after,note,created_at')
+        .eq('shop_id', SHOP_ID)
+        .order('created_at',{ascending:false})
+        .limit(100);
+      if(!lr.error) rows = lr.data || [];
+    }catch(e){ console.warn('[loy-act] ledger', e); }
+    try{
+      var sr = await sbC.rpc('loyalty_points_summary', {p_shop_id: SHOP_ID});
+      if(!sr.error && sr.data && sr.data[0]){
+        issued   = Math.max(0, Number(sr.data[0].issued)   || 0);
+        redeemed = Math.max(0, Number(sr.data[0].redeemed) || 0);
+      }
+    }catch(e){ console.warn('[loy-act] summary', e); }
+  }
+
+  _loyActRows   = rows;
+  _loyActFilter = 'all';
+
+  var outstanding = issued - redeemed;
+  var summaryHTML = hasConn
+    ? '<div style="font-size:14px;color:var(--text-1,#374151);margin-bottom:16px;padding:12px 14px;'
+      +'background:var(--bg-2,#f9fafb);border-radius:10px;border:1px solid var(--border,#e5e7eb)">'
+      +'Εκδόθηκαν <strong>'+_loyFmtPts(issued)+'</strong>'
+      +' · Εξαργυρώθηκαν <strong>'+_loyFmtPts(redeemed)+'</strong>'
+      +' · Σε κυκλοφορία <strong>'+_loyFmtPts(Math.max(0,outstanding))+'</strong>'
+      +'</div>'
+    : '';
+
+  var html = '<div class="mt-4">'
+    +summaryHTML
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">'
+    +'<button id="loyActChipAll" data-loy-act-chip="all" '
+    +'style="min-height:36px;padding:0 14px;border-radius:99px;border:1px solid var(--border,#e5e7eb);'
+    +'font-size:13px;font-weight:700;cursor:pointer;background:var(--accent,#6366f1);color:#fff">Όλα</button>'
+    +'<button id="loyActChipEarn" data-loy-act-chip="earn" '
+    +'style="min-height:36px;padding:0 14px;border-radius:99px;border:1px solid var(--border,#e5e7eb);'
+    +'font-size:13px;font-weight:700;cursor:pointer;background:var(--bg-1,#fff);color:var(--text-1,#374151)">Κέρδη</button>'
+    +'<button id="loyActChipRedeem" data-loy-act-chip="redeem" '
+    +'style="min-height:36px;padding:0 14px;border-radius:99px;border:1px solid var(--border,#e5e7eb);'
+    +'font-size:13px;font-weight:700;cursor:pointer;background:var(--bg-1,#fff);color:var(--text-1,#374151)">Εξαργυρώσεις</button>'
+    +'<button id="loyActExportBtn" '
+    +'style="min-height:36px;padding:0 14px;border-radius:99px;border:1px solid var(--border,#e5e7eb);'
+    +'font-size:13px;font-weight:600;cursor:pointer;background:var(--bg-1,#fff);color:var(--text-1,#374151);'
+    +'margin-left:auto">⬇️ Εξαγωγή CSV</button>'
+    +'</div>'
+    +'<div class="card" style="padding:0 16px">'
+    +'<div id="loyActFeed">'+_loyActFeedHTML(rows)+'</div>'
+    +'</div>'
+    +'</div>';
+
+  body.innerHTML = html;
+  body.setAttribute('data-rendered','1');
+
+  // Delegated filter chip clicks
+  var chipBar = body.querySelector('[data-loy-act-chip="all"]') && body.children[0];
+  body.addEventListener('click', function(e){
+    var chip = e.target.closest('[data-loy-act-chip]');
+    if(chip){
+      _loyActFilter = chip.getAttribute('data-loy-act-chip');
+      // Update chip styles
+      var chips = body.querySelectorAll('[data-loy-act-chip]');
+      for(var k = 0; k < chips.length; k++){
+        var active = chips[k].getAttribute('data-loy-act-chip') === _loyActFilter;
+        chips[k].style.background = active ? 'var(--accent,#6366f1)' : 'var(--bg-1,#fff)';
+        chips[k].style.color      = active ? '#fff' : 'var(--text-1,#374151)';
+      }
+      var feed = document.getElementById('loyActFeed');
+      if(feed) feed.innerHTML = _loyActFeedHTML(_loyActFilter2Rows(_loyActRows, _loyActFilter));
+      return;
+    }
+    if(e.target.closest('#loyActExportBtn')){
+      _loyActExportCSV(_loyActFilter2Rows(_loyActRows, _loyActFilter));
+    }
+  });
+}
+
 function _setLoyaltyTab(tab){
   _LOYALTY_TAB = tab;
   var ids = ['overview','members','offers','activity','settings'];
@@ -5098,6 +5284,12 @@ function _setLoyaltyTab(tab){
       if(typeof _renderLoyaltyOffers==='function') _renderLoyaltyOffers();
     }
   }
+  if(tab==='activity'){
+    var actBody=document.getElementById('loyBody_activity');
+    if(actBody && !actBody.hasAttribute('data-rendered')){
+      if(typeof _renderLoyaltyActivity==='function') _renderLoyaltyActivity();
+    }
+  }
 }
 
 function renderLoyalty(){
@@ -5121,15 +5313,15 @@ function renderLoyalty(){
     +'<div id="loyBody_offers" style="'+(t!=='offers'?'display:none':'')+'">'
     +'</div>'
     +'<div id="loyBody_activity" style="'+(t!=='activity'?'display:none':'')+'">'
-    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📋</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Δραστηριότητα</div><div class="muted" style="font-size:16px">Σύντομα — loyalty ledger, earn/redeem ιστορικό, εξαγωγή CSV.</div></div>'
     +'</div>'
     +'<div id="loyBody_settings" style="'+(t!=='settings'?'display:none':'')+'">'
     +'</div>';
   if(typeof lucide!=='undefined') lucide.createIcons();
-  if(t==='settings') _setLoyaltyTab('settings');
-  if(t==='overview') _setLoyaltyTab('overview');
-  if(t==='members')  _setLoyaltyTab('members');
-  if(t==='offers')   _setLoyaltyTab('offers');
+  if(t==='settings')  _setLoyaltyTab('settings');
+  if(t==='overview')  _setLoyaltyTab('overview');
+  if(t==='members')   _setLoyaltyTab('members');
+  if(t==='offers')    _setLoyaltyTab('offers');
+  if(t==='activity')  _setLoyaltyTab('activity');
 }
 
 // ===== MAIN RENDERER =====
