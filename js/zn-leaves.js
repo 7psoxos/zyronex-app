@@ -28370,7 +28370,7 @@ async function _doCheckout(){
     var _bonus = _computeCartBonusPoints(CART);
     var _la = await _loyaltyAward({ customerId: customerId, saleId: (saleData && saleData.id) || null, subtotal: subtotal, pointsUsed: pointsUsed, shopId: SHOP_ID, bonusPoints: _bonus, earnNote: (_bonus > 0 ? 'Bonus πόντοι (πολλαπλασιαστήρας): +'+_bonus : null) });
     if(_la){ earnedPoints = _la.earned; newTier = _la.tier; }
-    _captureMultiplierUses(CART, saleData.id, customerId);
+    if(customerId){ _captureMultiplierUses(CART, saleData.id, customerId); }
     // Points-used toast
     if(customerId && pointsUsed > 0) toast(`⭐ Χρησιμοποιήθηκαν ${pointsUsed} πόντοι`, 'info');
     // Store credit deduction (separate from loyalty — _loyaltyAward does not touch store_credit)
@@ -28701,9 +28701,9 @@ async function syncOfflineQueue(){
             bonusPoints: _offBonus,
             earnNote: (_offBonus > 0 ? 'Bonus πόντοι (πολλαπλασιαστήρας): +'+_offBonus : null)
           });
+          _captureMultiplierUses(entry.cart, saleId, entry.customerId);
         }catch(e){ console.error('[offline sync] _loyaltyAward failed:', e); }
       }
-      _captureMultiplierUses(entry.cart, saleId, entry.customerId);
     }catch(err){
       console.error('Sync failed for entry:', entry, err);
       failed++;
