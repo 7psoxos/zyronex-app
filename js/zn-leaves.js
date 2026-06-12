@@ -4046,8 +4046,8 @@ function _renderLoyaltyMembers(){
     var topPts = Number(top.loyaltyPoints) || 0;
     var topTKey = (top.loyaltyTier || 'bronze').toLowerCase();
     var topTM = TIER[topTKey] || TIER.bronze;
-    html += '<div style="background:linear-gradient(135deg,#1e1535 0%,#2d1b4e 100%);'
-      +'border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:18px;margin-bottom:14px">'
+    html += '<div data-cid="'+top.id+'" style="background:linear-gradient(135deg,#1e1535 0%,#2d1b4e 100%);'
+      +'border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:18px;margin-bottom:14px;cursor:pointer">'
       +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;'
       +'color:rgba(167,139,250,0.6);margin-bottom:12px">🏆 #1 Μέλος</div>'
       +'<div style="display:flex;align-items:flex-start;gap:14px">'
@@ -4085,8 +4085,8 @@ function _renderLoyaltyMembers(){
         var dn = (m.name||'').toLowerCase();
         var dp = (m.phone||'').toLowerCase();
         var sep = i > 1 ? 'border-top:1px solid var(--border)' : '';
-        html += '<div data-member="1" data-name="'+dn+'" data-phone="'+dp+'"'
-          +' style="display:flex;align-items:flex-start;gap:12px;padding:14px;'+sep+'">'
+        html += '<div data-member="1" data-cid="'+m.id+'" data-name="'+dn+'" data-phone="'+dp+'"'
+          +' style="display:flex;align-items:flex-start;gap:12px;padding:14px;cursor:pointer;'+sep+'">'
           + avatar(m.name, tm.color, 38)
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.name||'—')+'</div>'
@@ -4127,6 +4127,316 @@ function _renderLoyaltyMembers(){
       }
       if(nom) nom.style.display = (q && vis === 0) ? '' : 'none';
     });
+  }
+  // Delegated click: open member profile (one listener on the whole body)
+  body.addEventListener('click', function(e){
+    var card = e.target.closest('[data-cid]');
+    if(!card) return;
+    var cid = card.getAttribute('data-cid');
+    if(cid && typeof _renderLoyaltyMemberProfile === 'function') _renderLoyaltyMemberProfile(cid);
+  });
+  // Prevent tel/sms link taps from bubbling up to the profile opener
+  var tlLinks = body.querySelectorAll('a[href^="tel:"],a[href^="sms:"]');
+  for(var k = 0; k < tlLinks.length; k++){
+    tlLinks[k].addEventListener('click', function(e){ e.stopPropagation(); });
+  }
+}
+
+function _renderLoyaltyMemberProfile(cid){
+  var cust = null;
+  var cs = window.CUSTOMERS || [];
+  for(var i = 0; i < cs.length; i++){
+    if(cs[i].id == cid){ cust = cs[i]; break; }
+  }
+  if(!cust) return;
+
+  // Single-instance: remove any existing overlay
+  var ex = document.getElementById('loyMemberProfileOverlay');
+  if(ex) ex.parentNode.removeChild(ex);
+
+  var TIER = {
+    platinum:{emoji:'💎',color:'#a78bfa',label:'Platinum',floor:700,next:700},
+    gold:    {emoji:'🥇',color:'#fbbf24',label:'Gold',    floor:300,next:700},
+    silver:  {emoji:'🥈',color:'#94a3b8',label:'Silver',  floor:100,next:300},
+    bronze:  {emoji:'🥉',color:'#cd7f32',label:'Bronze',  floor:0,  next:100}
+  };
+  var NEXT_LABEL = {bronze:'Silver',silver:'Gold',gold:'Platinum'};
+
+  var pts  = Number(cust.loyaltyPoints) || 0;
+  var tKey = (cust.loyaltyTier || 'bronze').toLowerCase();
+  var tm   = TIER[tKey] || TIER.bronze;
+
+  var esc = function(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  };
+  var fmtDate = function(d){
+    if(!d) return null;
+    var dt = (d instanceof Date) ? d : new Date(d);
+    if(isNaN(dt.getTime())) return null;
+    var dy = dt.getDate(); var mo = dt.getMonth()+1; var yr = dt.getFullYear();
+    return (dy<10?'0':'')+dy+'/'+(mo<10?'0':'')+mo+'/'+yr;
+  };
+  var fmtBday = function(d){
+    if(!d) return null;
+    var dt = (d instanceof Date) ? d : new Date(d);
+    if(isNaN(dt.getTime())) return null;
+    var dy = dt.getDate(); var mo = dt.getMonth()+1;
+    return (dy<10?'0':'')+dy+'/'+(mo<10?'0':'')+mo;
+  };
+  var tierProg = function(p, tk){
+    if(tk==='platinum') return {pct:100,max:true,rem:0,nextName:''};
+    var t2 = TIER[tk]||TIER.bronze;
+    var range = t2.next - t2.floor;
+    var pct = range>0 ? Math.min(100,Math.max(0,Math.round((p-t2.floor)/range*100))) : 0;
+    return {pct:pct,max:false,rem:Math.max(0,t2.next-p),nextName:NEXT_LABEL[tk]||''};
+  };
+  var avHTML = function(name, color, sz){
+    return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+'25;'
+      +'border:2px solid '+color+'70;display:flex;align-items:center;justify-content:center;'
+      +'font-size:'+(sz/2.5|0)+'px;font-weight:800;color:'+color+';flex-shrink:0">'
+      +(name||'?').charAt(0).toUpperCase()+'</div>';
+  };
+
+  var memberId = 'ZN-'+String(cust.id||'').padStart(4,'0');
+  var prog = tierProg(pts, tKey);
+  var ph = cust.phone ? String(cust.phone).replace(/[^0-9+\-\s]/g,'') : null;
+  var qrToken = cust.loyalty_qr_token || null;
+
+  var html = '';
+
+  // ── Sticky top bar ──────────────────────────────────────────────────────────
+  html += '<div style="position:sticky;top:0;z-index:10;background:#f4f5f7;'
+    +'padding:12px 16px;border-bottom:1px solid var(--border,#e5e7eb);'
+    +'display:flex;align-items:center;gap:12px">'
+    +'<button id="loyProfileBack" style="min-width:44px;min-height:44px;border:none;background:none;'
+    +'cursor:pointer;font-size:18px;font-weight:600;color:var(--text-0,#111);padding:0 8px;'
+    +'border-radius:8px">‹ Πίσω</button>'
+    +'<span style="font-size:16px;font-weight:700">Προφίλ Μέλους</span>'
+    +'</div>';
+
+  html += '<div style="padding:16px;max-width:600px;margin:0 auto">';
+
+  // ── 1) Header card ──────────────────────────────────────────────────────────
+  html += '<div style="background:linear-gradient(135deg,'+tm.color+'22 0%,'+tm.color+'08 100%);'
+    +'border:1px solid '+tm.color+'40;border-radius:14px;padding:20px;margin-bottom:14px;text-align:center">'
+    +'<div style="display:flex;justify-content:center;margin-bottom:12px">'+avHTML(cust.name,tm.color,56)+'</div>'
+    +'<div style="font-size:20px;font-weight:800;margin-bottom:4px">'+esc(cust.name||'—')+'</div>'
+    +'<div style="font-size:14px;color:'+tm.color+';font-weight:600;margin-bottom:6px">'+tm.emoji+' '+tm.label+'</div>'
+    +'<div style="font-size:12px;color:var(--text-2,#6b7283);margin-bottom:10px">'+memberId+'</div>'
+    +'<div style="font-size:32px;font-weight:900;color:'+tm.color+'">'
+    +_loyFmtPts(pts)+'<span style="font-size:14px;font-weight:400;color:var(--text-2,#6b7283)"> πόντοι</span></div>';
+  if(cust.ageVerified === true){
+    html += '<div style="display:inline-block;margin-top:10px;padding:4px 12px;'
+      +'background:#16a34a22;border:1px solid #16a34a44;border-radius:99px;'
+      +'font-size:12px;color:#16a34a;font-weight:600">🛡️ Ηλικία επιβεβαιωμένη</div>';
+  }
+  html += '</div>';
+
+  // ── 2) Tier progress bar ────────────────────────────────────────────────────
+  var progLbl = prog.max ? '💎 Μέγιστο επίπεδο'
+    : prog.pct+'% προς '+prog.nextName+(prog.rem>0?' · '+prog.rem+' πόντοι ακόμα':'');
+  html += '<div class="card" style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283);margin-bottom:8px">Πρόοδος επιπέδου</div>'
+    +'<div style="height:8px;background:var(--bg-3,#e5e7eb);border-radius:99px;overflow:hidden;margin-bottom:6px">'
+    +'<div style="height:100%;width:'+prog.pct+'%;background:'+tm.color+';border-radius:99px"></div></div>'
+    +'<div style="font-size:13px;color:var(--text-1,#374151)">'+progLbl+'</div>'
+    +'</div>';
+
+  // ── 3) Store credit ─────────────────────────────────────────────────────────
+  var sc = parseFloat(cust.storeCredit) || 0;
+  html += '<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:14px">'
+    +'<div style="font-size:28px">💳</div><div>'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283)">Πιστωτικό υπόλοιπο</div>'
+    +'<div style="font-size:22px;font-weight:900">€'+sc.toFixed(2)+'</div>'
+    +'<div style="font-size:12px;color:var(--text-2,#6b7283)">διαθέσιμο στο ταμείο</div>'
+    +'</div></div>';
+
+  // ── 4) Statistics ───────────────────────────────────────────────────────────
+  var sRows = [];
+  sRows.push('<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border,#e5e7eb)">'
+    +'<span style="color:var(--text-2,#6b7283)">Συνολικές Αγορές</span>'
+    +'<span style="font-weight:700">€'+(parseFloat(cust.totalSpent)||0).toFixed(2)+'</span></div>');
+  if(cust.visits){
+    sRows.push('<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border,#e5e7eb)">'
+      +'<span style="color:var(--text-2,#6b7283)">Επισκέψεις</span>'
+      +'<span style="font-weight:700">'+Number(cust.visits)+'</span></div>');
+  }
+  var regD = fmtDate(cust.createdAt);
+  if(regD){
+    sRows.push('<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border,#e5e7eb)">'
+      +'<span style="color:var(--text-2,#6b7283)">Μέλος από</span>'
+      +'<span style="font-weight:700">'+regD+'</span></div>');
+  }
+  var lastV = fmtDate(cust.lastVisit);
+  if(lastV){
+    sRows.push('<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border,#e5e7eb)">'
+      +'<span style="color:var(--text-2,#6b7283)">Τελευταία επίσκεψη</span>'
+      +'<span style="font-weight:700">'+lastV+'</span></div>');
+  }
+  var bdStr = fmtBday(cust.birthday);
+  if(bdStr){
+    sRows.push('<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border,#e5e7eb)">'
+      +'<span style="color:var(--text-2,#6b7283)">🎂 Γενέθλια</span>'
+      +'<span style="font-weight:700">'+bdStr+'</span></div>');
+  }
+  if(cust.preferredNicotine){
+    sRows.push('<div style="display:flex;justify-content:space-between;padding:10px 0">'
+      +'<span style="color:var(--text-2,#6b7283)">Νικοτίνη</span>'
+      +'<span style="font-weight:700">'+esc(String(cust.preferredNicotine))+' mg</span></div>');
+  }
+  html += '<div class="card" style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283);margin-bottom:4px">Στατιστικά</div>'
+    +sRows.join('')+'</div>';
+
+  // ── 5) Communication ────────────────────────────────────────────────────────
+  var cRows = [];
+  if(cust.phone) cRows.push('<div style="padding:6px 0;font-size:14px">📞 '+esc(cust.phone)+'</div>');
+  if(cust.email) cRows.push('<div style="padding:6px 0;font-size:14px">✉️ '+esc(cust.email)+'</div>');
+  var adr = [cust.address,cust.city,cust.postalCode].filter(Boolean).join(', ');
+  if(adr) cRows.push('<div style="padding:6px 0;font-size:14px">📍 '+esc(adr)+'</div>');
+  if(cRows.length){
+    html += '<div class="card" style="margin-bottom:14px">'
+      +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+      +'color:var(--text-2,#6b7283);margin-bottom:4px">Επικοινωνία</div>'
+      +cRows.join('');
+    if(ph){
+      html += '<div style="display:flex;gap:8px;margin-top:12px">'
+        +'<a href="tel:'+ph+'" style="display:flex;align-items:center;justify-content:center;flex:1;'
+        +'min-height:44px;border-radius:10px;background:var(--bg-3,#e5e7eb);color:var(--text-0,#111);'
+        +'font-size:14px;font-weight:600;text-decoration:none">📞 Κλήση</a>'
+        +'<a href="sms:'+ph+'" style="display:flex;align-items:center;justify-content:center;flex:1;'
+        +'min-height:44px;border-radius:10px;background:var(--bg-3,#e5e7eb);color:var(--text-0,#111);'
+        +'font-size:14px;font-weight:600;text-decoration:none">💬 SMS</a>'
+        +'</div>';
+    }
+    html += '</div>';
+  }
+
+  // ── 6) QR / token card ──────────────────────────────────────────────────────
+  html += '<div class="card" style="margin-bottom:14px;text-align:center">'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283);margin-bottom:12px">Κάρτα μέλους (QR)</div>';
+  if(qrToken){
+    html += '<div id="loyProfileQrWrap" style="margin:0 auto;background:#fff;border-radius:8px;padding:8px;display:inline-block"></div>';
+  } else {
+    html += '<div style="font-family:monospace;font-size:13px;background:var(--bg-3,#f3f4f6);'
+      +'padding:10px;border-radius:8px">Κωδικός κάρτας: —</div>';
+  }
+  html += '</div>';
+
+  // ── 7) Notes ────────────────────────────────────────────────────────────────
+  if(cust.notes){
+    html += '<div class="card" style="margin-bottom:14px">'
+      +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+      +'color:var(--text-2,#6b7283);margin-bottom:8px">Σημειώσεις</div>'
+      +'<div style="font-size:14px;color:var(--text-1,#374151);white-space:pre-wrap">'+esc(cust.notes)+'</div>'
+      +'</div>';
+  }
+
+  // ── 8) Activity history (async, loading state) ──────────────────────────────
+  html += '<div class="card" style="margin-bottom:32px">'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283);margin-bottom:8px">Ιστορικό Δραστηριότητας</div>'
+    +'<div id="loyProfileActivityInner" style="text-align:center;padding:20px;'
+    +'color:var(--text-2,#6b7283);font-size:14px">⏳ Φόρτωση...</div>'
+    +'</div>';
+
+  html += '</div>'; // end inner padding
+
+  // Build and inject overlay
+  var overlay = document.createElement('div');
+  overlay.id = 'loyMemberProfileOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#f4f5f7;z-index:99999;'
+    +'overflow-y:auto;-webkit-overflow-scrolling:touch;'
+    +'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+
+  // Back button
+  var backBtn = overlay.querySelector('#loyProfileBack');
+  if(backBtn){
+    backBtn.addEventListener('click', function(){
+      var ov = document.getElementById('loyMemberProfileOverlay');
+      if(ov) ov.parentNode.removeChild(ov);
+    });
+  }
+
+  // QR rendering: QRCode.js if loaded, else api.qrserver.com img (existing pattern)
+  if(qrToken){
+    var qrWrap = overlay.querySelector('#loyProfileQrWrap');
+    if(qrWrap){
+      var qrData = 'ZYRONEX-LOYALTY:'+qrToken;
+      if(typeof QRCode !== 'undefined'){
+        try{
+          new QRCode(qrWrap,{text:qrData,width:128,height:128,colorDark:'#000000',colorLight:'#ffffff'});
+        }catch(e){
+          qrWrap.innerHTML='<div style="font-family:monospace;font-size:11px;word-break:break-all;max-width:220px;padding:4px">'+esc(qrToken)+'</div>';
+        }
+      } else {
+        var qrImg = document.createElement('img');
+        qrImg.width = 128; qrImg.height = 128;
+        qrImg.style.cssText = 'display:block;border-radius:4px';
+        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=128x128&data='
+          +encodeURIComponent(qrData)+'&bgcolor=ffffff&color=0f172a&margin=2';
+        qrWrap.appendChild(qrImg);
+      }
+    }
+  }
+
+  // Kick off async ledger load
+  _loadLoyaltyLedger(cid);
+}
+
+async function _loadLoyaltyLedger(cid){
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){
+      var elNoConn = document.getElementById('loyProfileActivityInner');
+      if(elNoConn) elNoConn.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Χωρίς σύνδεση.</div>';
+      return;
+    }
+    var r = await sbC.from('loyalty_ledger')
+      .select('created_at,type,delta,sale_id')
+      .eq('customer_id', cid)
+      .eq('shop_id', SHOP_ID)
+      .order('created_at',{ascending:false})
+      .limit(25);
+    // Re-query element after await in case overlay was closed
+    var inner = document.getElementById('loyProfileActivityInner');
+    if(!inner) return;
+    if(r.error) throw r.error;
+    var rows = r.data || [];
+    if(!rows.length){
+      inner.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">'
+        +'Καμία δραστηριότητα ακόμα — οι πόντοι θα εμφανίζονται εδώ.</div>';
+      return;
+    }
+    var rh = '';
+    for(var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      var rdt = row.created_at ? new Date(row.created_at) : null;
+      var dStr = (rdt && !isNaN(rdt.getTime()))
+        ? (rdt.getDate()<10?'0':'')+rdt.getDate()+'/'+(rdt.getMonth()<9?'0':'')+(rdt.getMonth()+1)+'/'+rdt.getFullYear()
+        : '';
+      var delta = Number(row.delta) || 0;
+      var isEarn = row.type === 'earn';
+      var sign = delta >= 0 ? '+' : '';
+      var col = delta >= 0 ? '#16a34a' : '#dc2626';
+      var lbl = isEarn ? 'Κέρδος' : 'Εξαργύρωση';
+      var rowSep = i > 0 ? 'border-top:1px solid var(--border,#e5e7eb)' : '';
+      rh += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;'+rowSep+'">'
+        +'<div><div style="font-size:13px;font-weight:600">'+lbl+'</div>'
+        +'<div style="font-size:11px;color:var(--text-2,#6b7283)">'+dStr+'</div></div>'
+        +'<div style="font-size:16px;font-weight:800;color:'+col+'">'+sign+delta+'</div>'
+        +'</div>';
+    }
+    inner.innerHTML = rh;
+  }catch(e){
+    var elErr = document.getElementById('loyProfileActivityInner');
+    if(elErr) elErr.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Δεν ήταν δυνατή η φόρτωση ιστορικού.</div>';
   }
 }
 
