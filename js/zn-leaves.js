@@ -80,22 +80,28 @@ var PIN_BUFFER = '';
 var SELECTED_USER_ID = null;
 
 // Phase 3b: categories
-var DEFAULT_CATEGORIES = ['Υγρά Αναπλήρωσης','Συσκευές','Αντιστάσεις','Μπαταρίες','Αξεσουάρ'];
+var DEFAULT_CATEGORIES = ['Υγρά Αναπλήρωσης','Νικοτινούχα υγρά','Νικοτινούχες βάσεις','Συσκευές','Αντιστάσεις','Μπαταρίες','Αξεσουάρ'];
 
 // Mutable list — μπορεί να επεξεργαστεί ο admin από Settings
 // Πάντα διατηρεί 'Όλα' στην αρχή για filtering
 var CATEGORIES = (() => {
+  var _required = ['Νικοτινούχα υγρά','Νικοτινούχες βάσεις'];
   try {
-    const saved = localStorage.getItem('vs_product_categories');
+    var saved = localStorage.getItem('vs_product_categories');
     if (saved) {
-      const arr = JSON.parse(saved);
+      var arr = JSON.parse(saved);
       if (Array.isArray(arr) && arr.length > 0) {
-        // Φρόντισε να υπάρχει 'Όλα' στην αρχή
-        return ['Όλα', ...arr.filter(c => c && c !== 'Όλα')];
+        var merged = arr.filter(function(c){ return c && c !== 'Όλα'; });
+        var changed = false;
+        for(var _i=0; _i<_required.length; _i++){
+          if(merged.indexOf(_required[_i]) === -1){ merged.push(_required[_i]); changed = true; }
+        }
+        if(changed){ try{ localStorage.setItem('vs_product_categories', JSON.stringify(merged)); }catch(_){} }
+        return ['Όλα'].concat(merged);
       }
     }
   } catch(e) {}
-  return ['Όλα', ...DEFAULT_CATEGORIES];
+  return ['Όλα'].concat(DEFAULT_CATEGORIES);
 })();
 
 // Phase 4a: modal system
@@ -25256,40 +25262,39 @@ function _qmCalculate(product, targetNicMg, boosterVgPctOverride, finalVolOverri
 }
 
 // Κοινός έλεγχος: χρειάζεται το προϊόν Quick-Mix (nicotine picker);
-// Δουλεύει και χωρίς το checkbox hasNicotine — βάσει κατηγορίας/τύπου.
+// Quick-Mix opens ONLY for nicotine-FREE mixable bases. Never for finished nic
+// liquids, boosters, or nicotine bases.
 
 function _productNeedsNicPicker(p){
   if(!p) return false;
   var name = (p.name||'').toLowerCase();
   var cat  = (p.category||'').toLowerCase();
-  // Non-liquid categories never need Quick-Mix regardless of any other field
-  var nonLiquidCats = ['συσκευ', 'αντιστάσ', 'αντιστας', 'μπαταρ', 'αξεσουαρ', 'αξεσουάρ', 'coil', 'device', 'battery'];
-  if(nonLiquidCats.some(function(k){ return cat.includes(k); })) return false;
-  // Explicit mixable-liquid signals override the raw-base/ingredient heuristics below
-  var _pt = (p.productType || '').toLowerCase();
-  if (p.hasNicotine || _pt === 'longfill' || _pt === 'shortfill' || (p.shortfillMl > 0)) return true;
-  var ingKeywords = ['nicshot','nic shot','nic-shot','booster','νικοτιν','νικσοτ',
-                     'glycerin','γλυκερ','propylene','προπυλεν',' vg ',' pg ','βαση','base'];
+
+  // Owner-managed nicotine categories: finished nic liquids & nicotine bases/boosters → never Quick-Mix
+  var nicExcludeCats = ['νικοτινούχα υγρά','νικοτινουχα υγρα','νικοτινούχες βάσεις','νικοτινουχες βασεις'];
+  if(nicExcludeCats.some(function(k){ return cat.indexOf(k)!==-1; })) return false;
+
+  // Non-liquid categories never need Quick-Mix
+  var nonLiquidCats = ['συσκευ','αντιστάσ','αντιστας','μπαταρ','αξεσουαρ','αξεσουάρ','coil','device','battery'];
+  if(nonLiquidCats.some(function(k){ return cat.indexOf(k)!==-1; })) return false;
+
+  // Ingredients (boosters / nicshots / nicotine bases / raw VG-PG / glycerin / propylene) → never Quick-Mix
+  var ingKeywords = ['nicshot','nic shot','nic-shot','booster','νικοτιν','νίκσοτ','νικσοτ','base','βαση','βάση','glycerin','γλυκερ','propylene','προπυλεν'];
+  if(ingKeywords.some(function(k){ return name.indexOf(k)!==-1 || cat.indexOf(k)!==-1; })) return false;
   if(p.baseType === 'vg' || p.baseType === 'pg') return false;
-  if(ingKeywords.some(function(k){ return name.includes(k) || cat.includes(k); })) return false;
+
+  // Already-finished / non-mixable product types
   var ptype = (p.productType||'').toLowerCase();
-  var isRefillCat = cat.indexOf('υγρά αναπλήρωσης') !== -1 || cat.indexOf('υγρα αναπληρωσης') !== -1;
+  if(ptype === 'premix' || ptype === 'concentrate' || ptype === 'booster' || ptype === 'base') return false;
+
+  // Finished nicotine liquid (already contains nicotine) → no nicotine picker
+  if(p.hasNicotine) return false;
+
+  // Genuinely mixable nicotine-free base → open Quick-Mix
+  var isRefillCat = cat.indexOf('υγρά αναπλήρωσης')!==-1 || cat.indexOf('υγρα αναπληρωσης')!==-1;
   var isMixable = (ptype === 'longfill' || ptype === 'shortfill');
-  // premix = έτοιμο προς πώληση, concentrate = καθαρό άρωμα για DIY: ΠΟΤΕ
-  // δεν ανοίγουν Quick-Mix αυτόματα, ακόμη κι αν έχουν shortfillMl ορισμένο.
-  if(ptype === 'premix' || ptype === 'concentrate') return false;
-  // Ασφάλεια: αν έχει ορισμένο ml αρώματος, είναι αναμίξιμο ακόμη κι αν λείπει το productType
   var hasAroma = !!(p.shortfillMl && p.shortfillMl > 0);
-  // Ένα προϊόν χρειάζεται Quick-Mix όταν ΟΠΟΙΟΔΗΠΟΤΕ από αυτά ισχύει:
-  //  • έχει checkbox νικοτίνης (hasNicotine), Ή
-  //  • ο τύπος του είναι longfill/shortfill (αναμίξιμο), Ή
-  //  • έχει ορισμένο ml αρώματος (shortfillMl), Ή
-  //  • ανήκει στην κατηγορία «Υγρά Αναπλήρωσης».
-  // ΣΗΜΕΙΩΣΗ: το isRefillCat ΔΕΝ είναι πλέον προαπαιτούμενο για τα isMixable/hasAroma,
-  // ώστε προϊόντα όπως «Banana Milkshake» (Shortfill, 24ml άρωμα) που ζουν σε
-  // κατηγορία με άλλο όνομα (π.χ. «Longfills», «Shortfills», «Αρώματα») να
-  // ανοίγουν σωστά το Quick-Mix. Οι boosters/βάσεις έχουν ήδη φιλτραριστεί πάνω.
-  return !!(p.hasNicotine || isMixable || hasAroma || isRefillCat);
+  return !!(isMixable || hasAroma || isRefillCat);
 }
 
 function addToCart(pid){
