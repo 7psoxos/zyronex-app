@@ -3836,13 +3836,12 @@ async function _renderLoyaltyOverview(){
   try {
     var sbC = (typeof sb !== 'undefined') ? sb : null;
     if(sbC && typeof SHOP_ID !== 'undefined'){
-      var earnR = await sbC.from('loyalty_ledger').select('delta.sum()').eq('type','earn').eq('shop_id',SHOP_ID);
-      var redR  = await sbC.from('loyalty_ledger').select('delta.sum()').eq('type','redeem').eq('shop_id',SHOP_ID);
-      if(!earnR.error && earnR.data && earnR.data[0])
-        totalIssued = Math.max(0, Math.round(earnR.data[0].sum || 0));
-      if(!redR.error && redR.data && redR.data[0])
-        totalRedeemed = Math.abs(Math.round(redR.data[0].sum || 0));
-      ledgerOk = !earnR.error;
+      var r = await sbC.rpc('loyalty_points_summary', { p_shop_id: SHOP_ID });
+      if(!r.error && r.data && r.data[0]){
+        totalIssued   = Math.max(0, Number(r.data[0].issued)  || 0);
+        totalRedeemed = Math.max(0, Number(r.data[0].redeemed)|| 0);
+        ledgerOk = true;
+      }
     }
   } catch(e){ console.warn('[loy-overview]', e); }
 
