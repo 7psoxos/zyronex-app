@@ -3981,13 +3981,43 @@ function _renderLoyaltyMembers(){
   if(!body || body.hasAttribute('data-rendered')) return;
 
   var TIER = {
-    platinum: {emoji:'💎', color:'#a78bfa', label:'Platinum'},
-    gold:     {emoji:'🥇', color:'#fbbf24', label:'Gold'},
-    silver:   {emoji:'🥈', color:'#94a3b8', label:'Silver'},
-    bronze:   {emoji:'🥉', color:'#cd7f32', label:'Bronze'}
+    platinum: {emoji:'💎', color:'#a78bfa', label:'Platinum', floor:700, next:700},
+    gold:     {emoji:'🥇', color:'#fbbf24', label:'Gold',     floor:300, next:700},
+    silver:   {emoji:'🥈', color:'#94a3b8', label:'Silver',   floor:100, next:300},
+    bronze:   {emoji:'🥉', color:'#cd7f32', label:'Bronze',   floor:0,   next:100}
+  };
+  var NEXT_LABEL = {bronze:'Silver', silver:'Gold', gold:'Platinum'};
+
+  var tierProg = function(pts, tKey){
+    var tm = TIER[tKey] || TIER.bronze;
+    if(tKey === 'platinum') return {pct:100, max:true, rem:0, nextName:''};
+    var range = tm.next - tm.floor;
+    var pct = range > 0 ? Math.min(100, Math.max(0, Math.round((pts - tm.floor) / range * 100))) : 0;
+    return {pct:pct, max:false, rem:Math.max(0, tm.next - pts), nextName:NEXT_LABEL[tKey]||''};
   };
 
-  // Sort a shallow copy by points desc — pure in-memory, no fetch
+  var progHTML = function(pts, tKey, color, onDark){
+    var p = tierProg(pts, tKey);
+    var textCol = onDark ? 'rgba(255,255,255,0.5)' : 'var(--text-2,#6b7283)';
+    var trackCol = onDark ? 'rgba(255,255,255,0.1)' : 'var(--bg-3)';
+    var lbl = p.max ? '💎 Μέγιστο επίπεδο'
+      : p.pct+'% προς '+p.nextName+(p.rem > 0 ? ' <span style="opacity:0.7">· '+p.rem+' πόντοι ακόμα</span>' : '');
+    return '<div style="margin-top:7px">'
+      +'<div style="height:5px;background:'+trackCol+';border-radius:99px;overflow:hidden;margin-bottom:3px">'
+      +'<div style="height:100%;width:'+p.pct+'%;background:'+color+';border-radius:99px"></div>'
+      +'</div>'
+      +'<div style="font-size:11px;color:'+textCol+'">'+lbl+'</div>'
+      +'</div>';
+  };
+
+  var avatar = function(name, color, sz){
+    return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+'25;'
+      +'border:2px solid '+color+'70;display:flex;align-items:center;justify-content:center;'
+      +'font-size:'+(sz/2.5|0)+'px;font-weight:800;color:'+color+';flex-shrink:0">'
+      +(name||'?').charAt(0).toUpperCase()+'</div>';
+  };
+
+  // Sort by points DESC — pure in-memory, no fetch
   var members = (window.CUSTOMERS || []).slice();
   members.sort(function(a, b){ return (Number(b.loyaltyPoints)||0) - (Number(a.loyaltyPoints)||0); });
 
@@ -3996,40 +4026,105 @@ function _renderLoyaltyMembers(){
   if(members.length === 0){
     html += '<div class="card" style="text-align:center;padding:48px 20px">'
       +'<div style="font-size:40px;margin-bottom:12px">👥</div>'
-      +'<div class="fw-700" style="font-size:16px;margin-bottom:8px">Κανένα μέλος ακόμα</div>'
-      +'<div class="muted" style="font-size:14px">Οι πελάτες θα εμφανίζονται εδώ μόλις αποκτήσουν πόντους.</div>'
+      +'<div style="font-size:16px;font-weight:700;margin-bottom:8px">Δεν υπάρχουν μέλη ακόμα</div>'
+      +'<div style="font-size:14px;color:var(--text-2,#6b7283)">Οι πελάτες θα εμφανίζονται εδώ μόλις αποκτήσουν πόντους.</div>'
       +'</div>';
   } else {
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
-      +'<div style="font-size:13px;color:var(--text-2,#6b7283)">'+members.length+' εγγεγραμμένα μέλη</div>'
-      +'<div style="font-size:12px;color:var(--text-2,#6b7283)">ταξινόμηση: πόντοι ↓</div>'
-      +'</div>'
-      +'<div class="card" style="padding:0;overflow:hidden">';
+    // Search — only when there are standard members to filter
+    if(members.length > 1){
+      html += '<input id="loyMembersSearch" type="search" placeholder="🔍 Αναζήτηση μέλους..."'
+        +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;'
+        +'background:var(--bg-2);border:1px solid var(--border);border-radius:12px;'
+        +'color:var(--text-0);margin-bottom:14px;outline:none">';
+    }
 
-    for(var i = 0; i < members.length; i++){
-      var m = members[i];
-      var pts = Number(m.loyaltyPoints) || 0;
-      var tier = (m.loyaltyTier || 'bronze').toLowerCase();
-      var tm = TIER[tier] || TIER.bronze;
-      var sep = i > 0 ? 'border-top:1px solid var(--border)' : '';
-      html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;min-height:56px;'+sep+'">'
-        +'<div style="width:36px;height:36px;border-radius:50%;background:'+tm.color+'20;border:1.5px solid '+tm.color+'60;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">'+tm.emoji+'</div>'
-        +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.name||'—')+'</div>'
-        +'<div style="font-size:12px;color:var(--text-2,#6b7283)">'+(m.phone||m.email||'—')+'</div>'
-        +'</div>'
-        +'<div style="text-align:right;flex-shrink:0">'
-        +'<div style="font-size:15px;font-weight:800;color:'+tm.color+'">'+_loyFmtPts(pts)+'</div>'
-        +'<div style="font-size:11px;color:var(--text-2,#6b7283)">'+tm.label+'</div>'
-        +'</div>'
+    // Featured #1 (always shown, not affected by search)
+    var top = members[0];
+    var topPts = Number(top.loyaltyPoints) || 0;
+    var topTKey = (top.loyaltyTier || 'bronze').toLowerCase();
+    var topTM = TIER[topTKey] || TIER.bronze;
+    html += '<div style="background:linear-gradient(135deg,#1e1535 0%,#2d1b4e 100%);'
+      +'border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:18px;margin-bottom:14px">'
+      +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;'
+      +'color:rgba(167,139,250,0.6);margin-bottom:12px">🏆 #1 Μέλος</div>'
+      +'<div style="display:flex;align-items:flex-start;gap:14px">'
+      + avatar(top.name, topTM.color, 48)
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:17px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(top.name||'—')+'</div>'
+      +'<div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:6px">'+(top.phone||top.email||'—')+'</div>'
+      +'<div style="font-size:24px;font-weight:900;color:'+topTM.color+';line-height:1">'
+      +_loyFmtPts(topPts)+'<span style="font-size:12px;font-weight:400;color:rgba(255,255,255,0.45)"> πόντοι</span></div>'
+      + progHTML(topPts, topTKey, topTM.color, true)
+      +'</div></div>';
+    if(top.phone){
+      var ph = (top.phone||'').replace(/[^0-9+\-\s]/g,'');
+      html += '<div style="display:flex;gap:8px;margin-top:14px">'
+        +'<a href="tel:'+ph+'" style="display:flex;align-items:center;justify-content:center;flex:1;'
+        +'min-height:44px;border-radius:10px;background:rgba(255,255,255,0.08);color:#fff;'
+        +'font-size:14px;font-weight:600;text-decoration:none">📞 Κλήση</a>'
+        +'<a href="sms:'+ph+'" style="display:flex;align-items:center;justify-content:center;flex:1;'
+        +'min-height:44px;border-radius:10px;background:rgba(255,255,255,0.08);color:#fff;'
+        +'font-size:14px;font-weight:600;text-decoration:none">💬 SMS</a>'
         +'</div>';
     }
     html += '</div>';
+
+    // Standard list (members 1+)
+    if(members.length > 1){
+      html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;'
+        +'color:var(--text-2,#6b7283);margin-bottom:8px">Υπόλοιπα μέλη ('+(members.length-1)+')</div>'
+        +'<div id="loyMembersList" class="card" style="padding:0;overflow:hidden">';
+      for(var i = 1; i < members.length; i++){
+        var m = members[i];
+        var pts = Number(m.loyaltyPoints) || 0;
+        var tKey = (m.loyaltyTier || 'bronze').toLowerCase();
+        var tm = TIER[tKey] || TIER.bronze;
+        var dn = (m.name||'').toLowerCase();
+        var dp = (m.phone||'').toLowerCase();
+        var sep = i > 1 ? 'border-top:1px solid var(--border)' : '';
+        html += '<div data-member="1" data-name="'+dn+'" data-phone="'+dp+'"'
+          +' style="display:flex;align-items:flex-start;gap:12px;padding:14px;'+sep+'">'
+          + avatar(m.name, tm.color, 38)
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.name||'—')+'</div>'
+          +'<div style="font-size:12px;color:var(--text-2,#6b7283)">'+(m.phone||m.email||'—')+'</div>'
+          + progHTML(pts, tKey, tm.color, false)
+          +'</div>'
+          +'<div style="text-align:right;flex-shrink:0;padding-top:2px">'
+          +'<div style="font-size:15px;font-weight:800;color:'+tm.color+'">'+_loyFmtPts(pts)+'</div>'
+          +'<div style="font-size:11px;color:var(--text-2,#6b7283)">'+tm.emoji+' '+tm.label+'</div>'
+          +'</div>'
+          +'</div>';
+      }
+      html += '</div>'
+        +'<div id="loyMembersNoMatch" style="display:none;text-align:center;padding:24px;'
+        +'color:var(--text-2,#6b7283);font-size:14px">Καμία αντιστοίχιση.</div>';
+    }
   }
 
   html += '</div>';
   body.innerHTML = html;
   body.setAttribute('data-rendered','1');
+
+  // Wire search — addEventListener, no inline handlers
+  var inp = document.getElementById('loyMembersSearch');
+  var lst = document.getElementById('loyMembersList');
+  var nom = document.getElementById('loyMembersNoMatch');
+  if(inp && lst){
+    inp.addEventListener('input', function(){
+      var q = inp.value.toLowerCase().trim();
+      var rows = lst.querySelectorAll('[data-member]');
+      var vis = 0;
+      for(var j = 0; j < rows.length; j++){
+        var ok = !q
+          || rows[j].getAttribute('data-name').indexOf(q) > -1
+          || rows[j].getAttribute('data-phone').indexOf(q) > -1;
+        rows[j].style.display = ok ? '' : 'none';
+        if(ok) vis++;
+      }
+      if(nom) nom.style.display = (q && vis === 0) ? '' : 'none';
+    });
+  }
 }
 
 function _setLoyaltyTab(tab){
