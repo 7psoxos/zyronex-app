@@ -4579,6 +4579,15 @@ async function _doLoyaltyRedeem(cid, rewardId, costPts, rewardName, rewards){
     for(var i = 0; i < cs.length; i++){
       if(cs[i].id == cid){ cs[i].loyaltyPoints = d.new_balance; break; }
     }
+    // Invalidate overview so KPIs re-fetch on next tab view
+    var _ovEl = document.getElementById('loyBody_overview');
+    if(_ovEl) _ovEl.removeAttribute('data-rendered');
+    // Re-render members list immediately (visible on ‹Πίσω)
+    var _mbEl = document.getElementById('loyBody_members');
+    if(_mbEl){
+      _mbEl.removeAttribute('data-rendered');
+      if(typeof _renderLoyaltyMembers === 'function') _renderLoyaltyMembers();
+    }
     toast('Εξαργυρώθηκε ✓ — κωδικός '+d.code, 'success');
     _renderLoyaltyMemberProfile(cid);
   }catch(e){
