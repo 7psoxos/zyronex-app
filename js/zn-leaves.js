@@ -3976,6 +3976,62 @@ function _loyGaugeRender(pct, ledgerOk){
   });
 }
 
+function _renderLoyaltyMembers(){
+  var body = document.getElementById('loyBody_members');
+  if(!body || body.hasAttribute('data-rendered')) return;
+
+  var TIER = {
+    platinum: {emoji:'💎', color:'#a78bfa', label:'Platinum'},
+    gold:     {emoji:'🥇', color:'#fbbf24', label:'Gold'},
+    silver:   {emoji:'🥈', color:'#94a3b8', label:'Silver'},
+    bronze:   {emoji:'🥉', color:'#cd7f32', label:'Bronze'}
+  };
+
+  // Sort a shallow copy by points desc — pure in-memory, no fetch
+  var members = (window.CUSTOMERS || []).slice();
+  members.sort(function(a, b){ return (Number(b.loyaltyPoints)||0) - (Number(a.loyaltyPoints)||0); });
+
+  var html = '<div class="mt-4">';
+
+  if(members.length === 0){
+    html += '<div class="card" style="text-align:center;padding:48px 20px">'
+      +'<div style="font-size:40px;margin-bottom:12px">👥</div>'
+      +'<div class="fw-700" style="font-size:16px;margin-bottom:8px">Κανένα μέλος ακόμα</div>'
+      +'<div class="muted" style="font-size:14px">Οι πελάτες θα εμφανίζονται εδώ μόλις αποκτήσουν πόντους.</div>'
+      +'</div>';
+  } else {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+      +'<div style="font-size:13px;color:var(--text-2,#6b7283)">'+members.length+' εγγεγραμμένα μέλη</div>'
+      +'<div style="font-size:12px;color:var(--text-2,#6b7283)">ταξινόμηση: πόντοι ↓</div>'
+      +'</div>'
+      +'<div class="card" style="padding:0;overflow:hidden">';
+
+    for(var i = 0; i < members.length; i++){
+      var m = members[i];
+      var pts = Number(m.loyaltyPoints) || 0;
+      var tier = (m.loyaltyTier || 'bronze').toLowerCase();
+      var tm = TIER[tier] || TIER.bronze;
+      var sep = i > 0 ? 'border-top:1px solid var(--border)' : '';
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;min-height:56px;'+sep+'">'
+        +'<div style="width:36px;height:36px;border-radius:50%;background:'+tm.color+'20;border:1.5px solid '+tm.color+'60;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">'+tm.emoji+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.name||'—')+'</div>'
+        +'<div style="font-size:12px;color:var(--text-2,#6b7283)">'+(m.phone||m.email||'—')+'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+        +'<div style="font-size:15px;font-weight:800;color:'+tm.color+'">'+_loyFmtPts(pts)+'</div>'
+        +'<div style="font-size:11px;color:var(--text-2,#6b7283)">'+tm.label+'</div>'
+        +'</div>'
+        +'</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  body.innerHTML = html;
+  body.setAttribute('data-rendered','1');
+}
+
 function _setLoyaltyTab(tab){
   _LOYALTY_TAB = tab;
   var ids = ['overview','members','offers','activity','settings'];
@@ -3986,11 +4042,17 @@ function _setLoyaltyTab(tab){
     var body=document.getElementById('loyBody_'+t);
     if(body){ body.style.display=t===tab?'':'none'; }
   }
-  // Lazy-render overview + settings tabs only when active
+  // Lazy-render overview + members + settings tabs only when active
   if(tab==='overview'){
     var ovBody=document.getElementById('loyBody_overview');
     if(ovBody && !ovBody.hasAttribute('data-rendered')){
       if(typeof _renderLoyaltyOverview==='function') _renderLoyaltyOverview();
+    }
+  }
+  if(tab==='members'){
+    var mbBody=document.getElementById('loyBody_members');
+    if(mbBody && !mbBody.hasAttribute('data-rendered')){
+      if(typeof _renderLoyaltyMembers==='function') _renderLoyaltyMembers();
     }
   }
   if(tab==='settings'){
@@ -4020,7 +4082,6 @@ function renderLoyalty(){
     +'<div id="loyBody_overview" style="'+(t!=='overview'?'display:none':'')+'">'
     +'</div>'
     +'<div id="loyBody_members" style="'+(t!=='members'?'display:none':'')+'">'
-    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">👥</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Μέλη</div><div class="muted" style="font-size:16px">Σύντομα — κατάλογος μελών ανά tier, φίλτρα, bulk actions.</div></div>'
     +'</div>'
     +'<div id="loyBody_offers" style="'+(t!=='offers'?'display:none':'')+'">'
     +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">🎟️</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Προσφορές &amp; Ανταμοιβές</div><div class="muted" style="font-size:16px">Σύντομα — δημιουργία προσφορών, ανταμοιβές ανά tier, campaigns.</div></div>'
@@ -4033,6 +4094,7 @@ function renderLoyalty(){
   if(typeof lucide!=='undefined') lucide.createIcons();
   if(t==='settings') _setLoyaltyTab('settings');
   if(t==='overview') _setLoyaltyTab('overview');
+  if(t==='members')  _setLoyaltyTab('members');
 }
 
 // ===== MAIN RENDERER =====
