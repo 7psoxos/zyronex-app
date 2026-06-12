@@ -3828,6 +3828,7 @@ var _loyOvChart = null;
 
 // ===== LOYALTY TIER MODEL =====
 var _LOY_TIER_META = {
+  elite:    {emoji:'👑', color:'#e9c46a', label:'Elite',    floor:0,    next:0},
   diamond:  {emoji:'💎', color:'#22d3ee', label:'Diamond',  floor:1200, next:1200},
   platinum: {emoji:'💎', color:'#a78bfa', label:'Platinum', floor:700,  next:1200},
   gold:     {emoji:'🥇', color:'#fbbf24', label:'Gold',     floor:300,  next:700},
@@ -3835,6 +3836,7 @@ var _LOY_TIER_META = {
   bronze:   {emoji:'🥉', color:'#cd7f32', label:'Bronze',   floor:0,    next:100}
 };
 function _loyaltyTierOf(c){
+  if(c.loyaltyElite === true) return 'elite';
   var lifetime = Number(c.loyaltyLifetimePoints != null ? c.loyaltyLifetimePoints : (c.loyaltyPoints||0));
   if(lifetime >= 1200) return 'diamond';
   if(lifetime >= 700)  return 'platinum';
@@ -3852,7 +3854,7 @@ async function _renderLoyaltyOverview(){
   var members = window.CUSTOMERS || [];
   var totalM = members.length;
   var outstanding = 0;
-  var tiers = {bronze:0, silver:0, gold:0, platinum:0, diamond:0};
+  var tiers = {elite:0, bronze:0, silver:0, gold:0, platinum:0, diamond:0};
   for(var i = 0; i < members.length; i++){
     var m = members[i];
     outstanding += (m.loyaltyPoints || 0);
@@ -3900,6 +3902,7 @@ function _loyOvCard(label, val, sub, subCol){
 
 function _loyOvHTMLInner(totalM, outstanding, issued, redeemed, pct, tiers, ledgerOk){
   var tierCfg = [
+    {key:'elite',    label:'Elite',    color:'#e9c46a', emoji:'👑'},
     {key:'diamond',  label:'Diamond',  color:'#22d3ee', emoji:'💎'},
     {key:'platinum', label:'Platinum', color:'#a78bfa', emoji:'💎'},
     {key:'gold',     label:'Gold',     color:'#fbbf24', emoji:'🥇'},
@@ -4015,7 +4018,7 @@ function _renderLoyaltyMembers(){
 
   var tierProg = function(lifetime, tKey){
     var tm = TIER[tKey] || TIER.bronze;
-    if(tKey === 'diamond') return {pct:100, max:true, rem:0, nextName:''};
+    if(tKey === 'diamond' || tKey === 'elite') return {pct:100, max:true, rem:0, nextName:''};
     var range = tm.next - tm.floor;
     var pct = range > 0 ? Math.min(100, Math.max(0, Math.round((lifetime - tm.floor) / range * 100))) : 0;
     return {pct:pct, max:false, rem:Math.max(0, tm.next - lifetime), nextName:NEXT_LABEL[tKey]||''};
@@ -4025,7 +4028,7 @@ function _renderLoyaltyMembers(){
     var p = tierProg(pts, tKey);
     var textCol = onDark ? 'rgba(255,255,255,0.5)' : 'var(--text-2,#6b7283)';
     var trackCol = onDark ? 'rgba(255,255,255,0.1)' : 'var(--bg-3)';
-    var lbl = p.max ? '💎 Μέγιστο επίπεδο'
+    var lbl = p.max ? (tKey === 'elite' ? '👑 Elite' : '💎 Μέγιστο επίπεδο')
       : p.pct+'% προς '+p.nextName+(p.rem > 0 ? ' <span style="opacity:0.7">· '+p.rem+' πόντοι ακόμα</span>' : '');
     return '<div style="margin-top:7px">'
       +'<div style="height:5px;background:'+trackCol+';border-radius:99px;overflow:hidden;margin-bottom:3px">'
@@ -4191,6 +4194,7 @@ function _renderLoyaltyMemberProfile(cid){
 
   var TIER = _LOY_TIER_META;
   var NEXT_LABEL = {bronze:'Silver',silver:'Gold',gold:'Platinum',platinum:'Diamond'};
+  var isOwner = typeof _isOwnerBypass === 'function' && _isOwnerBypass();
 
   var pts      = Number(cust.loyaltyPoints) || 0;
   var lifetime = Number(cust.loyaltyLifetimePoints != null ? cust.loyaltyLifetimePoints : pts) || 0;
@@ -4215,7 +4219,7 @@ function _renderLoyaltyMemberProfile(cid){
     return (dy<10?'0':'')+dy+'/'+(mo<10?'0':'')+mo;
   };
   var tierProg = function(lft, tk){
-    if(tk==='diamond') return {pct:100,max:true,rem:0,nextName:''};
+    if(tk==='diamond' || tk==='elite') return {pct:100,max:true,rem:0,nextName:''};
     var t2 = TIER[tk]||TIER.bronze;
     var range = t2.next - t2.floor;
     var pct = range>0 ? Math.min(100,Math.max(0,Math.round((lft-t2.floor)/range*100))) : 0;
@@ -4275,7 +4279,7 @@ function _renderLoyaltyMemberProfile(cid){
   html += '</div>';
 
   // ── 2) Tier progress bar ────────────────────────────────────────────────────
-  var progLbl = prog.max ? '💎 Μέγιστο επίπεδο'
+  var progLbl = prog.max ? (tKey === 'elite' ? '👑 Elite' : '💎 Μέγιστο επίπεδο')
     : prog.pct+'% προς '+prog.nextName+(prog.rem>0?' · '+prog.rem+' πόντοι ακόμα':'');
   html += '<div class="card" style="margin-bottom:14px">'
     +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
@@ -4294,6 +4298,24 @@ function _renderLoyaltyMemberProfile(cid){
     +'<div style="font-size:22px;font-weight:900">€'+sc.toFixed(2)+'</div>'
     +'<div style="font-size:12px;color:var(--text-2,#6b7283)">διαθέσιμο στο ταμείο</div>'
     +'</div></div>';
+
+  // ── 3b) Elite toggle (owner-only) ──────────────────────────────────────────
+  if(isOwner){
+    var eliteOn = cust.loyaltyElite === true;
+    html += '<div class="card" style="margin-bottom:14px;border:1px solid '+(eliteOn?'#e9c46a66':'var(--border,#e5e7eb)')+';">'
+      +'<div style="display:flex;align-items:center;gap:12px">'
+      +'<div style="font-size:22px">👑</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:14px;font-weight:700;color:'+(eliteOn?'#e9c46a':'var(--text-0,#111)')+'">Elite μέλος'+(eliteOn?' <span style="font-size:11px;font-weight:600;padding:2px 7px;background:#e9c46a22;border-radius:99px">Ενεργό</span>':'')+'</div>'
+      +'<div style="font-size:12px;color:var(--text-2,#6b7283)">Black Card — αποκλειστική πρόσβαση VIP</div>'
+      +'</div>'
+      +'<button data-loy-elite-toggle="1" '
+      +'style="min-height:44px;padding:0 16px;border-radius:10px;border:none;cursor:pointer;'
+      +'font-size:13px;font-weight:700;flex-shrink:0;'
+      +(eliteOn?'background:#e9c46a22;color:#e9c46a':'background:var(--bg-3,#e5e7eb);color:var(--text-1,#374151)')+';">'
+      +(eliteOn?'Αφαίρεση':'Ορισμός Elite')+'</button>'
+      +'</div></div>';
+  }
 
   // ── 4) Statistics ───────────────────────────────────────────────────────────
   var sRows = [];
@@ -4449,10 +4471,40 @@ function _renderLoyaltyMemberProfile(cid){
     }
   }
 
+  // Elite toggle (owner-only)
+  var eliteToggleBtn = overlay.querySelector('[data-loy-elite-toggle]');
+  if(eliteToggleBtn){
+    eliteToggleBtn.addEventListener('click', function(){ _doToggleLoyaltyElite(cid); });
+  }
+
   // Kick off async loads
   _loadLoyaltyLedger(cid);
   _loadLoyaltyProfileRewards(cid, pts);
   _loadLoyaltyProfileCoupons(cid);
+}
+
+async function _doToggleLoyaltyElite(cid){
+  var cs = window.CUSTOMERS || [];
+  var cust = null;
+  for(var i = 0; i < cs.length; i++){ if(cs[i].id == cid){ cust = cs[i]; break; } }
+  if(!cust){ toast('Σφάλμα: πελάτης δεν βρέθηκε.','error'); return; }
+  var newVal = !cust.loyaltyElite;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
+  try{
+    var upd = await sbC.from('customers').update({loyalty_elite: newVal}).eq('id', cid).eq('shop_id', SHOP_ID);
+    if(upd.error) throw upd.error;
+    cust.loyaltyElite = newVal;
+    toast(newVal ? 'Ορίστηκε ως Elite 👑' : 'Αφαιρέθηκε από Elite', 'success');
+    var ovEl = document.getElementById('loyBody_overview');
+    if(ovEl) ovEl.removeAttribute('data-rendered');
+    var mbEl = document.getElementById('loyBody_members');
+    if(mbEl){ mbEl.removeAttribute('data-rendered'); if(typeof _renderLoyaltyMembers==='function') _renderLoyaltyMembers(); }
+    _renderLoyaltyMemberProfile(cid);
+  }catch(e){
+    console.error('elite toggle error', e);
+    toast('Σφάλμα.','error');
+  }
 }
 
 async function _loadLoyaltyLedger(cid){
