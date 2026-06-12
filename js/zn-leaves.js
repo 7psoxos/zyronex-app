@@ -824,7 +824,7 @@ async function loadAllData(){
     
     console.log('Querying customers...');
     const custRes = await sb.from('customers')
-      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token')
+      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified')
       .order('name')
       .limit(2000);
     
@@ -926,7 +926,10 @@ async function loadAllData(){
       city: c.city||null,
       floor: c.floor||null,
       doorbellName: c.doorbell_name||null,
-      deliveryNotes: c.delivery_notes||null
+      deliveryNotes: c.delivery_notes||null,
+      createdAt: c.created_at||null,
+      notes: c.notes||null,
+      ageVerified: c.age_verified||null
     }));
     console.log('✓ CUSTOMERS mapped:', CUSTOMERS.length);
     
