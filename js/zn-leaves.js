@@ -4827,7 +4827,10 @@ async function _renderLoyaltyOffers(){
 
     // ── List ──
     +'<div id="loyOffersListWrap"></div>'
-    +'</div>';
+    +'</div>'
+
+    // ── Multipliers section (appended below rewards) ──
+    +'<div id="loyMultSection" class="mt-4"></div>';
 
   body.innerHTML = html;
   body.setAttribute('data-rendered','1');
@@ -4861,6 +4864,7 @@ async function _renderLoyaltyOffers(){
   }
 
   await _loyOffersLoad();
+  await _loyMultRender();
 }
 
 function _loyOffersToggleValueField(){
@@ -5137,6 +5141,470 @@ function _loyOffersEsc(s){
 function _loyOffersToast(msg, type){
   if(typeof toast === 'function'){ toast(msg, type||'success'); }
   else { console.log('[loyalty-offers]', msg); }
+}
+
+// ===== LOYALTY MULTIPLIERS CRUD =====
+var _loyMultCache = [];
+var _loyMultFormPids = []; // selected product_ids in the open form
+
+function _loyMultFmtDate(iso){
+  if(!iso) return null;
+  var d = new Date(iso);
+  if(isNaN(d.getTime())) return null;
+  return (d.getDate()<10?'0':'')+d.getDate()+'/'+(d.getMonth()<9?'0':'')+(d.getMonth()+1)+'/'+d.getFullYear();
+}
+
+async function _loyMultRender(){
+  var sec = document.getElementById('loyMultSection');
+  if(!sec) return;
+
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC || typeof SHOP_ID === 'undefined'){
+    sec.innerHTML = '';
+    return;
+  }
+
+  // ── Fetch rules (include inactive for admin) ──
+  try{
+    var res = await sbC.from('loyalty_multipliers')
+      .select('*').eq('shop_id', SHOP_ID).order('created_at',{ascending:false});
+    _loyMultCache = (res && res.data) ? res.data : [];
+  }catch(e){
+    _loyMultCache = [];
+  }
+
+  // ── Build HTML ──
+  var inpStyle = 'width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none';
+
+  var formHtml = '<div id="loyMultFormWrap" style="display:none">'
+    +'<div class="card" style="margin-bottom:16px;padding:20px">'
+    +'<div id="loyMultFormTitle" style="font-size:16px;font-weight:800;margin-bottom:16px">Νέος Πολλαπλασιαστής</div>'
+    +'<div style="display:flex;flex-direction:column;gap:12px">'
+    // name
+    +'<input id="loyMultFName" type="text" placeholder="Όνομα κανόνα *" autocomplete="off" style="'+inpStyle+'">'
+    // multiplier chips
+    +'<div>'
+    +'<div style="font-size:13px;font-weight:600;color:var(--text-2,#6b7283);margin-bottom:6px">Πολλαπλασιαστής *</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px" id="loyMultChips">'
+    +'<button id="loyMultChip2" data-mult-chip="2" style="min-height:44px;padding:0 18px;border-radius:10px;'
+    +'border:2px solid var(--accent,#f97316);background:rgba(249,115,22,0.15);color:#f97316;font-size:15px;font-weight:800;cursor:pointer">x2</button>'
+    +'<button id="loyMultChip3" data-mult-chip="3" style="min-height:44px;padding:0 18px;border-radius:10px;'
+    +'border:2px solid var(--border,#e5e7eb);background:transparent;color:var(--text-0);font-size:15px;font-weight:800;cursor:pointer">x3</button>'
+    +'<button id="loyMultChipC" data-mult-chip="custom" style="min-height:44px;padding:0 18px;border-radius:10px;'
+    +'border:2px solid var(--border,#e5e7eb);background:transparent;color:var(--text-0);font-size:15px;font-weight:800;cursor:pointer">Custom</button>'
+    +'</div>'
+    +'<input id="loyMultFMultCustom" type="number" min="1" step="0.5" placeholder="π.χ. 1.5" style="'+inpStyle+';display:none">'
+    +'</div>'
+    // product multi-select
+    +'<div>'
+    +'<div style="font-size:13px;font-weight:600;color:var(--text-2,#6b7283);margin-bottom:6px">Προϊόντα * (≥1)</div>'
+    +'<div id="loyMultFPidChips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:8px;margin-bottom:8px"></div>'
+    +'<input id="loyMultFProdSearch" type="text" placeholder="Αναζήτηση προϊόντος..." autocomplete="off" style="'+inpStyle+'">'
+    +'<div id="loyMultFProdResults" style="max-height:220px;overflow-y:auto;border:1px solid var(--border,#e5e7eb);'
+    +'border-top:none;border-radius:0 0 10px 10px;background:var(--bg-1);display:none"></div>'
+    +'</div>'
+    // dates
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div style="flex:1;min-width:140px">'
+    +'<div style="font-size:13px;font-weight:600;color:var(--text-2,#6b7283);margin-bottom:4px">Από (προαιρετικό)</div>'
+    +'<input id="loyMultFFrom" type="date" style="'+inpStyle+'">'
+    +'</div>'
+    +'<div style="flex:1;min-width:140px">'
+    +'<div style="font-size:13px;font-weight:600;color:var(--text-2,#6b7283);margin-bottom:4px">Έως (προαιρετικό)</div>'
+    +'<input id="loyMultFTo" type="date" style="'+inpStyle+'">'
+    +'</div>'
+    +'</div>'
+    // active toggle
+    +'<div style="display:flex;align-items:center;gap:10px;min-height:44px">'
+    +'<input id="loyMultFActive" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;flex-shrink:0">'
+    +'<label for="loyMultFActive" style="font-size:15px;font-weight:600;cursor:pointer">Ενεργός</label>'
+    +'</div>'
+    +'<input id="loyMultFId" type="hidden" value="">'
+    +'<div style="display:flex;gap:10px">'
+    +'<button id="loyMultFSaveBtn" style="flex:1;min-height:44px;border-radius:10px;'
+    +'background:#f97316;color:#fff;border:none;font-size:15px;font-weight:700;cursor:pointer">Αποθήκευση</button>'
+    +'<button id="loyMultFCancelBtn" style="flex:1;min-height:44px;border-radius:10px;'
+    +'background:var(--bg-3,#e5e7eb);color:var(--text-0);border:none;font-size:15px;font-weight:600;cursor:pointer">Άκυρο</button>'
+    +'</div>'
+    +'</div></div></div>';
+
+  var listHtml = '<div id="loyMultListWrap">' + _loyMultListHTML(_loyMultCache) + '</div>';
+
+  sec.innerHTML = '<div style="border-top:1px solid var(--border,#e5e7eb);margin-top:32px;padding-top:24px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
+    +'<div style="font-size:18px;font-weight:800;color:var(--text-0,#111)">🔥 Πολλαπλασιαστές Πόντων (Ξεπούλημα Stock)</div>'
+    +'<button id="loyMultAddBtn" style="min-height:44px;padding:0 18px;border-radius:10px;'
+    +'background:#f97316;color:#fff;border:none;font-size:15px;font-weight:700;cursor:pointer">➕ Νέος Πολλαπλασιαστής</button>'
+    +'</div>'
+    + formHtml + listHtml + '</div>';
+
+  // ── Wire events ──
+  var addBtn = document.getElementById('loyMultAddBtn');
+  if(addBtn) addBtn.addEventListener('click', function(){ _loyMultShowForm(null); });
+
+  var saveBtn = document.getElementById('loyMultFSaveBtn');
+  if(saveBtn) saveBtn.addEventListener('click', function(){ _loyMultSave(); });
+
+  var cancelBtn = document.getElementById('loyMultFCancelBtn');
+  if(cancelBtn) cancelBtn.addEventListener('click', function(){ _loyMultHideForm(); });
+
+  // Multiplier chip delegation
+  var chipsEl = document.getElementById('loyMultChips');
+  if(chipsEl) chipsEl.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-mult-chip]');
+    if(!btn) return;
+    _loyMultSelectChip(btn.getAttribute('data-mult-chip'));
+  });
+
+  // Product search input
+  var searchEl = document.getElementById('loyMultFProdSearch');
+  if(searchEl) searchEl.addEventListener('input', function(){ _loyMultFilterProds(this.value); });
+
+  // Product results delegation
+  var resultsEl = document.getElementById('loyMultFProdResults');
+  if(resultsEl) resultsEl.addEventListener('click', function(e){
+    var row = e.target.closest('[data-mult-pid]');
+    if(!row) return;
+    _loyMultAddPid(row.getAttribute('data-mult-pid'));
+  });
+
+  // Chip remove delegation (chips rendered inside loyMultFPidChips)
+  var pidChipsEl = document.getElementById('loyMultFPidChips');
+  if(pidChipsEl) pidChipsEl.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-mult-remove-pid]');
+    if(!btn) return;
+    _loyMultRemovePid(btn.getAttribute('data-mult-remove-pid'));
+  });
+
+  // List delegation
+  var listWrap = document.getElementById('loyMultListWrap');
+  if(listWrap) listWrap.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-mult-action]');
+    if(!btn) return;
+    var action = btn.getAttribute('data-mult-action');
+    var id     = btn.getAttribute('data-mult-id');
+    if(action === 'edit')   _loyMultEdit(id);
+    else if(action === 'toggle') _loyMultToggle(id);
+    else if(action === 'delete') _loyMultDelete(id);
+  });
+}
+
+function _loyMultListHTML(rules){
+  if(!rules || !rules.length){
+    return '<div class="card" style="text-align:center;padding:48px 20px">'
+      +'<div style="font-size:40px;margin-bottom:12px">🔥</div>'
+      +'<div style="font-size:16px;font-weight:700;margin-bottom:8px">Δεν υπάρχουν κανόνες ακόμα</div>'
+      +'<div style="font-size:14px;color:var(--text-2,#6b7283)">Πρόσθεσε τον πρώτο με το ➕.</div>'
+      +'</div>';
+  }
+  var allProds = (typeof PRODUCTS !== 'undefined') ? PRODUCTS : [];
+  var h = '';
+  for(var i = 0; i < rules.length; i++){
+    var rule = rules[i];
+    var isActive = (rule.active !== false);
+    var pids = Array.isArray(rule.product_ids) ? rule.product_ids : [];
+    // Product name preview
+    var prodNames = [];
+    for(var j = 0; j < pids.length && j < 3; j++){
+      var pr = null;
+      for(var k = 0; k < allProds.length; k++){ if(String(allProds[k].id) === String(pids[j])){ pr = allProds[k]; break; } }
+      if(pr) prodNames.push(_loyOffersEsc(pr.name));
+    }
+    var prodPreview = pids.length === 0 ? '<span style="color:#ef4444">— χωρίς προϊόντα —</span>'
+      : prodNames.join(', ') + (pids.length > 3 ? ' <span style="color:var(--text-2,#6b7283)">+' + (pids.length - 3) + ' ακόμα</span>' : '');
+
+    // Date window
+    var fromFmt = _loyMultFmtDate(rule.starts_at);
+    var toFmt   = _loyMultFmtDate(rule.ends_at);
+    var dateStr = (!fromFmt && !toFmt) ? 'Πάντα ενεργό'
+      : (fromFmt||'—') + ' – ' + (toFmt||'—');
+
+    var mult = Number(rule.multiplier)||1;
+    h += '<div class="card" style="margin-bottom:12px;padding:16px'+(isActive?'':';opacity:0.55')+'">'
+      +'<div style="display:flex;align-items:flex-start;gap:12px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
+      +'<div style="font-size:15px;font-weight:800">'+_loyOffersEsc(rule.name||'—')+'</div>'
+      +'<span style="font-size:13px;font-weight:800;padding:3px 10px;border-radius:99px;'
+      +'background:linear-gradient(135deg,#f97316,#fbbf24);color:#fff">x'+mult+'</span>'
+      +(!isActive ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;'
+        +'background:#ef444420;color:#ef4444">Ανενεργός</span>' : '')
+      +'</div>'
+      +'<div style="font-size:13px;color:var(--text-1,#374151);margin-bottom:4px">'
+      +'<b>'+pids.length+'</b> προϊόντα: '+prodPreview+'</div>'
+      +'<div style="font-size:12px;color:var(--text-2,#6b7283)">📅 '+_loyOffersEsc(dateStr)+'</div>'
+      +'</div></div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button data-mult-action="edit" data-mult-id="'+rule.id+'"'
+      +' style="min-height:44px;padding:0 14px;border-radius:8px;background:var(--bg-3,#e5e7eb);'
+      +'border:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-0)">✏️ Επεξεργασία</button>'
+      +'<button data-mult-action="toggle" data-mult-id="'+rule.id+'"'
+      +' style="min-height:44px;padding:0 14px;border-radius:8px;'
+      +'background:'+(isActive?'rgba(34,197,94,0.12)':'var(--bg-3,#e5e7eb)')+';'
+      +'border:1px solid '+(isActive?'rgba(34,197,94,0.3)':'var(--border,#e5e7eb)')+';'
+      +'font-size:13px;font-weight:600;cursor:pointer;color:'+(isActive?'#16a34a':'var(--text-0)')+'>'
+      +(isActive?'🟢 Ενεργός':'⚫ Ανενεργός')+'</button>'
+      +'<button data-mult-action="delete" data-mult-id="'+rule.id+'"'
+      +' style="min-height:44px;padding:0 14px;border-radius:8px;background:#ef444415;'
+      +'border:1px solid #ef444430;font-size:13px;font-weight:600;cursor:pointer;color:#ef4444">'
+      +'🗑️ Διαγραφή</button>'
+      +'</div>'
+      +'</div>';
+  }
+  return h;
+}
+
+function _loyMultSelectChip(val){
+  var chip2  = document.getElementById('loyMultChip2');
+  var chip3  = document.getElementById('loyMultChip3');
+  var chipC  = document.getElementById('loyMultChipC');
+  var custom = document.getElementById('loyMultFMultCustom');
+  var activeStyle = 'border:2px solid #f97316;background:rgba(249,115,22,0.15);color:#f97316';
+  var idleStyle   = 'border:2px solid var(--border,#e5e7eb);background:transparent;color:var(--text-0)';
+  if(chip2) chip2.setAttribute('style', chip2.getAttribute('style').replace(/border:[^;]+;background:[^;]+;color:[^;]+/, '') + (val==='2' ? activeStyle : idleStyle));
+  if(chip3) chip3.setAttribute('style', chip3.getAttribute('style').replace(/border:[^;]+;background:[^;]+;color:[^;]+/, '') + (val==='3' ? activeStyle : idleStyle));
+  if(chipC) chipC.setAttribute('style', chipC.getAttribute('style').replace(/border:[^;]+;background:[^;]+;color:[^;]+/, '') + (val==='custom' ? activeStyle : idleStyle));
+  if(custom) custom.style.display = (val === 'custom') ? '' : 'none';
+  // simpler: set data attribute to track selection
+  var chipsEl = document.getElementById('loyMultChips');
+  if(chipsEl) chipsEl.setAttribute('data-selected', val);
+}
+
+function _loyMultGetMult(){
+  var chipsEl = document.getElementById('loyMultChips');
+  var sel = chipsEl ? chipsEl.getAttribute('data-selected') : '2';
+  if(sel === 'custom'){
+    var v = parseFloat((document.getElementById('loyMultFMultCustom')||{}).value||'');
+    return isNaN(v) ? null : v;
+  }
+  return Number(sel) || null;
+}
+
+function _loyMultRenderPidChips(){
+  var el = document.getElementById('loyMultFPidChips');
+  if(!el) return;
+  var allProds = (typeof PRODUCTS !== 'undefined') ? PRODUCTS : [];
+  var h = '';
+  for(var i = 0; i < _loyMultFormPids.length; i++){
+    var pr = null;
+    var pid = String(_loyMultFormPids[i]);
+    for(var j = 0; j < allProds.length; j++){ if(String(allProds[j].id) === pid){ pr = allProds[j]; break; } }
+    var nm = pr ? _loyOffersEsc(pr.name) : pid;
+    h += '<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:99px;'
+      +'background:rgba(249,115,22,0.15);color:#c2410c;font-size:13px;font-weight:600;border:1px solid rgba(249,115,22,0.3)">'
+      + nm
+      +'<button data-mult-remove-pid="'+pid+'" style="background:none;border:none;cursor:pointer;color:#c2410c;'
+      +'font-size:15px;line-height:1;padding:0 0 0 3px;font-weight:900" aria-label="Αφαίρεση">✕</button>'
+      +'</span>';
+  }
+  el.innerHTML = h;
+}
+
+function _loyMultAddPid(pid){
+  pid = String(pid);
+  if(_loyMultFormPids.indexOf(pid) === -1) _loyMultFormPids.push(pid);
+  _loyMultRenderPidChips();
+  // clear search
+  var si = document.getElementById('loyMultFProdSearch');
+  if(si) si.value = '';
+  var ri = document.getElementById('loyMultFProdResults');
+  if(ri){ ri.innerHTML = ''; ri.style.display = 'none'; }
+}
+
+function _loyMultRemovePid(pid){
+  pid = String(pid);
+  var idx = _loyMultFormPids.indexOf(pid);
+  if(idx !== -1) _loyMultFormPids.splice(idx, 1);
+  _loyMultRenderPidChips();
+}
+
+function _loyMultFilterProds(q){
+  var ri = document.getElementById('loyMultFProdResults');
+  if(!ri) return;
+  q = (q||'').trim().toLowerCase();
+  if(!q){ ri.innerHTML = ''; ri.style.display = 'none'; return; }
+  var allProds = (typeof PRODUCTS !== 'undefined') ? PRODUCTS : [];
+  var matches = [];
+  for(var i = 0; i < allProds.length && matches.length < 15; i++){
+    var p = allProds[i];
+    if((p.name||'').toLowerCase().indexOf(q) !== -1) matches.push(p);
+  }
+  if(!matches.length){ ri.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--text-2,#6b7283)">Δεν βρέθηκαν.</div>'; ri.style.display = ''; return; }
+  var h = '';
+  for(var j = 0; j < matches.length; j++){
+    var m = matches[j];
+    var alreadySel = _loyMultFormPids.indexOf(String(m.id)) !== -1;
+    h += '<div data-mult-pid="'+m.id+'" style="display:flex;align-items:center;justify-content:space-between;'
+      +'padding:10px 14px;min-height:44px;cursor:'+(alreadySel?'default':'pointer')+';'
+      +'background:'+(alreadySel?'rgba(249,115,22,0.08)':'transparent')+';'
+      +'border-bottom:1px solid var(--border,#e5e7eb);font-size:14px;font-weight:600;color:var(--text-0)">'
+      +'<span>'+_loyOffersEsc(m.name||'')+'</span>'
+      +'<span style="font-size:12px;color:var(--text-2,#6b7283)">stock: '+(m.stock||0)+(alreadySel?' ✓':'')+'</span>'
+      +'</div>';
+  }
+  ri.innerHTML = h;
+  ri.style.display = '';
+}
+
+function _loyMultShowForm(rule){
+  _loyMultFormPids = [];
+  var formWrap = document.getElementById('loyMultFormWrap');
+  var titleEl  = document.getElementById('loyMultFormTitle');
+  var nameEl   = document.getElementById('loyMultFName');
+  var fromEl   = document.getElementById('loyMultFFrom');
+  var toEl     = document.getElementById('loyMultFTo');
+  var activeEl = document.getElementById('loyMultFActive');
+  var idEl     = document.getElementById('loyMultFId');
+  if(!formWrap || !nameEl) return;
+  if(rule){
+    if(titleEl) titleEl.textContent = 'Επεξεργασία Πολλαπλασιαστή';
+    nameEl.value = rule.name || '';
+    var mult = Number(rule.multiplier)||2;
+    var chipVal = (mult === 2) ? '2' : (mult === 3) ? '3' : 'custom';
+    _loyMultSelectChip(chipVal);
+    if(chipVal === 'custom'){
+      var ci = document.getElementById('loyMultFMultCustom');
+      if(ci) ci.value = mult;
+    }
+    _loyMultFormPids = Array.isArray(rule.product_ids) ? rule.product_ids.map(String) : [];
+    if(fromEl) fromEl.value = rule.starts_at ? rule.starts_at.slice(0,10) : '';
+    if(toEl)   toEl.value   = rule.ends_at   ? rule.ends_at.slice(0,10)   : '';
+    if(activeEl) activeEl.checked = (rule.active !== false);
+    if(idEl) idEl.value = rule.id || '';
+  } else {
+    if(titleEl) titleEl.textContent = 'Νέος Πολλαπλασιαστής';
+    nameEl.value = '';
+    _loyMultSelectChip('2');
+    if(fromEl) fromEl.value = '';
+    if(toEl)   toEl.value   = '';
+    if(activeEl) activeEl.checked = true;
+    if(idEl) idEl.value = '';
+  }
+  _loyMultRenderPidChips();
+  formWrap.style.display = '';
+  nameEl.focus();
+}
+
+function _loyMultHideForm(){
+  var fw = document.getElementById('loyMultFormWrap');
+  if(fw) fw.style.display = 'none';
+  _loyMultFormPids = [];
+}
+
+async function _loyMultSave(){
+  var nameEl   = document.getElementById('loyMultFName');
+  var fromEl   = document.getElementById('loyMultFFrom');
+  var toEl     = document.getElementById('loyMultFTo');
+  var activeEl = document.getElementById('loyMultFActive');
+  var idEl     = document.getElementById('loyMultFId');
+  var saveBtn  = document.getElementById('loyMultFSaveBtn');
+  if(!nameEl) return;
+
+  var name   = (nameEl.value||'').trim();
+  var mult   = _loyMultGetMult();
+  var active = activeEl ? activeEl.checked : true;
+  var editId = idEl ? (idEl.value||'') : '';
+
+  if(!name){ toast('Το όνομα είναι υποχρεωτικό.','warn'); return; }
+  if(!mult || mult < 1){ toast('Ο πολλαπλασιαστής πρέπει να είναι ≥ 1.','warn'); return; }
+  if(!_loyMultFormPids.length){ toast('Επίλεξε τουλάχιστον 1 προϊόν.','warn'); return; }
+
+  // Date handling: local midnight start, local 23:59:59.999 end
+  var startsAt = null, endsAt = null;
+  var fromVal = fromEl ? fromEl.value : '';
+  var toVal   = toEl   ? toEl.value   : '';
+  if(fromVal){
+    var fs = new Date(fromVal); // local date from YYYY-MM-DD
+    startsAt = new Date(fs.getFullYear(), fs.getMonth(), fs.getDate(), 0, 0, 0, 0).toISOString();
+  }
+  if(toVal){
+    var ts = new Date(toVal);
+    endsAt = new Date(ts.getFullYear(), ts.getMonth(), ts.getDate(), 23, 59, 59, 999).toISOString();
+  }
+
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','danger'); return; }
+
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = '...'; }
+  try{
+    var payload = {
+      name: name,
+      multiplier: mult,
+      product_ids: _loyMultFormPids.map(function(x){ return Number(x)||x; }),
+      starts_at: startsAt,
+      ends_at: endsAt,
+      active: active
+    };
+    var r;
+    if(editId){
+      r = await sbC.from('loyalty_multipliers').update(payload).eq('id', editId).eq('shop_id', SHOP_ID);
+    } else {
+      payload.shop_id = SHOP_ID;
+      r = await sbC.from('loyalty_multipliers').insert(payload);
+    }
+    if(r && r.error) throw r.error;
+    toast(editId ? 'Κανόνας ενημερώθηκε.' : 'Κανόνας δημιουργήθηκε! 🔥', 'success');
+    _loyMultHideForm();
+    if(typeof _loadLoyaltyMultipliers === 'function') await _loadLoyaltyMultipliers();
+    await _loyMultRender();
+  }catch(err){
+    toast('Σφάλμα: '+((err&&err.message)||'Αδύνατη αποθήκευση.'), 'danger');
+  }finally{
+    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Αποθήκευση'; }
+  }
+}
+
+function _loyMultEdit(id){
+  var rule = null;
+  for(var i = 0; i < _loyMultCache.length; i++){
+    if(String(_loyMultCache[i].id) === String(id)){ rule = _loyMultCache[i]; break; }
+  }
+  if(!rule) return;
+  _loyMultShowForm(rule);
+  var fw = document.getElementById('loyMultFormWrap');
+  if(fw) fw.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function _loyMultToggle(id){
+  var rule = null;
+  for(var i = 0; i < _loyMultCache.length; i++){
+    if(String(_loyMultCache[i].id) === String(id)){ rule = _loyMultCache[i]; break; }
+  }
+  if(!rule) return;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC) return;
+  try{
+    var r = await sbC.from('loyalty_multipliers')
+      .update({active: !rule.active}).eq('id', id).eq('shop_id', SHOP_ID);
+    if(r && r.error) throw r.error;
+    toast(rule.active ? 'Απενεργοποιήθηκε.' : 'Ενεργοποιήθηκε. 🔥', 'success');
+    if(typeof _loadLoyaltyMultipliers === 'function') await _loadLoyaltyMultipliers();
+    await _loyMultRender();
+  }catch(err){
+    toast('Σφάλμα: '+((err&&err.message)||''), 'danger');
+  }
+}
+
+async function _loyMultDelete(id){
+  var rule = null;
+  for(var i = 0; i < _loyMultCache.length; i++){
+    if(String(_loyMultCache[i].id) === String(id)){ rule = _loyMultCache[i]; break; }
+  }
+  var label = rule ? (rule.name||'αυτόν τον κανόνα') : 'αυτόν τον κανόνα';
+  var confirmed = await window.confirm('Διαγραφή κανόνα "'+label+'";');
+  if(!confirmed) return;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC){ toast('Χωρίς σύνδεση.','danger'); return; }
+  try{
+    var r = await sbC.from('loyalty_multipliers').delete().eq('id', id).eq('shop_id', SHOP_ID);
+    if(r && r.error) throw r.error;
+    toast('Κανόνας διαγράφηκε.', 'success');
+    if(typeof _loadLoyaltyMultipliers === 'function') await _loadLoyaltyMultipliers();
+    await _loyMultRender();
+  }catch(err){
+    toast('Σφάλμα διαγραφής: '+((err&&err.message)||''), 'danger');
+  }
 }
 
 // ===== LOYALTY ACTIVITY TAB =====
