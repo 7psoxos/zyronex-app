@@ -5207,13 +5207,15 @@ async function _loyMultRender(){
     +'border-top:none;border-radius:0 0 10px 10px;background:var(--bg-1);display:none"></div>'
     +'</div>'
     // deadstock suggest block
-    +'<div id="loyMultDeadstockBlock">'
-    +'<button id="loyMultDeadstockToggle" type="button" style="display:flex;align-items:center;gap:6px;'
-    +'min-height:44px;background:none;border:none;color:var(--text-2,#6b7283);font-size:13px;'
-    +'font-weight:600;cursor:pointer;padding:4px 0;text-align:left;width:100%;-webkit-tap-highlight-color:transparent">'
-    +'<span id="loyMultDeadstockCaret" style="font-size:10px">&#9658;</span>'
-    +' &#x1F4A4; Προτεινόμενα από αποθήκη</button>'
-    +'<div id="loyMultDeadstockPanel" style="display:none"></div>'
+    +'<div id="loyMultDeadstockBlock" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.22);border-radius:10px;overflow:hidden">'
+    +'<button id="loyMultDeadstockToggle" type="button" style="display:flex;align-items:center;gap:8px;'
+    +'min-height:44px;background:none;border:none;color:var(--text-0);font-size:14px;'
+    +'font-weight:700;cursor:pointer;padding:10px 14px;text-align:left;width:100%;-webkit-tap-highlight-color:transparent">'
+    +'<span id="loyMultDeadstockCaret" style="font-size:11px;color:var(--text-2,#6b7283);flex-shrink:0">&#9658;</span>'
+    +'<span>&#x1F4A4; Προτεινόμενα από αποθήκη</span>'
+    +'<span id="loyMultDeadstockCount" style="font-size:11px;font-weight:500;color:var(--text-2,#6b7283);margin-left:auto;flex-shrink:0"></span>'
+    +'</button>'
+    +'<div id="loyMultDeadstockPanel" style="display:none;padding:0 14px 12px"></div>'
     +'</div>'
     // dates
     +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
@@ -5490,6 +5492,8 @@ function _loyMultShowForm(rule){
   if(dsPanel){ dsPanel.style.display = 'none'; dsPanel.innerHTML = ''; }
   var dsCaret = document.getElementById('loyMultDeadstockCaret');
   if(dsCaret) dsCaret.innerHTML = '&#9658;';
+  var dsCount = document.getElementById('loyMultDeadstockCount');
+  if(dsCount) dsCount.textContent = '';
   var formWrap = document.getElementById('loyMultFormWrap');
   var titleEl  = document.getElementById('loyMultFormTitle');
   var nameEl   = document.getElementById('loyMultFName');
@@ -5552,10 +5556,13 @@ async function _loyMultLoadDeadstock(){
     panel.innerHTML = '<div style="padding:8px 0;font-size:13px;color:var(--danger,#e74c3c)">Δεν ήταν δυνατή η φόρτωση</div>';
     return;
   }
+  var countEl = document.getElementById('loyMultDeadstockCount');
   if(!_loyMultDeadstockRows.length){
     panel.innerHTML = '<div style="padding:8px 0;font-size:13px;color:var(--text-2,#6b7283)">Δεν βρέθηκαν αργοκίνητα προϊόντα</div>';
+    if(countEl) countEl.textContent = '0 προτάσεις';
     return;
   }
+  if(countEl) countEl.textContent = _loyMultDeadstockRows.length + ' προτάσεις';
   _loyMultRenderDeadstockRows();
 }
 
@@ -5590,7 +5597,7 @@ function _loyMultRenderDeadstockRows(){
       + '<div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">'
       + '<span style="font-size:14px;font-weight:600;color:' + (disabled ? 'var(--text-2,#6b7283)' : 'var(--text-0)') + ';'
       + 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-      + _loyOffersEsc(row.product_name || pid) + '</span>'
+      + _loyOffersEsc(row.name || row.product_name || pid) + '</span>'
       + '<span style="font-size:11px;color:var(--text-2,#6b7283)">' + daysInfo + '</span>'
       + '</div>'
       + rightLabel
