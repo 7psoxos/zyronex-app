@@ -26807,9 +26807,10 @@ function renderQuickCategoriesGrid(){
       ? `<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-2);font-size:13px">Δεν βρέθηκαν προϊόντα</div>`
       : products.map(p => {
         const imgSrc = p.image_url || p.imageUrl;
+        const _mb = _loyMultBadgeHTML(p.id,'staff');
         return `
-        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}" style="position:relative">
-          ${_loyMultBadgeHTML(p.id,'staff')}
+        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}"${_mb ? ' style="position:relative"' : ''}>
+          ${_mb}
           ${imgSrc && imgSrc.trim() ? `<img src="${imgSrc}" class="quick-pos-product-img" alt="" loading="lazy" onerror="_posImgErr(this)">` : `<div class="quick-pos-product-placeholder">📦</div>`}
           <div class="quick-pos-product-name">${p.name}</div>
           <div class="quick-pos-product-price">${eur(p.price)}</div>
@@ -26837,9 +26838,10 @@ function renderQuickCategoriesGrid(){
         </div>
       ` : products.map(p => {
         const imgSrc = p.image_url || p.imageUrl;
+        const _mb = _loyMultBadgeHTML(p.id,'staff');
         return `
-        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}" style="position:relative">
-          ${_loyMultBadgeHTML(p.id,'staff')}
+        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}"${_mb ? ' style="position:relative"' : ''}>
+          ${_mb}
           ${imgSrc && imgSrc.trim() ? `<img src="${imgSrc}" class="quick-pos-product-img" alt="" loading="lazy" onerror="_posImgErr(this)">` : `<div class="quick-pos-product-placeholder">📦</div>`}
           <div class="quick-pos-product-name">${p.name}</div>
           <div class="quick-pos-product-price">${eur(p.price)}</div>
@@ -27117,7 +27119,8 @@ function _loyMultBadgeHTML(productId, mode){
   var n = m.mult;
   var multStr = Number.isInteger(n) ? String(n) : String(n);
   var label = mode === 'staff' ? ('🔥 ×' + multStr) : ('🔥 ×' + multStr + ' ΠΟΝΤΟΙ');
-  return '<span style="position:absolute;top:6px;left:6px;z-index:5;'
+  var pos = mode === 'kiosk' ? 'bottom:6px;left:6px' : 'top:6px;left:6px';
+  return '<span style="position:absolute;' + pos + ';z-index:5;'
     + 'background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;font-weight:700;font-size:10px;'
     + 'line-height:1;padding:4px 7px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25);'
     + 'pointer-events:none;white-space:nowrap">' + label + '</span>';
