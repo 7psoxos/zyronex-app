@@ -28064,7 +28064,7 @@ async function _loadLoyaltyMultipliers(){
       for(var j=0; j<pids.length; j++){
         var pid = pids[j];
         if(!map[pid] || mult > map[pid].mult){
-          map[pid] = {mult: mult, name: rule.name||''};
+          map[pid] = {mult: mult, name: rule.name||'', ruleId: rule.id||null, ruleName: rule.name||''};
         }
       }
     }
@@ -28147,6 +28147,37 @@ async function _loyaltyAward(opts){
     if(c){ c.totalSpent=curSpent+(opts.subtotal||0); c.visits=curVisits+1; c.lastVisit=addDays(0); c.loyaltyPoints=finalPoints; c.loyaltyTier=tier; c.loyaltyLifetimePoints=newLifetime; }
     return {earned:earned, afterEarn:afterEarn, finalPoints:finalPoints, tier:tier, oldTier:oldTier, tierChanged:(tier!==oldTier), custName: c ? c.name : ''};
   }catch(e){ console.error('_loyaltyAward', e); return null; }
+}
+
+function _captureMultiplierUses(cart, saleId, customerId){
+  try{
+    if(!cart || !cart.length) return;
+    var _cmMap = window.LOYALTY_MULT_MAP || {};
+    var _cmRows = [];
+    for(var _ci=0; _ci<cart.length; _ci++){
+      var _cLine = cart[_ci];
+      var _cm = _cmMap[_cLine.productId] || _cmMap[String(_cLine.productId)] || _cmMap[Number(_cLine.productId)];
+      if(!_cm || !(_cm.mult > 1)) continue;
+      var _cBonus = Math.floor((_cLine.price||0) * (_cLine.qty||0) * (_cm.mult - 1));
+      if(_cBonus <= 0) continue;
+      _cmRows.push({
+        shop_id: SHOP_ID,
+        rule_id: _cm.ruleId || null,
+        rule_name: _cm.ruleName || _cm.name || null,
+        product_id: _cLine.productId,
+        customer_id: customerId || null,
+        sale_id: saleId || null,
+        multiplier: _cm.mult,
+        bonus_points: _cBonus
+      });
+    }
+    if(!_cmRows.length) return;
+    sb.from('loyalty_multiplier_uses').insert(_cmRows)
+      .then(function(){})
+      .catch(function(e){ console.warn('[_captureMultiplierUses] insert failed:', e); });
+  }catch(e){
+    console.warn('[_captureMultiplierUses] error:', e);
+  }
 }
 
 async function _doCheckout(){
@@ -28339,6 +28370,7 @@ async function _doCheckout(){
     var _bonus = _computeCartBonusPoints(CART);
     var _la = await _loyaltyAward({ customerId: customerId, saleId: (saleData && saleData.id) || null, subtotal: subtotal, pointsUsed: pointsUsed, shopId: SHOP_ID, bonusPoints: _bonus, earnNote: (_bonus > 0 ? 'Bonus πόντοι (πολλαπλασιαστήρας): +'+_bonus : null) });
     if(_la){ earnedPoints = _la.earned; newTier = _la.tier; }
+    _captureMultiplierUses(CART, saleData.id, customerId);
     // Points-used toast
     if(customerId && pointsUsed > 0) toast(`⭐ Χρησιμοποιήθηκαν ${pointsUsed} πόντοι`, 'info');
     // Store credit deduction (separate from loyalty — _loyaltyAward does not touch store_credit)
@@ -28671,6 +28703,7 @@ async function syncOfflineQueue(){
           });
         }catch(e){ console.error('[offline sync] _loyaltyAward failed:', e); }
       }
+      _captureMultiplierUses(entry.cart, saleId, entry.customerId);
     }catch(err){
       console.error('Sync failed for entry:', entry, err);
       failed++;
