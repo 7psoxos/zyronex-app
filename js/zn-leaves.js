@@ -4364,24 +4364,29 @@ function _renderLoyaltyMemberProfile(cid){
     });
   }
 
-  // QR rendering: QRCode.js if loaded, else api.qrserver.com img (existing pattern)
+  // QR rendering — local QRCode.js only, same lib used for product barcodes; no external requests
   if(qrToken){
     var qrWrap = overlay.querySelector('#loyProfileQrWrap');
     if(qrWrap){
       var qrData = 'ZYRONEX-LOYALTY:'+qrToken;
-      if(typeof QRCode !== 'undefined'){
-        try{
-          new QRCode(qrWrap,{text:qrData,width:128,height:128,colorDark:'#000000',colorLight:'#ffffff'});
-        }catch(e){
-          qrWrap.innerHTML='<div style="font-family:monospace;font-size:11px;word-break:break-all;max-width:220px;padding:4px">'+esc(qrToken)+'</div>';
+      try{
+        qrWrap.innerHTML = '';
+        new QRCode(qrWrap,{
+          text: qrData,
+          width: 180,
+          height: 180,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel ? QRCode.CorrectLevel.M : 0
+        });
+        // Shim (line 271) produces no canvas/img; fall back to monospace token
+        if(!qrWrap.querySelector('canvas,img')){
+          qrWrap.innerHTML='<div style="font-family:monospace;font-size:12px;word-break:break-all;'
+            +'padding:4px;max-width:200px;text-align:left">'+esc(qrToken)+'</div>';
         }
-      } else {
-        var qrImg = document.createElement('img');
-        qrImg.width = 128; qrImg.height = 128;
-        qrImg.style.cssText = 'display:block;border-radius:4px';
-        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=128x128&data='
-          +encodeURIComponent(qrData)+'&bgcolor=ffffff&color=0f172a&margin=2';
-        qrWrap.appendChild(qrImg);
+      }catch(qrErr){
+        qrWrap.innerHTML='<div style="font-family:monospace;font-size:12px;word-break:break-all;'
+          +'padding:4px;max-width:200px;text-align:left">'+esc(qrToken)+'</div>';
       }
     }
   }
@@ -4422,10 +4427,14 @@ async function _loadLoyaltyLedger(cid){
         ? (rdt.getDate()<10?'0':'')+rdt.getDate()+'/'+(rdt.getMonth()<9?'0':'')+(rdt.getMonth()+1)+'/'+rdt.getFullYear()
         : '';
       var delta = Number(row.delta) || 0;
-      var isEarn = row.type === 'earn';
-      var sign = delta >= 0 ? '+' : '';
-      var col = delta >= 0 ? '#16a34a' : '#dc2626';
-      var lbl = isEarn ? 'Κέρδος' : 'Εξαργύρωση';
+      var sign, col, lbl;
+      if(delta > 0){
+        sign = '+'; col = '#16a34a'; lbl = 'Κέρδος';
+      } else if(delta < 0){
+        sign = '';  col = '#dc2626'; lbl = 'Εξαργύρωση';
+      } else {
+        sign = '';  col = 'var(--text-2,#6b7283)'; lbl = 'Προσαρμογή';
+      }
       var rowSep = i > 0 ? 'border-top:1px solid var(--border,#e5e7eb)' : '';
       rh += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;'+rowSep+'">'
         +'<div><div style="font-size:13px;font-weight:600">'+lbl+'</div>'
