@@ -26808,7 +26808,8 @@ function renderQuickCategoriesGrid(){
       : products.map(p => {
         const imgSrc = p.image_url || p.imageUrl;
         return `
-        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}">
+        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}" style="position:relative">
+          ${_loyMultBadgeHTML(p.id,'staff')}
           ${imgSrc && imgSrc.trim() ? `<img src="${imgSrc}" class="quick-pos-product-img" alt="" loading="lazy" onerror="_posImgErr(this)">` : `<div class="quick-pos-product-placeholder">📦</div>`}
           <div class="quick-pos-product-name">${p.name}</div>
           <div class="quick-pos-product-price">${eur(p.price)}</div>
@@ -26837,7 +26838,8 @@ function renderQuickCategoriesGrid(){
       ` : products.map(p => {
         const imgSrc = p.image_url || p.imageUrl;
         return `
-        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}">
+        <button class="quick-pos-product" onclick="quickPosAddProduct('${p.id}')" title="${p.name}" style="position:relative">
+          ${_loyMultBadgeHTML(p.id,'staff')}
           ${imgSrc && imgSrc.trim() ? `<img src="${imgSrc}" class="quick-pos-product-img" alt="" loading="lazy" onerror="_posImgErr(this)">` : `<div class="quick-pos-product-placeholder">📦</div>`}
           <div class="quick-pos-product-name">${p.name}</div>
           <div class="quick-pos-product-price">${eur(p.price)}</div>
@@ -27098,7 +27100,7 @@ function renderPOSGrid(){
       ? `<span style="position:absolute;top:4px;left:4px;background:rgba(0,212,168,0.9);color:#000;font-size:9px;font-weight:800;padding:2px 5px;border-radius:4px;z-index:2">⭐ ×${p.sales30d}</span>`
       : '';
     return `<div class="prod-card ${cls}" onclick="addToCart('${p.id}')">
-      <div style="position:relative">${imgHtml}${volChip}${topBadge}</div>
+      <div style="position:relative">${imgHtml}${volChip}${topBadge}${_loyMultBadgeHTML(p.id,'kiosk')}</div>
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">${eur(p.price)}</div>
       <div class="prod-meta">Stock: ${p.stock||0}${(p.stock||0)<=(p.minStock||0)?' ⚠️':''}</div></div>`;
@@ -27108,6 +27110,18 @@ function renderPOSGrid(){
 
 
 var _posSearchTimer = null;
+
+function _loyMultBadgeHTML(productId, mode){
+  var m = (window.LOYALTY_MULT_MAP||{})[productId];
+  if(!m || !(m.mult > 1)) return '';
+  var n = m.mult;
+  var multStr = Number.isInteger(n) ? String(n) : String(n);
+  var label = mode === 'staff' ? ('🔥 ×' + multStr) : ('🔥 ×' + multStr + ' ΠΟΝΤΟΙ');
+  return '<span style="position:absolute;top:6px;left:6px;z-index:5;'
+    + 'background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;font-weight:700;font-size:10px;'
+    + 'line-height:1;padding:4px 7px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25);'
+    + 'pointer-events:none;white-space:nowrap">' + label + '</span>';
+}
 
 
 function updatePOSSearch(val){
