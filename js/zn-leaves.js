@@ -4559,53 +4559,53 @@ async function _loadLoyaltyProfileRewards(cid, pts){
   }
 }
 
-function _doLoyaltyRedeem(cid, rewardId, costPts, rewardName, rewards){
-  showConfirm('Εξαργύρωση «'+rewardName+'» για '+costPts+' πόντους;', async function(){
-    var cs = window.CUSTOMERS || [];
-    var custIdx = -1;
-    for(var i = 0; i < cs.length; i++){ if(cs[i].id == cid){ custIdx = i; break; } }
-    if(custIdx < 0){ toast('Σφάλμα: πελάτης δεν βρέθηκε.','error'); return; }
-    var currentPts = Number(cs[custIdx].loyaltyPoints) || 0;
-    if(currentPts < costPts){
-      toast('Ανεπαρκείς πόντοι για αυτή την ανταμοιβή.','error');
-      return;
-    }
-    var newPoints = currentPts - costPts;
-    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    var code = '';
-    for(var k = 0; k < 6; k++){ code += chars.charAt(Math.floor(Math.random()*chars.length)); }
-    try{
-      var sbC = (typeof sb !== 'undefined') ? sb : null;
-      if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
-      var upd = await sbC.from('customers').update({loyalty_points:newPoints}).eq('id',cid).eq('shop_id',SHOP_ID);
-      if(upd.error) throw upd.error;
-      var ledRow = {shop_id:SHOP_ID, customer_id:cid, sale_id:'redeem:'+code, type:'redeem', delta:-costPts, balance_after:newPoints};
-      var lIns = await sbC.from('loyalty_ledger').insert([ledRow]);
-      if(lIns.error) throw lIns.error;
-      var rw = null;
-      for(var j = 0; j < rewards.length; j++){ if(String(rewards[j].id)===String(rewardId)){ rw = rewards[j]; break; } }
-      var cpRow = {
-        shop_id: SHOP_ID,
-        customer_id: cid,
-        reward_id: rewardId,
-        name: rewardName,
-        type: rw ? rw.type : 'custom',
-        value: rw ? rw.value : null,
-        cost_points: costPts,
-        status: 'active',
-        code: code,
-        issued_at: new Date().toISOString()
-      };
-      var cIns = await sbC.from('loyalty_coupons').insert([cpRow]);
-      if(cIns.error) throw cIns.error;
-      cs[custIdx].loyaltyPoints = newPoints;
-      toast('Εξαργυρώθηκε ✓','success');
-      _renderLoyaltyMemberProfile(cid);
-    }catch(e){
-      console.error('redeem error', e);
-      toast('Σφάλμα κατά την εξαργύρωση.','error');
-    }
-  });
+async function _doLoyaltyRedeem(cid, rewardId, costPts, rewardName, rewards){
+  var confirmed = await window.confirm('Εξαργύρωση «'+rewardName+'» για '+costPts+' πόντους;');
+  if(!confirmed) return;
+  var cs = window.CUSTOMERS || [];
+  var custIdx = -1;
+  for(var i = 0; i < cs.length; i++){ if(cs[i].id == cid){ custIdx = i; break; } }
+  if(custIdx < 0){ toast('Σφάλμα: πελάτης δεν βρέθηκε.','error'); return; }
+  var currentPts = Number(cs[custIdx].loyaltyPoints) || 0;
+  if(currentPts < costPts){
+    toast('Ανεπαρκείς πόντοι για αυτή την ανταμοιβή.','error');
+    return;
+  }
+  var newPoints = currentPts - costPts;
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  var code = '';
+  for(var k = 0; k < 6; k++){ code += chars.charAt(Math.floor(Math.random()*chars.length)); }
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
+    var upd = await sbC.from('customers').update({loyalty_points:newPoints}).eq('id',cid).eq('shop_id',SHOP_ID);
+    if(upd.error) throw upd.error;
+    var ledRow = {shop_id:SHOP_ID, customer_id:cid, sale_id:'redeem:'+code, type:'redeem', delta:-costPts, balance_after:newPoints};
+    var lIns = await sbC.from('loyalty_ledger').insert([ledRow]);
+    if(lIns.error) throw lIns.error;
+    var rw = null;
+    for(var j = 0; j < rewards.length; j++){ if(String(rewards[j].id)===String(rewardId)){ rw = rewards[j]; break; } }
+    var cpRow = {
+      shop_id: SHOP_ID,
+      customer_id: cid,
+      reward_id: rewardId,
+      name: rewardName,
+      type: rw ? rw.type : 'custom',
+      value: rw ? rw.value : null,
+      cost_points: costPts,
+      status: 'active',
+      code: code,
+      issued_at: new Date().toISOString()
+    };
+    var cIns = await sbC.from('loyalty_coupons').insert([cpRow]);
+    if(cIns.error) throw cIns.error;
+    cs[custIdx].loyaltyPoints = newPoints;
+    toast('Εξαργυρώθηκε ✓','success');
+    _renderLoyaltyMemberProfile(cid);
+  }catch(e){
+    console.error('redeem error', e);
+    toast('Σφάλμα κατά την εξαργύρωση.','error');
+  }
 }
 
 async function _loadLoyaltyProfileCoupons(cid){
@@ -4672,23 +4672,23 @@ async function _loadLoyaltyProfileCoupons(cid){
   }
 }
 
-function _doMarkCouponUsed(cid, couponId){
-  showConfirm('Σήμανση κουπονιού ως χρησιμοποιημένου;', async function(){
-    try{
-      var sbC = (typeof sb !== 'undefined') ? sb : null;
-      if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
-      var upd = await sbC.from('loyalty_coupons')
-        .update({status:'used', used_at:new Date().toISOString()})
-        .eq('id', couponId)
-        .eq('shop_id', SHOP_ID);
-      if(upd.error) throw upd.error;
-      toast('Κουπόνι χρησιμοποιήθηκε ✓','success');
-      _loadLoyaltyProfileCoupons(cid);
-    }catch(e){
-      console.error('mark-used error', e);
-      toast('Σφάλμα.','error');
-    }
-  });
+async function _doMarkCouponUsed(cid, couponId){
+  var confirmed = await window.confirm('Σήμανση κουπονιού ως χρησιμοποιημένου;');
+  if(!confirmed) return;
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
+    var upd = await sbC.from('loyalty_coupons')
+      .update({status:'used', used_at:new Date().toISOString()})
+      .eq('id', couponId)
+      .eq('shop_id', SHOP_ID);
+    if(upd.error) throw upd.error;
+    toast('Κουπόνι χρησιμοποιήθηκε ✓','success');
+    _loadLoyaltyProfileCoupons(cid);
+  }catch(e){
+    console.error('mark-used error', e);
+    toast('Σφάλμα.','error');
+  }
 }
 
 // ===== LOYALTY OFFERS / REWARDS CRUD =====
