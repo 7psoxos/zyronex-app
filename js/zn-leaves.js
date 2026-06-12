@@ -26586,7 +26586,7 @@ function renderPOSQuickBody(){
       <!-- Search -->
       <input type="text" id="posSearch" class="form-input" placeholder="🔍 Αναζήτηση προϊόντος..." oninput="updatePOSSearch(this.value)" style="font-size:13px;flex-shrink:0">
       <!-- Categories / Products -->
-      <div class="quick-pos-categories" id="quickCategoriesGrid" style="flex:1;min-height:0"></div>
+      <div class="quick-pos-categories" id="quickCategoriesGrid"></div>
     </div>
 
     <!-- Col 3: Numpad + cash + payment -->

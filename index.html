@@ -891,10 +891,10 @@ if(window.navigator && window.navigator.share){
   .quick-pos-cat-name{font-size:13px;font-weight:700;text-align:center;line-height:1.2;word-break:break-word}
   .quick-pos-back{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;color:var(--accent);font-size:13px;text-transform:uppercase;letter-spacing:1px}
   @media (hover:hover) and (pointer:fine){.quick-pos-back:hover{background:var(--bg-3)}}
-  .quick-pos-product{background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:6px 6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;color:var(--text-0);transition:all 0.15s;-webkit-tap-highlight-color:transparent;text-align:left;font-family:inherit;overflow:hidden;min-height:110px;position:relative;align-items:stretch}
+  .quick-pos-product{background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:6px 6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;color:var(--text-0);transition:all 0.15s;-webkit-tap-highlight-color:transparent;text-align:left;font-family:inherit;min-height:175px;position:relative;align-items:stretch}
   @media (hover:hover) and (pointer:fine){.quick-pos-product:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,212,168,0.12)}}
   .quick-pos-product:active{transform:scale(0.97);border-color:var(--accent)}
-  .quick-pos-product-name{font-size:12px;font-weight:600;line-height:1.25;color:var(--text-0);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .quick-pos-product-name{font-size:12px;font-weight:600;line-height:1.25;color:var(--text-0);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;flex-shrink:0;min-height:30px}
   .quick-pos-product-price{font-size:14px;font-weight:800;color:var(--accent);font-family:'JetBrains Mono',monospace}
   .quick-pos-product-stock{font-size:10px;color:var(--warn)}
   .quick-pos-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -1343,7 +1343,7 @@ if(window.navigator && window.navigator.share){
     .quick-pos-layout{grid-template-columns:1fr;height:auto;min-height:auto}
     .quick-pos-cart{order:3;min-height:200px;max-height:none;overflow:visible}
     .cart-body{overflow:visible}
-    .quick-pos-mid{order:2;max-height:260px}
+    .quick-pos-mid{order:2;max-height:460px}
     .quick-pos-pad{order:1;padding:10px;gap:8px}
     .quick-pos-cash-row{grid-template-columns:repeat(5,1fr);gap:4px}
     .quick-pos-cash{padding:8px 2px;font-size:12px}
