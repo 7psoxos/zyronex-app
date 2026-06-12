@@ -4014,6 +4014,16 @@ function _renderLoyaltyMembers(){
   };
 
   var avatar = function(name, color, sz){
+    var src = null;
+    if(typeof _detectGender === 'function' && typeof _AV_MALE !== 'undefined' && typeof _AV_FEMALE !== 'undefined'){
+      src = (_detectGender(name) === 'female') ? _AV_FEMALE : _AV_MALE;
+    }
+    if(src){
+      return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;border:2px solid '+color+'70;'
+        +'overflow:hidden;flex-shrink:0;background:'+color+'25">'
+        +'<img src="'+src+'" style="width:100%;height:100%;object-fit:cover;object-position:center 12%;display:block">'
+        +'</div>';
+    }
     return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+'25;'
       +'border:2px solid '+color+'70;display:flex;align-items:center;justify-content:center;'
       +'font-size:'+(sz/2.5|0)+'px;font-weight:800;color:'+color+';flex-shrink:0">'
@@ -4191,6 +4201,16 @@ function _renderLoyaltyMemberProfile(cid){
     return {pct:pct,max:false,rem:Math.max(0,t2.next-p),nextName:NEXT_LABEL[tk]||''};
   };
   var avHTML = function(name, color, sz){
+    var src = null;
+    if(typeof _detectGender === 'function' && typeof _AV_MALE !== 'undefined' && typeof _AV_FEMALE !== 'undefined'){
+      src = (_detectGender(name) === 'female') ? _AV_FEMALE : _AV_MALE;
+    }
+    if(src){
+      return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;border:2px solid '+color+'70;'
+        +'overflow:hidden;flex-shrink:0;background:'+color+'25">'
+        +'<img src="'+src+'" style="width:100%;height:100%;object-fit:cover;object-position:center 12%;display:block">'
+        +'</div>';
+    }
     return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+'25;'
       +'border:2px solid '+color+'70;display:flex;align-items:center;justify-content:center;'
       +'font-size:'+(sz/2.5|0)+'px;font-weight:800;color:'+color+';flex-shrink:0">'
