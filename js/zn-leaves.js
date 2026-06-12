@@ -27114,7 +27114,7 @@ function renderPOSGrid(){
 var _posSearchTimer = null;
 
 function _loyMultBadgeHTML(productId, mode){
-  var m = (window.LOYALTY_MULT_MAP||{})[productId];
+  var m = window.LOYALTY_MULT_MAP && (window.LOYALTY_MULT_MAP[productId] || window.LOYALTY_MULT_MAP[String(productId)] || window.LOYALTY_MULT_MAP[Number(productId)]);
   if(!m || !(m.mult > 1)) return '';
   var n = m.mult;
   var multStr = Number.isInteger(n) ? String(n) : String(n);
@@ -28058,7 +28058,7 @@ async function _loadLoyaltyMultipliers(){
       var ends   = rule.ends_at   ? new Date(rule.ends_at).getTime()   : null;
       if(starts !== null && now < starts) continue;
       if(ends   !== null && now > ends)   continue;
-      var mult = Number(rule.mult)||1;
+      var mult = Number(rule.multiplier)||1;
       if(mult <= 1) continue;
       var pids = Array.isArray(rule.product_ids) ? rule.product_ids : [];
       for(var j=0; j<pids.length; j++){
