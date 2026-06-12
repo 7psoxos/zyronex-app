@@ -3417,6 +3417,11 @@ function custAvatarHTML(name, size, tierEmoji, tierColor){
     ${tierEmoji ? `<span style="position:absolute;bottom:-4px;right:-4px;font-size:${Math.round(s*0.28)}px;background:var(--bg-1);border-radius:50%;padding:0 2px;line-height:1.4;z-index:2">${tierEmoji}</span>` : ''}
   </div>`;
 }
+// Expose avatar assets on window so loyalty helpers in this file can reference
+// them via window.* and avoid any closure/scope ambiguity at render time
+window._detectGender = _detectGender;
+window._AV_MALE     = _AV_MALE;
+window._AV_FEMALE   = _AV_FEMALE;
 
 async function openCustomerDetail(id){
   const c=CUSTOMERS.find(x=>x.id===id);
@@ -4015,8 +4020,9 @@ function _renderLoyaltyMembers(){
 
   var avatar = function(name, color, sz){
     var src = null;
-    if(typeof _detectGender === 'function' && typeof _AV_MALE !== 'undefined' && typeof _AV_FEMALE !== 'undefined'){
-      src = (_detectGender(name) === 'female') ? _AV_FEMALE : _AV_MALE;
+    if(typeof window._detectGender === 'function' && window._AV_MALE && window._AV_FEMALE){
+      var gender = window._detectGender(name);
+      src = (gender === 'female' || gender === 'f') ? window._AV_FEMALE : window._AV_MALE;
     }
     if(src){
       return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;border:2px solid '+color+'70;'
@@ -4202,8 +4208,9 @@ function _renderLoyaltyMemberProfile(cid){
   };
   var avHTML = function(name, color, sz){
     var src = null;
-    if(typeof _detectGender === 'function' && typeof _AV_MALE !== 'undefined' && typeof _AV_FEMALE !== 'undefined'){
-      src = (_detectGender(name) === 'female') ? _AV_FEMALE : _AV_MALE;
+    if(typeof window._detectGender === 'function' && window._AV_MALE && window._AV_FEMALE){
+      var gender = window._detectGender(name);
+      src = (gender === 'female' || gender === 'f') ? window._AV_FEMALE : window._AV_MALE;
     }
     if(src){
       return '<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;border:2px solid '+color+'70;'
