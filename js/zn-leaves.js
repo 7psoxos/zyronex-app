@@ -80,22 +80,28 @@ var PIN_BUFFER = '';
 var SELECTED_USER_ID = null;
 
 // Phase 3b: categories
-var DEFAULT_CATEGORIES = ['Υγρά Αναπλήρωσης','Συσκευές','Αντιστάσεις','Μπαταρίες','Αξεσουάρ'];
+var DEFAULT_CATEGORIES = ['Υγρά Αναπλήρωσης','Νικοτινούχα υγρά','Νικοτινούχες βάσεις','Συσκευές','Αντιστάσεις','Μπαταρίες','Αξεσουάρ'];
 
 // Mutable list — μπορεί να επεξεργαστεί ο admin από Settings
 // Πάντα διατηρεί 'Όλα' στην αρχή για filtering
 var CATEGORIES = (() => {
+  var _required = ['Νικοτινούχα υγρά','Νικοτινούχες βάσεις'];
   try {
-    const saved = localStorage.getItem('vs_product_categories');
+    var saved = localStorage.getItem('vs_product_categories');
     if (saved) {
-      const arr = JSON.parse(saved);
+      var arr = JSON.parse(saved);
       if (Array.isArray(arr) && arr.length > 0) {
-        // Φρόντισε να υπάρχει 'Όλα' στην αρχή
-        return ['Όλα', ...arr.filter(c => c && c !== 'Όλα')];
+        var merged = arr.filter(function(c){ return c && c !== 'Όλα'; });
+        var changed = false;
+        for(var _i=0; _i<_required.length; _i++){
+          if(merged.indexOf(_required[_i]) === -1){ merged.push(_required[_i]); changed = true; }
+        }
+        if(changed){ try{ localStorage.setItem('vs_product_categories', JSON.stringify(merged)); }catch(_){} }
+        return ['Όλα'].concat(merged);
       }
     }
   } catch(e) {}
-  return ['Όλα', ...DEFAULT_CATEGORIES];
+  return ['Όλα'].concat(DEFAULT_CATEGORIES);
 })();
 
 // Phase 4a: modal system
@@ -982,7 +988,12 @@ async function loadAllData(){
     if(typeof migrateOrphanCategories === 'function'){
       migrateOrphanCategories().catch(e => console.warn('Category migration:', e));
     }
-    
+
+    // Load loyalty multipliers map (best-effort; failures set empty map)
+    if(typeof _loadLoyaltyMultipliers === 'function'){
+      _loadLoyaltyMultipliers().catch(function(e){ window.LOYALTY_MULT_MAP={}; console.warn('LOYALTY_MULT_MAP init failed', e); });
+    }
+
     // Page restore is handled EXCLUSIVELY by the session restore paths in init()
     // (both PIN login and auto-session restore call getInitialPage() → showPage() after shifts load)
     // Calling showPage() here races with session restore and causes redirect to dashboard.
@@ -26839,40 +26850,39 @@ function _qmCalculate(product, targetNicMg, boosterVgPctOverride, finalVolOverri
 }
 
 // Κοινός έλεγχος: χρειάζεται το προϊόν Quick-Mix (nicotine picker);
-// Δουλεύει και χωρίς το checkbox hasNicotine — βάσει κατηγορίας/τύπου.
+// Quick-Mix opens ONLY for nicotine-FREE mixable bases. Never for finished nic
+// liquids, boosters, or nicotine bases.
 
 function _productNeedsNicPicker(p){
   if(!p) return false;
   var name = (p.name||'').toLowerCase();
   var cat  = (p.category||'').toLowerCase();
-  // Non-liquid categories never need Quick-Mix regardless of any other field
-  var nonLiquidCats = ['συσκευ', 'αντιστάσ', 'αντιστας', 'μπαταρ', 'αξεσουαρ', 'αξεσουάρ', 'coil', 'device', 'battery'];
-  if(nonLiquidCats.some(function(k){ return cat.includes(k); })) return false;
-  // Explicit mixable-liquid signals override the raw-base/ingredient heuristics below
-  var _pt = (p.productType || '').toLowerCase();
-  if (p.hasNicotine || _pt === 'longfill' || _pt === 'shortfill' || (p.shortfillMl > 0)) return true;
-  var ingKeywords = ['nicshot','nic shot','nic-shot','booster','νικοτιν','νικσοτ',
-                     'glycerin','γλυκερ','propylene','προπυλεν',' vg ',' pg ','βαση','base'];
+
+  // Owner-managed nicotine categories: finished nic liquids & nicotine bases/boosters → never Quick-Mix
+  var nicExcludeCats = ['νικοτινούχα υγρά','νικοτινουχα υγρα','νικοτινούχες βάσεις','νικοτινουχες βασεις'];
+  if(nicExcludeCats.some(function(k){ return cat.indexOf(k)!==-1; })) return false;
+
+  // Non-liquid categories never need Quick-Mix
+  var nonLiquidCats = ['συσκευ','αντιστάσ','αντιστας','μπαταρ','αξεσουαρ','αξεσουάρ','coil','device','battery'];
+  if(nonLiquidCats.some(function(k){ return cat.indexOf(k)!==-1; })) return false;
+
+  // Ingredients (boosters / nicshots / nicotine bases / raw VG-PG / glycerin / propylene) → never Quick-Mix
+  var ingKeywords = ['nicshot','nic shot','nic-shot','booster','νικοτιν','νίκσοτ','νικσοτ','base','βαση','βάση','glycerin','γλυκερ','propylene','προπυλεν'];
+  if(ingKeywords.some(function(k){ return name.indexOf(k)!==-1 || cat.indexOf(k)!==-1; })) return false;
   if(p.baseType === 'vg' || p.baseType === 'pg') return false;
-  if(ingKeywords.some(function(k){ return name.includes(k) || cat.includes(k); })) return false;
+
+  // Already-finished / non-mixable product types
   var ptype = (p.productType||'').toLowerCase();
-  var isRefillCat = cat.indexOf('υγρά αναπλήρωσης') !== -1 || cat.indexOf('υγρα αναπληρωσης') !== -1;
+  if(ptype === 'premix' || ptype === 'concentrate' || ptype === 'booster' || ptype === 'base') return false;
+
+  // Finished nicotine liquid (already contains nicotine) → no nicotine picker
+  if(p.hasNicotine) return false;
+
+  // Genuinely mixable nicotine-free base → open Quick-Mix
+  var isRefillCat = cat.indexOf('υγρά αναπλήρωσης')!==-1 || cat.indexOf('υγρα αναπληρωσης')!==-1;
   var isMixable = (ptype === 'longfill' || ptype === 'shortfill');
-  // premix = έτοιμο προς πώληση, concentrate = καθαρό άρωμα για DIY: ΠΟΤΕ
-  // δεν ανοίγουν Quick-Mix αυτόματα, ακόμη κι αν έχουν shortfillMl ορισμένο.
-  if(ptype === 'premix' || ptype === 'concentrate') return false;
-  // Ασφάλεια: αν έχει ορισμένο ml αρώματος, είναι αναμίξιμο ακόμη κι αν λείπει το productType
   var hasAroma = !!(p.shortfillMl && p.shortfillMl > 0);
-  // Ένα προϊόν χρειάζεται Quick-Mix όταν ΟΠΟΙΟΔΗΠΟΤΕ από αυτά ισχύει:
-  //  • έχει checkbox νικοτίνης (hasNicotine), Ή
-  //  • ο τύπος του είναι longfill/shortfill (αναμίξιμο), Ή
-  //  • έχει ορισμένο ml αρώματος (shortfillMl), Ή
-  //  • ανήκει στην κατηγορία «Υγρά Αναπλήρωσης».
-  // ΣΗΜΕΙΩΣΗ: το isRefillCat ΔΕΝ είναι πλέον προαπαιτούμενο για τα isMixable/hasAroma,
-  // ώστε προϊόντα όπως «Banana Milkshake» (Shortfill, 24ml άρωμα) που ζουν σε
-  // κατηγορία με άλλο όνομα (π.χ. «Longfills», «Shortfills», «Αρώματα») να
-  // ανοίγουν σωστά το Quick-Mix. Οι boosters/βάσεις έχουν ήδη φιλτραριστεί πάνω.
-  return !!(p.hasNicotine || isMixable || hasAroma || isRefillCat);
+  return !!(isMixable || hasAroma || isRefillCat);
 }
 
 function addToCart(pid){
@@ -27550,11 +27560,56 @@ async function checkout(){
   return _doCheckout();
 }
 
+async function _loadLoyaltyMultipliers(){
+  try{
+    if(typeof sb==='undefined' || typeof SHOP_ID==='undefined'){ window.LOYALTY_MULT_MAP={}; return; }
+    var res = await sb.from('loyalty_multipliers').select('*').eq('shop_id', SHOP_ID).eq('active', true);
+    var rows = (res && res.data) ? res.data : [];
+    var now = Date.now();
+    var map = {};
+    for(var i=0; i<rows.length; i++){
+      var rule = rows[i];
+      var starts = rule.starts_at ? new Date(rule.starts_at).getTime() : null;
+      var ends   = rule.ends_at   ? new Date(rule.ends_at).getTime()   : null;
+      if(starts !== null && now < starts) continue;
+      if(ends   !== null && now > ends)   continue;
+      var mult = Number(rule.mult)||1;
+      if(mult <= 1) continue;
+      var pids = Array.isArray(rule.product_ids) ? rule.product_ids : [];
+      for(var j=0; j<pids.length; j++){
+        var pid = pids[j];
+        if(!map[pid] || mult > map[pid].mult){
+          map[pid] = {mult: mult, name: rule.name||''};
+        }
+      }
+    }
+    window.LOYALTY_MULT_MAP = map;
+  }catch(e){
+    console.warn('_loadLoyaltyMultipliers error', e);
+    window.LOYALTY_MULT_MAP = {};
+  }
+}
+
+function _computeCartBonusPoints(cart){
+  var bonus = 0;
+  var multMap = window.LOYALTY_MULT_MAP || {};
+  if(!cart || !cart.length) return 0;
+  for(var i=0; i<cart.length; i++){
+    var it = cart[i];
+    var m = multMap[it.productId];
+    if(m && m.mult > 1){
+      bonus += Math.floor((it.price||0) * (it.qty||0) * (m.mult - 1));
+    }
+  }
+  return bonus;
+}
+
 async function _loyaltyAward(opts){
   try{
     var customerId = opts.customerId;
     if(!customerId) return null;
-    var earned = Math.floor(opts.subtotal||0);
+    var base = Math.floor(opts.subtotal||0);
+    var earned = base + (opts.bonusPoints||0);
     var pointsUsed = opts.pointsUsed||0;
     var shopId = opts.shopId, saleId = opts.saleId||null;
     if(saleId){
@@ -27597,7 +27652,11 @@ async function _loyaltyAward(opts){
       loyalty_points: finalPoints, loyalty_tier: tier, loyalty_lifetime_points: newLifetime
     }).eq('id', customerId);
     var rows=[];
-    if(earned>0) rows.push({shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'earn', delta:earned, balance_after:afterEarn});
+    if(earned>0){
+      var earnRow={shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'earn', delta:earned, balance_after:afterEarn};
+      if((opts.bonusPoints||0)>0 && opts.earnNote) earnRow.note=opts.earnNote;
+      rows.push(earnRow);
+    }
     if(pointsUsed>0) rows.push({shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'redeem', delta:-pointsUsed, balance_after:finalPoints});
     if(rows.length){ try{ await sb.from('loyalty_ledger').insert(rows); }catch(e){ console.error('ledger insert', e); } }
     if(c){ c.totalSpent=curSpent+(opts.subtotal||0); c.visits=curVisits+1; c.lastVisit=addDays(0); c.loyaltyPoints=finalPoints; c.loyaltyTier=tier; c.loyaltyLifetimePoints=newLifetime; }
@@ -27792,7 +27851,8 @@ async function _doCheckout(){
     }
     let earnedPoints = 0;
     let newTier = null;
-    var _la = await _loyaltyAward({ customerId: customerId, saleId: (saleData && saleData.id) || null, subtotal: subtotal, pointsUsed: pointsUsed, shopId: SHOP_ID });
+    var _bonus = _computeCartBonusPoints(CART);
+    var _la = await _loyaltyAward({ customerId: customerId, saleId: (saleData && saleData.id) || null, subtotal: subtotal, pointsUsed: pointsUsed, shopId: SHOP_ID, bonusPoints: _bonus, earnNote: (_bonus > 0 ? 'Bonus πόντοι (πολλαπλασιαστήρας): +'+_bonus : null) });
     if(_la){ earnedPoints = _la.earned; newTier = _la.tier; }
     // Points-used toast
     if(customerId && pointsUsed > 0) toast(`⭐ Χρησιμοποιήθηκαν ${pointsUsed} πόντοι`, 'info');
@@ -28114,12 +28174,15 @@ async function syncOfflineQueue(){
       // Award loyalty points for offline sale (same logic as online checkout)
       if(entry.customerId){
         try{
+          var _offBonus = _computeCartBonusPoints(entry.cart||[]);
           await _loyaltyAward({
             customerId: entry.customerId,
             saleId: saleId || null,
             subtotal: subtotal,
             pointsUsed: entry.pointsUsed || 0,
-            shopId: SHOP_ID
+            shopId: SHOP_ID,
+            bonusPoints: _offBonus,
+            earnNote: (_offBonus > 0 ? 'Bonus πόντοι (πολλαπλασιαστήρας): +'+_offBonus : null)
           });
         }catch(e){ console.error('[offline sync] _loyaltyAward failed:', e); }
       }
