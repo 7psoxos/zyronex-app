@@ -4318,6 +4318,22 @@ function _renderLoyaltyMemberProfile(cid){
     +'color:var(--text-2,#6b7283);margin-bottom:4px">Στατιστικά</div>'
     +sRows.join('')+'</div>';
 
+  // ── 4a) Rewards redemption ──────────────────────────────────────────────────
+  html += '<div class="card" style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283);margin-bottom:8px">🎁 Εξαργύρωση Ανταμοιβής</div>'
+    +'<div id="loyProfileRewardsInner" style="text-align:center;padding:16px;'
+    +'color:var(--text-2,#6b7283);font-size:14px">⏳ Φόρτωση...</div>'
+    +'</div>';
+
+  // ── 4b) Available coupons ───────────────────────────────────────────────────
+  html += '<div class="card" style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;'
+    +'color:var(--text-2,#6b7283);margin-bottom:8px">🎟️ Διαθέσιμα Κουπόνια</div>'
+    +'<div id="loyProfileCouponsInner" style="text-align:center;padding:16px;'
+    +'color:var(--text-2,#6b7283);font-size:14px">⏳ Φόρτωση...</div>'
+    +'</div>';
+
   // ── 5) Communication ────────────────────────────────────────────────────────
   var cRows = [];
   if(cust.phone) cRows.push('<div style="padding:6px 0;font-size:14px">📞 '+esc(cust.phone)+'</div>');
@@ -4418,8 +4434,10 @@ function _renderLoyaltyMemberProfile(cid){
     }
   }
 
-  // Kick off async ledger load
+  // Kick off async loads
   _loadLoyaltyLedger(cid);
+  _loadLoyaltyProfileRewards(cid, pts);
+  _loadLoyaltyProfileCoupons(cid);
 }
 
 async function _loadLoyaltyLedger(cid){
@@ -4473,6 +4491,203 @@ async function _loadLoyaltyLedger(cid){
   }catch(e){
     var elErr = document.getElementById('loyProfileActivityInner');
     if(elErr) elErr.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Δεν ήταν δυνατή η φόρτωση ιστορικού.</div>';
+  }
+}
+
+async function _loadLoyaltyProfileRewards(cid, pts){
+  var el = document.getElementById('loyProfileRewardsInner');
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){
+      if(el) el.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Χωρίς σύνδεση.</div>';
+      return;
+    }
+    var r = await sbC.from('loyalty_rewards')
+      .select('id,name,description,cost_points,type,value,icon')
+      .eq('shop_id', SHOP_ID)
+      .eq('active', true)
+      .order('sort_order',{ascending:true});
+    el = document.getElementById('loyProfileRewardsInner');
+    if(!el) return;
+    if(r.error) throw r.error;
+    var rewards = r.data || [];
+    if(!rewards.length){
+      el.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px;padding:8px 0">Δεν υπάρχουν διαθέσιμες ανταμοιβές.</div>';
+      return;
+    }
+    var _rwBadge = function(type, value){
+      if(type==='discount_percent') return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#6366f122;color:#6366f1;font-weight:700">−'+value+'%</span>';
+      if(type==='discount_amount')  return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#0ea5e922;color:#0ea5e9;font-weight:700">−'+value+'€</span>';
+      if(type==='free_product')     return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#16a34a22;color:#16a34a;font-weight:700">Δωρεάν προϊόν</span>';
+      return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#f5922222;color:#f59222;font-weight:700">Προσφορά</span>';
+    };
+    var rh = '';
+    for(var i = 0; i < rewards.length; i++){
+      var rw = rewards[i];
+      var canRedeem = pts >= rw.cost_points;
+      var sep = i > 0 ? 'border-top:1px solid var(--border,#e5e7eb)' : '';
+      var icon = rw.icon ? String(rw.icon)+' ' : '🎁 ';
+      rh += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;'+sep+'">'
+        +'<div style="flex:1;min-width:0;margin-right:10px">'
+        +'<div style="font-size:14px;font-weight:700">'+icon+_loyOffersEsc(rw.name)+'</div>'
+        +(rw.description ? '<div style="font-size:12px;color:var(--text-2,#6b7283)">'+_loyOffersEsc(rw.description)+'</div>' : '')
+        +'<div style="margin-top:4px;display:flex;align-items:center;gap:6px">'
+        +_rwBadge(rw.type, rw.value)
+        +'<span style="font-size:12px;color:var(--text-2,#6b7283)">'+Number(rw.cost_points)+' πόντοι</span>'
+        +'</div></div>'
+        +'<button data-loy-redeem="'+_loyOffersEsc(String(rw.id))+'" data-loy-cost="'+Number(rw.cost_points)+'" '
+        +'data-loy-name="'+_loyOffersEsc(rw.name)+'" '
+        +'style="min-height:40px;padding:0 14px;border-radius:10px;border:none;'
+        +'font-size:13px;font-weight:700;flex-shrink:0;cursor:'+(canRedeem?'pointer':'default')+';'
+        +(canRedeem?'background:#6366f1;color:#fff':'background:var(--bg-3,#e5e7eb);color:var(--text-2,#6b7283)')
+        +'"'+(canRedeem?'':' disabled')+'>'
+        +(canRedeem?'Εξαργύρωση':'Ανεπαρκείς πόντοι')
+        +'</button></div>';
+    }
+    el.innerHTML = rh;
+    el.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-loy-redeem]');
+      if(!btn || btn.disabled) return;
+      var rwId = btn.getAttribute('data-loy-redeem');
+      var rwCost = parseInt(btn.getAttribute('data-loy-cost'), 10);
+      var rwName = btn.getAttribute('data-loy-name');
+      _doLoyaltyRedeem(cid, rwId, rwCost, rwName, rewards);
+    });
+  }catch(e){
+    var elE = document.getElementById('loyProfileRewardsInner');
+    if(elE) elE.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Δεν ήταν δυνατή η φόρτωση.</div>';
+  }
+}
+
+async function _doLoyaltyRedeem(cid, rewardId, costPts, rewardName, rewards){
+  var confirmed = await window.confirm('Εξαργύρωση «'+rewardName+'» για '+costPts+' πόντους;');
+  if(!confirmed) return;
+  var cs = window.CUSTOMERS || [];
+  var custIdx = -1;
+  for(var i = 0; i < cs.length; i++){ if(cs[i].id == cid){ custIdx = i; break; } }
+  if(custIdx < 0){ toast('Σφάλμα: πελάτης δεν βρέθηκε.','error'); return; }
+  var currentPts = Number(cs[custIdx].loyaltyPoints) || 0;
+  if(currentPts < costPts){
+    toast('Ανεπαρκείς πόντοι για αυτή την ανταμοιβή.','error');
+    return;
+  }
+  var newPoints = currentPts - costPts;
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  var code = '';
+  for(var k = 0; k < 6; k++){ code += chars.charAt(Math.floor(Math.random()*chars.length)); }
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
+    var upd = await sbC.from('customers').update({loyalty_points:newPoints}).eq('id',cid).eq('shop_id',SHOP_ID);
+    if(upd.error) throw upd.error;
+    var ledRow = {shop_id:SHOP_ID, customer_id:cid, sale_id:'redeem:'+code, type:'redeem', delta:-costPts, balance_after:newPoints};
+    var lIns = await sbC.from('loyalty_ledger').insert([ledRow]);
+    if(lIns.error) throw lIns.error;
+    var rw = null;
+    for(var j = 0; j < rewards.length; j++){ if(String(rewards[j].id)===String(rewardId)){ rw = rewards[j]; break; } }
+    var cpRow = {
+      shop_id: SHOP_ID,
+      customer_id: cid,
+      reward_id: rewardId,
+      name: rewardName,
+      type: rw ? rw.type : 'custom',
+      value: rw ? rw.value : null,
+      cost_points: costPts,
+      status: 'active',
+      code: code,
+      issued_at: new Date().toISOString()
+    };
+    var cIns = await sbC.from('loyalty_coupons').insert([cpRow]);
+    if(cIns.error) throw cIns.error;
+    cs[custIdx].loyaltyPoints = newPoints;
+    toast('Εξαργυρώθηκε ✓','success');
+    _renderLoyaltyMemberProfile(cid);
+  }catch(e){
+    console.error('redeem error', e);
+    toast('Σφάλμα κατά την εξαργύρωση.','error');
+  }
+}
+
+async function _loadLoyaltyProfileCoupons(cid){
+  var el = document.getElementById('loyProfileCouponsInner');
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){
+      if(el) el.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Χωρίς σύνδεση.</div>';
+      return;
+    }
+    var r = await sbC.from('loyalty_coupons')
+      .select('id,name,type,value,cost_points,code,status,issued_at')
+      .eq('customer_id', cid)
+      .eq('shop_id', SHOP_ID)
+      .eq('status', 'active')
+      .order('issued_at',{ascending:false});
+    el = document.getElementById('loyProfileCouponsInner');
+    if(!el) return;
+    if(r.error) throw r.error;
+    var coupons = r.data || [];
+    if(!coupons.length){
+      el.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px;padding:8px 0">Δεν υπάρχουν ενεργά κουπόνια.</div>';
+      return;
+    }
+    var _cpBadge = function(type, value){
+      if(type==='discount_percent') return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#6366f122;color:#6366f1;font-weight:700">−'+value+'%</span>';
+      if(type==='discount_amount')  return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#0ea5e922;color:#0ea5e9;font-weight:700">−'+value+'€</span>';
+      if(type==='free_product')     return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#16a34a22;color:#16a34a;font-weight:700">Δωρεάν προϊόν</span>';
+      return '<span style="font-size:11px;padding:2px 7px;border-radius:99px;background:#f5922222;color:#f59222;font-weight:700">Προσφορά</span>';
+    };
+    var _cpDate = function(d){
+      if(!d) return '';
+      var dt = new Date(d);
+      if(isNaN(dt.getTime())) return '';
+      return (dt.getDate()<10?'0':'')+dt.getDate()+'/'+(dt.getMonth()<9?'0':'')+(dt.getMonth()+1)+'/'+dt.getFullYear();
+    };
+    var ch = '';
+    for(var i = 0; i < coupons.length; i++){
+      var cp = coupons[i];
+      var sep = i > 0 ? 'border-top:1px solid var(--border,#e5e7eb)' : '';
+      ch += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;'+sep+'">'
+        +'<div style="flex:1;min-width:0;margin-right:10px">'
+        +'<div style="font-size:14px;font-weight:700">'+_loyOffersEsc(cp.name)+'</div>'
+        +'<div style="font-size:12px;font-family:monospace;color:var(--text-1,#374151);margin:2px 0;letter-spacing:1px">'+_loyOffersEsc(cp.code)+'</div>'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-top:4px">'
+        +_cpBadge(cp.type, cp.value)
+        +(cp.issued_at ? '<span style="font-size:11px;color:var(--text-2,#6b7283)">'+_cpDate(cp.issued_at)+'</span>' : '')
+        +'</div></div>'
+        +'<button data-loy-use-coupon="'+_loyOffersEsc(String(cp.id))+'" '
+        +'style="min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #6366f1;'
+        +'background:transparent;color:#6366f1;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">'
+        +'Χρησιμοποιήθηκε</button>'
+        +'</div>';
+    }
+    el.innerHTML = ch;
+    el.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-loy-use-coupon]');
+      if(!btn) return;
+      _doMarkCouponUsed(cid, btn.getAttribute('data-loy-use-coupon'));
+    });
+  }catch(e){
+    var elE = document.getElementById('loyProfileCouponsInner');
+    if(elE) elE.innerHTML='<div style="color:var(--text-2,#6b7283);font-size:14px">Δεν ήταν δυνατή η φόρτωση.</div>';
+  }
+}
+
+async function _doMarkCouponUsed(cid, couponId){
+  var confirmed = await window.confirm('Σήμανση κουπονιού ως χρησιμοποιημένου;');
+  if(!confirmed) return;
+  try{
+    var sbC = (typeof sb !== 'undefined') ? sb : null;
+    if(!sbC || typeof SHOP_ID === 'undefined'){ toast('Χωρίς σύνδεση.','error'); return; }
+    var upd = await sbC.from('loyalty_coupons')
+      .update({status:'used', used_at:new Date().toISOString()})
+      .eq('id', couponId)
+      .eq('shop_id', SHOP_ID);
+    if(upd.error) throw upd.error;
+    toast('Κουπόνι χρησιμοποιήθηκε ✓','success');
+    _loadLoyaltyProfileCoupons(cid);
+  }catch(e){
+    console.error('mark-used error', e);
+    toast('Σφάλμα.','error');
   }
 }
 
