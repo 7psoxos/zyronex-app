@@ -824,7 +824,7 @@ async function loadAllData(){
     
     console.log('Querying customers...');
     const custRes = await sb.from('customers')
-      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified')
+      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified,loyalty_lifetime_points,loyalty_elite')
       .order('name')
       .limit(2000);
     
@@ -929,7 +929,9 @@ async function loadAllData(){
       deliveryNotes: c.delivery_notes||null,
       createdAt: c.created_at||null,
       notes: c.notes||null,
-      ageVerified: c.age_verified||null
+      ageVerified: c.age_verified||null,
+      loyaltyLifetimePoints: Number(c.loyalty_lifetime_points)||0,
+      loyaltyElite: c.loyalty_elite||false
     }));
     console.log('✓ CUSTOMERS mapped:', CUSTOMERS.length);
     
@@ -1047,7 +1049,7 @@ async function reloadProducts(){
 }
 async function reloadCustomers(){
   const {data,error} = await sb.from('customers')
-    .select('id,name,phone,email,total_spent,visits,last_visit,preferred_nicotine,loyalty_points,loyalty_tier,birthday,store_credit,address,postal_code,city,notes,loyalty_qr_token')
+    .select('id,name,phone,email,total_spent,visits,last_visit,preferred_nicotine,loyalty_points,loyalty_tier,birthday,store_credit,address,postal_code,city,notes,loyalty_qr_token,loyalty_lifetime_points,loyalty_elite')
     .order('name');
   if(error) return;
   CUSTOMERS = (data||[]).map(c=>({
@@ -1059,6 +1061,8 @@ async function reloadCustomers(){
     birthday: c.birthday||null,
     storeCredit: parseFloat(c.store_credit||0),
     loyalty_qr_token: c.loyalty_qr_token||null,
+    loyaltyLifetimePoints: Number(c.loyalty_lifetime_points)||0,
+    loyaltyElite: c.loyalty_elite||false,
     // Shipping fields
     address: c.address||null,
     postalCode: c.postal_code||null,
@@ -3822,6 +3826,23 @@ function _goLoyaltySettings(){
 // ===== LOYALTY OVERVIEW KPIs =====
 var _loyOvChart = null;
 
+// ===== LOYALTY TIER MODEL =====
+var _LOY_TIER_META = {
+  diamond:  {emoji:'💎', color:'#22d3ee', label:'Diamond',  floor:1200, next:1200},
+  platinum: {emoji:'💎', color:'#a78bfa', label:'Platinum', floor:700,  next:1200},
+  gold:     {emoji:'🥇', color:'#fbbf24', label:'Gold',     floor:300,  next:700},
+  silver:   {emoji:'🥈', color:'#94a3b8', label:'Silver',   floor:100,  next:300},
+  bronze:   {emoji:'🥉', color:'#cd7f32', label:'Bronze',   floor:0,    next:100}
+};
+function _loyaltyTierOf(c){
+  var lifetime = Number(c.loyaltyLifetimePoints != null ? c.loyaltyLifetimePoints : (c.loyaltyPoints||0));
+  if(lifetime >= 1200) return 'diamond';
+  if(lifetime >= 700)  return 'platinum';
+  if(lifetime >= 300)  return 'gold';
+  if(lifetime >= 100)  return 'silver';
+  return 'bronze';
+}
+
 async function _renderLoyaltyOverview(){
   var body = document.getElementById('loyBody_overview');
   if(!body || body.hasAttribute('data-rendered')) return;
@@ -3831,11 +3852,11 @@ async function _renderLoyaltyOverview(){
   var members = window.CUSTOMERS || [];
   var totalM = members.length;
   var outstanding = 0;
-  var tiers = {bronze:0, silver:0, gold:0, platinum:0};
+  var tiers = {bronze:0, silver:0, gold:0, platinum:0, diamond:0};
   for(var i = 0; i < members.length; i++){
     var m = members[i];
     outstanding += (m.loyaltyPoints || 0);
-    var tr = (m.loyaltyTier || 'bronze').toLowerCase();
+    var tr = (typeof _loyaltyTierOf==='function') ? _loyaltyTierOf(m) : (m.loyaltyTier||'bronze').toLowerCase();
     if(tiers.hasOwnProperty(tr)) tiers[tr]++; else tiers.bronze++;
   }
 
@@ -3879,6 +3900,7 @@ function _loyOvCard(label, val, sub, subCol){
 
 function _loyOvHTMLInner(totalM, outstanding, issued, redeemed, pct, tiers, ledgerOk){
   var tierCfg = [
+    {key:'diamond',  label:'Diamond',  color:'#22d3ee', emoji:'💎'},
     {key:'platinum', label:'Platinum', color:'#a78bfa', emoji:'💎'},
     {key:'gold',     label:'Gold',     color:'#fbbf24', emoji:'🥇'},
     {key:'silver',   label:'Silver',   color:'#94a3b8', emoji:'🥈'},
@@ -3988,20 +4010,15 @@ function _renderLoyaltyMembers(){
   var body = document.getElementById('loyBody_members');
   if(!body || body.hasAttribute('data-rendered')) return;
 
-  var TIER = {
-    platinum: {emoji:'💎', color:'#a78bfa', label:'Platinum', floor:700, next:700},
-    gold:     {emoji:'🥇', color:'#fbbf24', label:'Gold',     floor:300, next:700},
-    silver:   {emoji:'🥈', color:'#94a3b8', label:'Silver',   floor:100, next:300},
-    bronze:   {emoji:'🥉', color:'#cd7f32', label:'Bronze',   floor:0,   next:100}
-  };
-  var NEXT_LABEL = {bronze:'Silver', silver:'Gold', gold:'Platinum'};
+  var TIER = _LOY_TIER_META;
+  var NEXT_LABEL = {bronze:'Silver', silver:'Gold', gold:'Platinum', platinum:'Diamond'};
 
-  var tierProg = function(pts, tKey){
+  var tierProg = function(lifetime, tKey){
     var tm = TIER[tKey] || TIER.bronze;
-    if(tKey === 'platinum') return {pct:100, max:true, rem:0, nextName:''};
+    if(tKey === 'diamond') return {pct:100, max:true, rem:0, nextName:''};
     var range = tm.next - tm.floor;
-    var pct = range > 0 ? Math.min(100, Math.max(0, Math.round((pts - tm.floor) / range * 100))) : 0;
-    return {pct:pct, max:false, rem:Math.max(0, tm.next - pts), nextName:NEXT_LABEL[tKey]||''};
+    var pct = range > 0 ? Math.min(100, Math.max(0, Math.round((lifetime - tm.floor) / range * 100))) : 0;
+    return {pct:pct, max:false, rem:Math.max(0, tm.next - lifetime), nextName:NEXT_LABEL[tKey]||''};
   };
 
   var progHTML = function(pts, tKey, color, onDark){
@@ -4060,7 +4077,8 @@ function _renderLoyaltyMembers(){
     // Featured #1 (always shown, not affected by search)
     var top = members[0];
     var topPts = Number(top.loyaltyPoints) || 0;
-    var topTKey = (top.loyaltyTier || 'bronze').toLowerCase();
+    var topLifetime = Number(top.loyaltyLifetimePoints != null ? top.loyaltyLifetimePoints : top.loyaltyPoints) || 0;
+    var topTKey = (typeof _loyaltyTierOf==='function') ? _loyaltyTierOf(top) : (top.loyaltyTier||'bronze').toLowerCase();
     var topTM = TIER[topTKey] || TIER.bronze;
     html += '<div data-cid="'+top.id+'" style="background:linear-gradient(135deg,#1e1535 0%,#2d1b4e 100%);'
       +'border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:18px;margin-bottom:14px;cursor:pointer">'
@@ -4073,7 +4091,7 @@ function _renderLoyaltyMembers(){
       +'<div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:6px">'+(top.phone||top.email||'—')+'</div>'
       +'<div style="font-size:24px;font-weight:900;color:'+topTM.color+';line-height:1">'
       +_loyFmtPts(topPts)+'<span style="font-size:12px;font-weight:400;color:rgba(255,255,255,0.45)"> πόντοι</span></div>'
-      + progHTML(topPts, topTKey, topTM.color, true)
+      + progHTML(topLifetime, topTKey, topTM.color, true)
       +'</div></div>';
     if(top.phone){
       var ph = (top.phone||'').replace(/[^0-9+\-\s]/g,'');
@@ -4096,7 +4114,8 @@ function _renderLoyaltyMembers(){
       for(var i = 1; i < members.length; i++){
         var m = members[i];
         var pts = Number(m.loyaltyPoints) || 0;
-        var tKey = (m.loyaltyTier || 'bronze').toLowerCase();
+        var mLifetime = Number(m.loyaltyLifetimePoints != null ? m.loyaltyLifetimePoints : m.loyaltyPoints) || 0;
+        var tKey = (typeof _loyaltyTierOf==='function') ? _loyaltyTierOf(m) : (m.loyaltyTier||'bronze').toLowerCase();
         var tm = TIER[tKey] || TIER.bronze;
         var dn = (m.name||'').toLowerCase();
         var dp = (m.phone||'').toLowerCase();
@@ -4107,7 +4126,7 @@ function _renderLoyaltyMembers(){
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.name||'—')+'</div>'
           +'<div style="font-size:12px;color:var(--text-2,#6b7283)">'+(m.phone||m.email||'—')+'</div>'
-          + progHTML(pts, tKey, tm.color, false)
+          + progHTML(mLifetime, tKey, tm.color, false)
           +'</div>'
           +'<div style="text-align:right;flex-shrink:0;padding-top:2px">'
           +'<div style="font-size:15px;font-weight:800;color:'+tm.color+'">'+_loyFmtPts(pts)+'</div>'
@@ -4170,16 +4189,12 @@ function _renderLoyaltyMemberProfile(cid){
   var ex = document.getElementById('loyMemberProfileOverlay');
   if(ex) ex.parentNode.removeChild(ex);
 
-  var TIER = {
-    platinum:{emoji:'💎',color:'#a78bfa',label:'Platinum',floor:700,next:700},
-    gold:    {emoji:'🥇',color:'#fbbf24',label:'Gold',    floor:300,next:700},
-    silver:  {emoji:'🥈',color:'#94a3b8',label:'Silver',  floor:100,next:300},
-    bronze:  {emoji:'🥉',color:'#cd7f32',label:'Bronze',  floor:0,  next:100}
-  };
-  var NEXT_LABEL = {bronze:'Silver',silver:'Gold',gold:'Platinum'};
+  var TIER = _LOY_TIER_META;
+  var NEXT_LABEL = {bronze:'Silver',silver:'Gold',gold:'Platinum',platinum:'Diamond'};
 
-  var pts  = Number(cust.loyaltyPoints) || 0;
-  var tKey = (cust.loyaltyTier || 'bronze').toLowerCase();
+  var pts      = Number(cust.loyaltyPoints) || 0;
+  var lifetime = Number(cust.loyaltyLifetimePoints != null ? cust.loyaltyLifetimePoints : pts) || 0;
+  var tKey = (typeof _loyaltyTierOf==='function') ? _loyaltyTierOf(cust) : (cust.loyaltyTier||'bronze').toLowerCase();
   var tm   = TIER[tKey] || TIER.bronze;
 
   var esc = function(s){
@@ -4199,12 +4214,12 @@ function _renderLoyaltyMemberProfile(cid){
     var dy = dt.getDate(); var mo = dt.getMonth()+1;
     return (dy<10?'0':'')+dy+'/'+(mo<10?'0':'')+mo;
   };
-  var tierProg = function(p, tk){
-    if(tk==='platinum') return {pct:100,max:true,rem:0,nextName:''};
+  var tierProg = function(lft, tk){
+    if(tk==='diamond') return {pct:100,max:true,rem:0,nextName:''};
     var t2 = TIER[tk]||TIER.bronze;
     var range = t2.next - t2.floor;
-    var pct = range>0 ? Math.min(100,Math.max(0,Math.round((p-t2.floor)/range*100))) : 0;
-    return {pct:pct,max:false,rem:Math.max(0,t2.next-p),nextName:NEXT_LABEL[tk]||''};
+    var pct = range>0 ? Math.min(100,Math.max(0,Math.round((lft-t2.floor)/range*100))) : 0;
+    return {pct:pct,max:false,rem:Math.max(0,t2.next-lft),nextName:NEXT_LABEL[tk]||''};
   };
   var avHTML = function(name, color, sz){
     var src = null;
@@ -4225,7 +4240,7 @@ function _renderLoyaltyMemberProfile(cid){
   };
 
   var memberId = 'ZN-'+String(cust.id||'').padStart(4,'0');
-  var prog = tierProg(pts, tKey);
+  var prog = tierProg(lifetime, tKey);
   var ph = cust.phone ? String(cust.phone).replace(/[^0-9+\-\s]/g,'') : null;
   var qrToken = cust.loyalty_qr_token || null;
 
@@ -27497,28 +27512,43 @@ async function _loyaltyAward(opts){
       }catch(e){ /* check failed -> proceed and award */ }
     }
     var c = (typeof CUSTOMERS!=='undefined' && CUSTOMERS) ? CUSTOMERS.find(function(x){return x.id===customerId;}) : null;
-    var curPoints, curSpent, curVisits;
-    if(c){ curPoints=c.loyaltyPoints||0; curSpent=c.totalSpent||0; curVisits=c.visits||0; }
-    else {
-      var r = await sb.from('customers').select('loyalty_points,total_spent,visits').eq('id',customerId).single();
+    var curPoints, curSpent, curVisits, curLifetime, oldTier;
+    if(c){
+      curPoints  = c.loyaltyPoints||0;
+      curSpent   = c.totalSpent||0;
+      curVisits  = c.visits||0;
+      curLifetime = Number(c.loyaltyLifetimePoints)||0;
+      oldTier    = c.loyaltyTier||'bronze';
+    } else {
+      var r = await sb.from('customers').select('loyalty_points,loyalty_lifetime_points,loyalty_tier,total_spent,visits').eq('id',customerId).single();
       if(!r||!r.data) return null;
-      curPoints=r.data.loyalty_points||0; curSpent=r.data.total_spent||0; curVisits=r.data.visits||0;
+      curPoints   = r.data.loyalty_points||0;
+      curLifetime = Number(r.data.loyalty_lifetime_points)||0;
+      oldTier     = r.data.loyalty_tier||'bronze';
+      curSpent    = r.data.total_spent||0;
+      curVisits   = r.data.visits||0;
     }
-    var afterEarn = curPoints + earned;
+    var afterEarn   = curPoints + earned;
     var finalPoints = pointsUsed>0 ? Math.max(0, afterEarn - pointsUsed) : afterEarn;
-    var oldTier = c ? (c.loyaltyTier||'bronze') : 'bronze';
-    var tier='bronze';
-    if(afterEarn>=700) tier='platinum'; else if(afterEarn>=300) tier='gold'; else if(afterEarn>=100) tier='silver';
+    var newLifetime = curLifetime + (earned > 0 ? earned : 0);
+    // Derive tier from LIFETIME total; ratchet up only — redemptions never demote
+    var TIER_ORDER = {bronze:0, silver:1, gold:2, platinum:3, diamond:4};
+    var computedTier = 'bronze';
+    if(newLifetime>=1200) computedTier='diamond';
+    else if(newLifetime>=700) computedTier='platinum';
+    else if(newLifetime>=300) computedTier='gold';
+    else if(newLifetime>=100) computedTier='silver';
+    var tier = ((TIER_ORDER[computedTier]||0) >= (TIER_ORDER[oldTier]||0)) ? computedTier : oldTier;
     await _dbInvalidate('customers_');
     await sb.from('customers').update({
       total_spent: curSpent+(opts.subtotal||0), visits: curVisits+1, last_visit: addDays(0),
-      loyalty_points: finalPoints, loyalty_tier: tier
+      loyalty_points: finalPoints, loyalty_tier: tier, loyalty_lifetime_points: newLifetime
     }).eq('id', customerId);
     var rows=[];
     if(earned>0) rows.push({shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'earn', delta:earned, balance_after:afterEarn});
     if(pointsUsed>0) rows.push({shop_id:shopId, customer_id:customerId, sale_id:saleId, type:'redeem', delta:-pointsUsed, balance_after:finalPoints});
     if(rows.length){ try{ await sb.from('loyalty_ledger').insert(rows); }catch(e){ console.error('ledger insert', e); } }
-    if(c){ c.totalSpent=curSpent+(opts.subtotal||0); c.visits=curVisits+1; c.lastVisit=addDays(0); c.loyaltyPoints=finalPoints; c.loyaltyTier=tier; }
+    if(c){ c.totalSpent=curSpent+(opts.subtotal||0); c.visits=curVisits+1; c.lastVisit=addDays(0); c.loyaltyPoints=finalPoints; c.loyaltyTier=tier; c.loyaltyLifetimePoints=newLifetime; }
     return {earned:earned, afterEarn:afterEarn, finalPoints:finalPoints, tier:tier, oldTier:oldTier, tierChanged:(tier!==oldTier), custName: c ? c.name : ''};
   }catch(e){ console.error('_loyaltyAward', e); return null; }
 }
