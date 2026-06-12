@@ -27852,9 +27852,12 @@ function renderCart(){
   const c = window.SELECTED_CUSTOMER_ID ? CUSTOMERS.find(x=>x.id===window.SELECTED_CUSTOMER_ID) : null;
   const tierEmoji = c ? {bronze:'🥉',silver:'🥈',gold:'🥇',platinum:'💎'}[c.loyaltyTier||'bronze'] : '';
   const tierColor = c ? {bronze:'#cd7f32',silver:'#c0c0c0',gold:'#ffd700',platinum:'#e5e4e2'}[c.loyaltyTier||'bronze'] : '';
+  var _previewBonus = c ? _computeCartBonusPoints(CART) : 0;
+  var _previewTotal = Math.floor(subtotal) + _previewBonus;
+  var _previewHint = _previewBonus > 0 ? '<br><span style="font-size:10px;font-weight:400;color:#888;white-space:nowrap">🔥 +' + _previewBonus + ' από πολλαπλασιαστή</span>' : '';
   const loyaltyBadge = c ? `<div class="summary-row" style="color:${tierColor};font-weight:700;font-size:12px">
     <span>${tierEmoji} ${(c.loyaltyTier||'bronze').toUpperCase()}</span>
-    <span>+${Math.floor(subtotal)} πόντοι</span></div>` : '';
+    <span style="text-align:right;line-height:1.3">+${_previewTotal} πόντοι${_previewHint}</span></div>` : '';
   const discRow = disc>0 ? `<div class="summary-row" style="color:var(--success)">
     <span>Έκπτωση ${disc}%</span><span>-${eur(discAmt)}</span></div>` : '';
 
