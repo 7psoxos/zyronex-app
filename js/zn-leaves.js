@@ -5146,6 +5146,8 @@ function _loyOffersToast(msg, type){
 // ===== LOYALTY MULTIPLIERS CRUD =====
 var _loyMultCache = [];
 var _loyMultFormPids = []; // selected product_ids in the open form
+var _loyMultDeadstockRows = null;
+var _loyMultDeadstockLoaded = false;
 
 function _loyMultFmtDate(iso){
   if(!iso) return null;
@@ -5203,6 +5205,15 @@ async function _loyMultRender(){
     +'<input id="loyMultFProdSearch" type="text" placeholder="Αναζήτηση προϊόντος..." autocomplete="off" style="'+inpStyle+'">'
     +'<div id="loyMultFProdResults" style="max-height:220px;overflow-y:auto;border:1px solid var(--border,#e5e7eb);'
     +'border-top:none;border-radius:0 0 10px 10px;background:var(--bg-1);display:none"></div>'
+    +'</div>'
+    // deadstock suggest block
+    +'<div id="loyMultDeadstockBlock">'
+    +'<button id="loyMultDeadstockToggle" type="button" style="display:flex;align-items:center;gap:6px;'
+    +'min-height:44px;background:none;border:none;color:var(--text-2,#6b7283);font-size:13px;'
+    +'font-weight:600;cursor:pointer;padding:4px 0;text-align:left;width:100%;-webkit-tap-highlight-color:transparent">'
+    +'<span id="loyMultDeadstockCaret" style="font-size:10px">&#9658;</span>'
+    +' &#x1F4A4; Προτεινόμενα από αποθήκη</button>'
+    +'<div id="loyMultDeadstockPanel" style="display:none"></div>'
     +'</div>'
     // dates
     +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
@@ -5287,6 +5298,30 @@ async function _loyMultRender(){
     if(action === 'edit')   _loyMultEdit(id);
     else if(action === 'toggle') _loyMultToggle(id);
     else if(action === 'delete') _loyMultDelete(id);
+  });
+
+  // Deadstock toggle
+  var deadToggle = document.getElementById('loyMultDeadstockToggle');
+  if(deadToggle) deadToggle.addEventListener('click', function(){
+    var panel = document.getElementById('loyMultDeadstockPanel');
+    var caret = document.getElementById('loyMultDeadstockCaret');
+    if(!panel) return;
+    var opening = panel.style.display === 'none';
+    panel.style.display = opening ? '' : 'none';
+    if(caret) caret.innerHTML = opening ? '&#9660;' : '&#9658;';
+    if(opening && !_loyMultDeadstockLoaded){
+      _loyMultDeadstockLoaded = true;
+      _loyMultLoadDeadstock();
+    }
+  });
+
+  // Deadstock row — add product
+  var deadPanel = document.getElementById('loyMultDeadstockPanel');
+  if(deadPanel) deadPanel.addEventListener('click', function(e){
+    var row = e.target.closest('[data-mult-dead-pid]');
+    if(!row) return;
+    _loyMultAddPid(row.getAttribute('data-mult-dead-pid'));
+    _loyMultRenderDeadstockRows();
   });
 }
 
@@ -5449,6 +5484,12 @@ function _loyMultFilterProds(q){
 
 function _loyMultShowForm(rule){
   _loyMultFormPids = [];
+  _loyMultDeadstockLoaded = false;
+  _loyMultDeadstockRows = null;
+  var dsPanel = document.getElementById('loyMultDeadstockPanel');
+  if(dsPanel){ dsPanel.style.display = 'none'; dsPanel.innerHTML = ''; }
+  var dsCaret = document.getElementById('loyMultDeadstockCaret');
+  if(dsCaret) dsCaret.innerHTML = '&#9658;';
   var formWrap = document.getElementById('loyMultFormWrap');
   var titleEl  = document.getElementById('loyMultFormTitle');
   var nameEl   = document.getElementById('loyMultFName');
@@ -5490,6 +5531,73 @@ function _loyMultHideForm(){
   var fw = document.getElementById('loyMultFormWrap');
   if(fw) fw.style.display = 'none';
   _loyMultFormPids = [];
+  _loyMultDeadstockLoaded = false;
+  _loyMultDeadstockRows = null;
+}
+
+async function _loyMultLoadDeadstock(){
+  var panel = document.getElementById('loyMultDeadstockPanel');
+  if(!panel) return;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC){
+    panel.innerHTML = '<div style="padding:8px 0;font-size:13px;color:var(--text-2,#6b7283)">Δεν ήταν δυνατή η φόρτωση</div>';
+    return;
+  }
+  panel.innerHTML = '<div style="padding:8px 0;font-size:13px;color:var(--text-2,#6b7283)">Φόρτωση…</div>';
+  try{
+    var res = await sbC.rpc('deadstock_candidates', { p_shop_id: SHOP_ID, p_days: 60, p_min_stock: 1, p_limit: 30 });
+    _loyMultDeadstockRows = (res && res.data) ? res.data : [];
+  }catch(e){
+    console.warn('[loyMultDeadstock] RPC error:', e);
+    panel.innerHTML = '<div style="padding:8px 0;font-size:13px;color:var(--danger,#e74c3c)">Δεν ήταν δυνατή η φόρτωση</div>';
+    return;
+  }
+  if(!_loyMultDeadstockRows.length){
+    panel.innerHTML = '<div style="padding:8px 0;font-size:13px;color:var(--text-2,#6b7283)">Δεν βρέθηκαν αργοκίνητα προϊόντα</div>';
+    return;
+  }
+  _loyMultRenderDeadstockRows();
+}
+
+function _loyMultRenderDeadstockRows(){
+  var panel = document.getElementById('loyMultDeadstockPanel');
+  if(!panel || !_loyMultDeadstockRows) return;
+  var rows = _loyMultDeadstockRows;
+  var multMap = window.LOYALTY_MULT_MAP || {};
+  var h = '<div style="border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden;margin-top:4px">';
+  for(var i = 0; i < rows.length; i++){
+    var row = rows[i];
+    var pid = String(row.product_id);
+    var isSelected = _loyMultFormPids.indexOf(pid) !== -1;
+    var existingRule = (!isSelected && multMap[pid]) ? multMap[pid] : null;
+    var disabled = isSelected || !!existingRule;
+    var daysInfo = (row.days_since != null) ? ('πωλήθηκε πριν ' + row.days_since + ' μέρες') : 'δεν έχει πουληθεί ποτέ';
+    var rightLabel;
+    if(isSelected){
+      rightLabel = '<span style="font-size:11px;color:var(--text-2,#6b7283);white-space:nowrap;flex-shrink:0">✓ προστέθηκε</span>';
+    } else if(existingRule){
+      rightLabel = '<span style="font-size:11px;color:var(--text-2,#6b7283);white-space:nowrap;flex-shrink:0">ήδη σε προσφορά: ' + _loyOffersEsc(existingRule.ruleName || existingRule.name || '') + '</span>';
+    } else {
+      rightLabel = '<span style="font-size:11px;color:var(--text-2,#6b7283);white-space:nowrap;flex-shrink:0">📦 ' + (row.stock||0) + ' τεμ.</span>';
+    }
+    h += '<div'
+      + (disabled ? '' : (' data-mult-dead-pid="' + pid + '"'))
+      + ' style="display:flex;align-items:center;justify-content:space-between;gap:8px;'
+      + 'padding:10px 14px;min-height:44px;border-bottom:1px solid var(--border,#e5e7eb);'
+      + 'cursor:' + (disabled ? 'default' : 'pointer') + ';'
+      + 'background:' + (isSelected ? 'rgba(249,115,22,0.06)' : (existingRule ? 'rgba(0,0,0,0.02)' : 'transparent')) + ';'
+      + 'opacity:' + (disabled ? '0.55' : '1') + '">'
+      + '<div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">'
+      + '<span style="font-size:14px;font-weight:600;color:' + (disabled ? 'var(--text-2,#6b7283)' : 'var(--text-0)') + ';'
+      + 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+      + _loyOffersEsc(row.product_name || pid) + '</span>'
+      + '<span style="font-size:11px;color:var(--text-2,#6b7283)">' + daysInfo + '</span>'
+      + '</div>'
+      + rightLabel
+      + '</div>';
+  }
+  h += '</div>';
+  panel.innerHTML = h;
 }
 
 async function _loyMultSave(){
