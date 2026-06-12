@@ -4476,6 +4476,388 @@ async function _loadLoyaltyLedger(cid){
   }
 }
 
+// ===== LOYALTY OFFERS / REWARDS CRUD =====
+var _loyOffersCache = [];
+
+async function _renderLoyaltyOffers(){
+  var body = document.getElementById('loyBody_offers');
+  if(!body || body.hasAttribute('data-rendered')) return;
+
+  body.innerHTML = '<div class="mt-4" style="text-align:center;padding:40px;color:var(--text-2,#6b7283)">⏳ Φόρτωση...</div>';
+
+  var html = '<div class="mt-4">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;'
+    +'margin-bottom:16px;flex-wrap:wrap;gap:8px">'
+    +'<div style="font-size:18px;font-weight:800;color:var(--text-0,#111)">🎁 Ανταμοιβές Προγράμματος</div>'
+    +'<button id="loyOffersAddBtn" style="min-height:44px;padding:0 18px;border-radius:10px;'
+    +'background:var(--accent,#6366f1);color:#fff;border:none;font-size:15px;font-weight:700;cursor:pointer">'
+    +'➕ Νέα Ανταμοιβή</button>'
+    +'</div>'
+
+    // ── Inline form (hidden until + or Edit) ──
+    +'<div id="loyOffersFormWrap" style="display:none">'
+    +'<div class="card" style="margin-bottom:16px;padding:20px">'
+    +'<div id="loyOffersFormTitle" style="font-size:16px;font-weight:800;margin-bottom:16px">Νέα Ανταμοιβή</div>'
+    +'<div style="display:flex;flex-direction:column;gap:12px">'
+    +'<input id="loyOffFormName" type="text" placeholder="Όνομα ανταμοιβής *" autocomplete="off"'
+    +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none">'
+    +'<textarea id="loyOffFormDesc" placeholder="Περιγραφή (προαιρετικό)" rows="2"'
+    +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none;resize:vertical"></textarea>'
+    +'<input id="loyOffFormPoints" type="number" min="0" step="1" placeholder="Κόστος σε πόντους *"'
+    +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none">'
+    +'<select id="loyOffFormType"'
+    +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none">'
+    +'<option value="discount_percent">Έκπτωση %</option>'
+    +'<option value="discount_amount">Έκπτωση €</option>'
+    +'<option value="free_product">Δωρεάν προϊόν</option>'
+    +'<option value="custom">Προσαρμοσμένη</option>'
+    +'</select>'
+    +'<div id="loyOffFormValueWrap" style="display:none">'
+    +'<label id="loyOffFormValueLbl" style="font-size:13px;font-weight:600;color:var(--text-2,#6b7283);'
+    +'display:block;margin-bottom:4px">Αξία</label>'
+    +'<input id="loyOffFormValue" type="number" min="0" step="0.01"'
+    +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none">'
+    +'</div>'
+    +'<input id="loyOffFormIcon" type="text" placeholder="Εικονίδιο emoji (προαιρετικό)" autocomplete="off"'
+    +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
+    +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none">'
+    +'<div style="display:flex;align-items:center;gap:10px;min-height:44px">'
+    +'<input id="loyOffFormActive" type="checkbox"'
+    +' style="width:20px;height:20px;cursor:pointer;flex-shrink:0">'
+    +'<label for="loyOffFormActive" style="font-size:15px;font-weight:600;cursor:pointer">Ενεργή</label>'
+    +'</div>'
+    +'<input id="loyOffFormId" type="hidden" value="">'
+    +'<div style="display:flex;gap:10px">'
+    +'<button id="loyOffFormSaveBtn" style="flex:1;min-height:44px;border-radius:10px;'
+    +'background:var(--accent,#6366f1);color:#fff;border:none;font-size:15px;font-weight:700;cursor:pointer">'
+    +'Αποθήκευση</button>'
+    +'<button id="loyOffFormCancelBtn" style="flex:1;min-height:44px;border-radius:10px;'
+    +'background:var(--bg-3,#e5e7eb);color:var(--text-0);border:none;font-size:15px;font-weight:600;cursor:pointer">'
+    +'Άκυρο</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+
+    // ── List ──
+    +'<div id="loyOffersListWrap"></div>'
+    +'</div>';
+
+  body.innerHTML = html;
+  body.setAttribute('data-rendered','1');
+
+  // + Νέα button
+  var addBtn = document.getElementById('loyOffersAddBtn');
+  if(addBtn) addBtn.addEventListener('click', function(){ _loyOffersShowForm(null); });
+
+  // Type dropdown → show/hide value field
+  var typeEl = document.getElementById('loyOffFormType');
+  if(typeEl) typeEl.addEventListener('change', function(){ _loyOffersToggleValueField(); });
+
+  // Save / Cancel
+  var saveBtn = document.getElementById('loyOffFormSaveBtn');
+  if(saveBtn) saveBtn.addEventListener('click', function(){ _loyOffersSave(); });
+  var cancelBtn = document.getElementById('loyOffFormCancelBtn');
+  if(cancelBtn) cancelBtn.addEventListener('click', function(){ _loyOffersHideForm(); });
+
+  // Delegated click on list (persists across reloads)
+  var listWrap = document.getElementById('loyOffersListWrap');
+  if(listWrap){
+    listWrap.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-loy-action]');
+      if(!btn) return;
+      var action = btn.getAttribute('data-loy-action');
+      var id = btn.getAttribute('data-loy-id');
+      if(action==='edit')   _loyOffersEditReward(id);
+      else if(action==='delete') _loyOffersDeleteReward(id);
+      else if(action==='toggle') _loyOffersToggleActive(id);
+    });
+  }
+
+  await _loyOffersLoad();
+}
+
+function _loyOffersToggleValueField(){
+  var typeEl = document.getElementById('loyOffFormType');
+  var wrap = document.getElementById('loyOffFormValueWrap');
+  var lbl  = document.getElementById('loyOffFormValueLbl');
+  if(!typeEl || !wrap) return;
+  var t = typeEl.value;
+  if(t === 'discount_percent' || t === 'discount_amount'){
+    wrap.style.display = '';
+    if(lbl) lbl.textContent = (t === 'discount_percent') ? 'Ποσοστό %' : 'Ποσό €';
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function _loyOffersShowForm(reward){
+  var wrap     = document.getElementById('loyOffersFormWrap');
+  var titleEl  = document.getElementById('loyOffersFormTitle');
+  var nameEl   = document.getElementById('loyOffFormName');
+  var descEl   = document.getElementById('loyOffFormDesc');
+  var pointsEl = document.getElementById('loyOffFormPoints');
+  var typeEl   = document.getElementById('loyOffFormType');
+  var valueEl  = document.getElementById('loyOffFormValue');
+  var iconEl   = document.getElementById('loyOffFormIcon');
+  var activeEl = document.getElementById('loyOffFormActive');
+  var idEl     = document.getElementById('loyOffFormId');
+  if(!wrap || !nameEl) return;
+  if(reward){
+    if(titleEl)  titleEl.textContent = 'Επεξεργασία Ανταμοιβής';
+    nameEl.value = reward.name || '';
+    if(descEl)   descEl.value   = reward.description || '';
+    if(pointsEl) pointsEl.value = (reward.cost_points != null) ? reward.cost_points : '';
+    if(typeEl)   typeEl.value   = reward.type || 'custom';
+    if(valueEl)  valueEl.value  = (reward.value != null) ? reward.value : '';
+    if(iconEl)   iconEl.value   = reward.icon || '';
+    if(activeEl) activeEl.checked = (reward.active !== false);
+    if(idEl)     idEl.value     = reward.id || '';
+  } else {
+    if(titleEl)  titleEl.textContent = 'Νέα Ανταμοιβή';
+    nameEl.value = '';
+    if(descEl)   descEl.value   = '';
+    if(pointsEl) pointsEl.value = '';
+    if(typeEl)   typeEl.value   = 'discount_percent';
+    if(valueEl)  valueEl.value  = '';
+    if(iconEl)   iconEl.value   = '';
+    if(activeEl) activeEl.checked = true;
+    if(idEl)     idEl.value     = '';
+  }
+  _loyOffersToggleValueField();
+  wrap.style.display = '';
+  nameEl.focus();
+}
+
+function _loyOffersHideForm(){
+  var wrap = document.getElementById('loyOffersFormWrap');
+  if(wrap) wrap.style.display = 'none';
+}
+
+function _loyOffersEditReward(id){
+  var reward = null;
+  for(var i = 0; i < _loyOffersCache.length; i++){
+    if(_loyOffersCache[i].id == id){ reward = _loyOffersCache[i]; break; }
+  }
+  if(!reward) return;
+  _loyOffersShowForm(reward);
+  var wrap = document.getElementById('loyOffersFormWrap');
+  if(wrap) wrap.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+async function _loyOffersSave(){
+  var nameEl   = document.getElementById('loyOffFormName');
+  var descEl   = document.getElementById('loyOffFormDesc');
+  var pointsEl = document.getElementById('loyOffFormPoints');
+  var typeEl   = document.getElementById('loyOffFormType');
+  var valueEl  = document.getElementById('loyOffFormValue');
+  var iconEl   = document.getElementById('loyOffFormIcon');
+  var activeEl = document.getElementById('loyOffFormActive');
+  var idEl     = document.getElementById('loyOffFormId');
+  var saveBtn  = document.getElementById('loyOffFormSaveBtn');
+  if(!nameEl) return;
+
+  var name        = (nameEl.value || '').trim();
+  var description = descEl   ? (descEl.value   || '').trim() : '';
+  var pointsRaw   = pointsEl ? pointsEl.value                : '';
+  var type        = typeEl   ? typeEl.value                  : 'custom';
+  var valueRaw    = valueEl  ? valueEl.value                 : '';
+  var icon        = iconEl   ? (iconEl.value   || '').trim() : '';
+  var active      = activeEl ? activeEl.checked              : true;
+  var editId      = idEl     ? (idEl.value     || '')        : '';
+
+  if(!name){
+    _loyOffersToast('Το όνομα είναι υποχρεωτικό.', 'warn'); return;
+  }
+  var cost_points = parseInt(pointsRaw, 10);
+  if(isNaN(cost_points) || cost_points < 0){
+    _loyOffersToast('Ο αριθμός πόντων πρέπει να είναι αριθμός ≥ 0.', 'warn'); return;
+  }
+  var needsValue = (type === 'discount_percent' || type === 'discount_amount');
+  var value = null;
+  if(needsValue){
+    value = parseFloat(valueRaw);
+    if(isNaN(value) || value < 0){
+      _loyOffersToast('Η αξία είναι υποχρεωτική και πρέπει να είναι αριθμός ≥ 0.', 'warn'); return;
+    }
+  }
+
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC || typeof SHOP_ID === 'undefined'){
+    _loyOffersToast('Χωρίς σύνδεση.', 'danger'); return;
+  }
+
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = '...'; }
+  try{
+    var payload = {
+      name: name,
+      description: description || null,
+      cost_points: cost_points,
+      type: type,
+      value: value,
+      icon: icon || null,
+      active: active
+    };
+    var r;
+    if(editId){
+      payload.updated_at = new Date().toISOString();
+      r = await sbC.from('loyalty_rewards').update(payload).eq('id', editId).eq('shop_id', SHOP_ID);
+    } else {
+      payload.shop_id    = SHOP_ID;
+      payload.sort_order = 0;
+      r = await sbC.from('loyalty_rewards').insert(payload);
+    }
+    if(r.error) throw r.error;
+    _loyOffersToast(editId ? 'Ανταμοιβή ενημερώθηκε.' : 'Ανταμοιβή δημιουργήθηκε!', 'success');
+    _loyOffersHideForm();
+    await _loyOffersLoad();
+  }catch(err){
+    _loyOffersToast('Σφάλμα: '+((err&&err.message)||'Αδύνατη η αποθήκευση.'), 'danger');
+  }finally{
+    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Αποθήκευση'; }
+  }
+}
+
+async function _loyOffersDeleteReward(id){
+  var reward = null;
+  for(var i = 0; i < _loyOffersCache.length; i++){
+    if(_loyOffersCache[i].id == id){ reward = _loyOffersCache[i]; break; }
+  }
+  var label = reward ? (reward.name || 'αυτή την ανταμοιβή') : 'αυτή την ανταμοιβή';
+  var confirmed = await window.confirm('Διαγραφή "'+label+'";');
+  if(!confirmed) return;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC){ _loyOffersToast('Χωρίς σύνδεση.', 'danger'); return; }
+  try{
+    var r = await sbC.from('loyalty_rewards').delete().eq('id', id).eq('shop_id', SHOP_ID);
+    if(r.error) throw r.error;
+    _loyOffersToast('Η ανταμοιβή διαγράφηκε.', 'success');
+    await _loyOffersLoad();
+  }catch(err){
+    _loyOffersToast('Σφάλμα διαγραφής: '+((err&&err.message)||''), 'danger');
+  }
+}
+
+async function _loyOffersToggleActive(id){
+  var reward = null;
+  for(var i = 0; i < _loyOffersCache.length; i++){
+    if(_loyOffersCache[i].id == id){ reward = _loyOffersCache[i]; break; }
+  }
+  if(!reward) return;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC) return;
+  try{
+    var r = await sbC.from('loyalty_rewards')
+      .update({ active: !reward.active, updated_at: new Date().toISOString() })
+      .eq('id', id).eq('shop_id', SHOP_ID);
+    if(r.error) throw r.error;
+    _loyOffersToast(reward.active ? 'Ανενεργοποιήθηκε.' : 'Ενεργοποιήθηκε.', 'success');
+    await _loyOffersLoad();
+  }catch(err){
+    _loyOffersToast('Σφάλμα: '+((err&&err.message)||''), 'danger');
+  }
+}
+
+async function _loyOffersLoad(){
+  var listWrap = document.getElementById('loyOffersListWrap');
+  if(!listWrap) return;
+  listWrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-2,#6b7283);font-size:14px">⏳ Φόρτωση...</div>';
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC || typeof SHOP_ID === 'undefined'){
+    listWrap.innerHTML = '<div class="card" style="text-align:center;padding:32px;color:var(--text-2,#6b7283)">Χωρίς σύνδεση.</div>';
+    _loyOffersCache = [];
+    return;
+  }
+  try{
+    var r = await sbC.from('loyalty_rewards')
+      .select('*')
+      .eq('shop_id', SHOP_ID)
+      .order('sort_order',{ascending:true})
+      .order('created_at',{ascending:true});
+    if(r.error) throw r.error;
+    _loyOffersCache = r.data || [];
+    listWrap.innerHTML = _loyOffersListHTML(_loyOffersCache);
+  }catch(err){
+    listWrap.innerHTML = '<div class="card" style="text-align:center;padding:32px">'
+      +'<div style="font-size:32px;margin-bottom:12px">⚠️</div>'
+      +'<div style="font-weight:700;margin-bottom:6px">Σφάλμα φόρτωσης</div>'
+      +'<div style="font-size:13px;color:var(--text-2,#6b7283)">'+_loyOffersEsc((err&&err.message)||'Δεν ήταν δυνατή η φόρτωση.')+'</div>'
+      +'</div>';
+    _loyOffersCache = [];
+  }
+}
+
+function _loyOffersListHTML(rewards){
+  if(!rewards || !rewards.length){
+    return '<div class="card" style="text-align:center;padding:48px 20px">'
+      +'<div style="font-size:40px;margin-bottom:12px">🎁</div>'
+      +'<div style="font-size:16px;font-weight:700;margin-bottom:8px">Δεν υπάρχουν ανταμοιβές ακόμα</div>'
+      +'<div style="font-size:14px;color:var(--text-2,#6b7283)">Πρόσθεσε την πρώτη με το ➕.</div>'
+      +'</div>';
+  }
+  var html = '';
+  for(var i = 0; i < rewards.length; i++){
+    var rw = rewards[i];
+    var isActive = (rw.active !== false);
+    var icon = rw.icon || '🎁';
+    var badge = '';
+    if(rw.type === 'discount_percent' && rw.value != null){
+      badge = '−'+rw.value+'%';
+    } else if(rw.type === 'discount_amount' && rw.value != null){
+      badge = '−'+rw.value+'€';
+    } else if(rw.type === 'free_product'){
+      badge = 'Δωρεάν προϊόν';
+    } else {
+      badge = 'Προσφορά';
+    }
+    html += '<div class="card" style="margin-bottom:12px;padding:16px'+(isActive?'':';opacity:0.55')+'">'
+      +'<div style="display:flex;align-items:flex-start;gap:12px">'
+      +'<div style="font-size:28px;line-height:1;padding-top:2px;flex-shrink:0">'+icon+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
+      +'<div style="font-size:15px;font-weight:800">'+_loyOffersEsc(rw.name||'—')+'</div>'
+      +(!isActive ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;'
+        +'background:#ef444420;color:#ef4444">Ανενεργή</span>' : '')
+      +'<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;'
+      +'background:var(--bg-3,#e5e7eb);color:var(--text-1,#374151)">'+_loyOffersEsc(badge)+'</span>'
+      +'</div>'
+      +(rw.description ? '<div style="font-size:13px;color:var(--text-2,#6b7283);margin-bottom:6px">'
+        +_loyOffersEsc(rw.description)+'</div>' : '')
+      +'<div style="font-size:13px;font-weight:700;color:var(--accent,#6366f1)">℗ '
+      +(rw.cost_points||0)+' πόντοι</div>'
+      +'</div></div>'
+      +'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'
+      +'<button data-loy-action="edit" data-loy-id="'+rw.id+'"'
+      +' style="min-height:44px;padding:0 14px;border-radius:8px;background:var(--bg-3,#e5e7eb);'
+      +'border:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-0)">✏️ Επεξεργασία</button>'
+      +'<button data-loy-action="toggle" data-loy-id="'+rw.id+'"'
+      +' style="min-height:44px;padding:0 14px;border-radius:8px;background:var(--bg-3,#e5e7eb);'
+      +'border:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-0)">'
+      +(isActive ? '⏸ Ανενεργοποίηση' : '▶ Ενεργοποίηση')+'</button>'
+      +'<button data-loy-action="delete" data-loy-id="'+rw.id+'"'
+      +' style="min-height:44px;padding:0 14px;border-radius:8px;background:#ef444415;'
+      +'border:1px solid #ef444430;font-size:13px;font-weight:600;cursor:pointer;color:#ef4444">'
+      +'🗑️ Διαγραφή</button>'
+      +'</div>'
+      +'</div>';
+  }
+  return html;
+}
+
+function _loyOffersEsc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _loyOffersToast(msg, type){
+  if(typeof toast === 'function'){ toast(msg, type||'success'); }
+  else { console.log('[loyalty-offers]', msg); }
+}
+
 function _setLoyaltyTab(tab){
   _LOYALTY_TAB = tab;
   var ids = ['overview','members','offers','activity','settings'];
@@ -4507,6 +4889,12 @@ function _setLoyaltyTab(tab){
       if(typeof lucide!=='undefined') lucide.createIcons();
     }
   }
+  if(tab==='offers'){
+    var offBody=document.getElementById('loyBody_offers');
+    if(offBody && !offBody.hasAttribute('data-rendered')){
+      if(typeof _renderLoyaltyOffers==='function') _renderLoyaltyOffers();
+    }
+  }
 }
 
 function renderLoyalty(){
@@ -4528,7 +4916,6 @@ function renderLoyalty(){
     +'<div id="loyBody_members" style="'+(t!=='members'?'display:none':'')+'">'
     +'</div>'
     +'<div id="loyBody_offers" style="'+(t!=='offers'?'display:none':'')+'">'
-    +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">🎟️</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Προσφορές &amp; Ανταμοιβές</div><div class="muted" style="font-size:16px">Σύντομα — δημιουργία προσφορών, ανταμοιβές ανά tier, campaigns.</div></div>'
     +'</div>'
     +'<div id="loyBody_activity" style="'+(t!=='activity'?'display:none':'')+'">'
     +'<div class="card mt-4" style="text-align:center;padding:48px 20px"><div style="font-size:40px;margin-bottom:12px">📋</div><div class="fw-700" style="font-size:16px;margin-bottom:8px">Δραστηριότητα</div><div class="muted" style="font-size:16px">Σύντομα — loyalty ledger, earn/redeem ιστορικό, εξαγωγή CSV.</div></div>'
@@ -4539,6 +4926,7 @@ function renderLoyalty(){
   if(t==='settings') _setLoyaltyTab('settings');
   if(t==='overview') _setLoyaltyTab('overview');
   if(t==='members')  _setLoyaltyTab('members');
+  if(t==='offers')   _setLoyaltyTab('offers');
 }
 
 // ===== MAIN RENDERER =====
