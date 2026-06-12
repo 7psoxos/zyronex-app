@@ -5186,12 +5186,84 @@ var _loyMultCache = [];
 var _loyMultFormPids = []; // selected product_ids in the open form
 var _loyMultDeadstockRows = null;
 var _loyMultDeadstockLoaded = false;
+var _loyMultImpactCache = null;
 
 function _loyMultFmtDate(iso){
   if(!iso) return null;
   var d = new Date(iso);
   if(isNaN(d.getTime())) return null;
   return (d.getDate()<10?'0':'')+d.getDate()+'/'+(d.getMonth()<9?'0':'')+(d.getMonth()+1)+'/'+d.getFullYear();
+}
+
+function _loyMultImpactCardHTML(bodyHtml){
+  return '<div class="card" style="padding:16px 20px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px">'
+    +'<div style="font-size:15px;font-weight:800;color:var(--text-0)">&#x1F4CA; Απήχηση προσφορών</div>'
+    +'<button type="button" data-mult-impact-refresh style="min-width:44px;min-height:44px;'
+    +'border-radius:10px;border:1px solid var(--border,#e5e7eb);background:var(--bg-2);'
+    +'cursor:pointer;font-size:18px;color:var(--text-2,#6b7283);-webkit-tap-highlight-color:transparent"'
+    +' title="Ανανέωση">&#x21BB;</button>'
+    +'</div>'
+    + bodyHtml
+    +'</div>';
+}
+
+async function _loyMultLoadImpact(){
+  var card = document.getElementById('loyMultImpact');
+  if(!card) return;
+  var sbC = (typeof sb !== 'undefined') ? sb : null;
+  if(!sbC) return;
+  card.innerHTML = _loyMultImpactCardHTML('<div style="padding:8px 0;font-size:13px;color:var(--text-2,#6b7283)">Φόρτωση…</div>');
+  try{
+    var res = await sbC.rpc('multiplier_impact', { p_shop_id: SHOP_ID });
+    _loyMultImpactCache = (res && res.data) ? res.data : [];
+  }catch(e){
+    console.warn('[loyMultImpact] RPC error:', e);
+    card.innerHTML = _loyMultImpactCardHTML('<div style="padding:8px 0;font-size:13px;color:var(--danger,#e74c3c)">Δεν ήταν δυνατή η φόρτωση</div>');
+    return;
+  }
+  _loyMultRenderImpact();
+}
+
+function _loyMultRenderImpact(){
+  var card = document.getElementById('loyMultImpact');
+  if(!card || !_loyMultImpactCache) return;
+  var rows = _loyMultImpactCache;
+  if(!rows.length){
+    card.innerHTML = _loyMultImpactCardHTML('<div style="padding:8px 0;font-size:13px;color:var(--text-2,#6b7283)">Δεν υπάρχουν ακόμη χρήσεις πολλαπλασιαστών</div>');
+    return;
+  }
+  var maxBonus = 0;
+  for(var i = 0; i < rows.length; i++){
+    var b = Number(rows[i].total_bonus) || 0;
+    if(b > maxBonus) maxBonus = b;
+  }
+  var bodyHtml = '';
+  for(var j = 0; j < rows.length; j++){
+    var row = rows[j];
+    var bonus = Number(row.total_bonus) || 0;
+    var barPct = maxBonus > 0 ? Math.round(bonus / maxBonus * 100) : 0;
+    var isTop = j === 0;
+    var dateFrom = _loyMultFmtDate(row.first_used) || '—';
+    var dateTo   = _loyMultFmtDate(row.last_used)  || '—';
+    bodyHtml += '<div style="padding:10px 0;border-bottom:1px solid var(--border,#e5e7eb);'
+      + (isTop ? 'border-left:3px solid var(--accent,#f97316);padding-left:10px;margin-left:-6px;' : '')
+      + '">'
+      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+      + (isTop ? '<span style="font-size:15px">&#x1F947;</span>' : '')
+      + '<span style="font-size:14px;font-weight:700;color:var(--text-0)">' + _loyOffersEsc(row.rule_name || '') + '</span>'
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--text-2,#6b7283);margin-bottom:6px">'
+      + '&#x1F525; ' + (row.uses || 0) + ' χρήσεις &nbsp;·&nbsp; &#x1F48E; ' + (row.total_bonus || 0) + ' bonus πόντοι &nbsp;·&nbsp; &#x1F464; ' + (row.unique_customers || 0) + ' πελάτες'
+      + '</div>'
+      + '<div style="height:6px;border-radius:99px;background:var(--bg-3,#e5e7eb);margin-bottom:4px;overflow:hidden">'
+      + '<div style="height:100%;width:' + barPct + '%;border-radius:99px;background:'
+      + (isTop ? 'var(--accent,#f97316)' : 'rgba(249,115,22,0.45)') + '"></div>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text-2,#6b7283)">' + _loyOffersEsc(dateFrom + ' → ' + dateTo) + '</div>'
+      + '</div>';
+  }
+  card.innerHTML = _loyMultImpactCardHTML(bodyHtml);
 }
 
 async function _loyMultRender(){
@@ -5283,6 +5355,7 @@ async function _loyMultRender(){
   var listHtml = '<div id="loyMultListWrap">' + _loyMultListHTML(_loyMultCache) + '</div>';
 
   sec.innerHTML = '<div style="border-top:1px solid var(--border,#e5e7eb);margin-top:32px;padding-top:24px">'
+    +'<div id="loyMultImpact" style="margin-bottom:20px"></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
     +'<div style="font-size:18px;font-weight:800;color:var(--text-0,#111)">🔥 Πολλαπλασιαστές Πόντων (Ξεπούλημα Stock)</div>'
     +'<button id="loyMultAddBtn" style="min-height:44px;padding:0 18px;border-radius:10px;'
@@ -5291,6 +5364,14 @@ async function _loyMultRender(){
     + formHtml + listHtml + '</div>';
 
   // ── Wire events ──
+
+  // Impact card: delegate refresh button, then load or render from cache
+  var impactEl = document.getElementById('loyMultImpact');
+  if(impactEl) impactEl.addEventListener('click', function(e){
+    if(e.target.closest('[data-mult-impact-refresh]')) _loyMultLoadImpact();
+  });
+  if(_loyMultImpactCache !== null){ _loyMultRenderImpact(); } else { _loyMultLoadImpact(); }
+
   var addBtn = document.getElementById('loyMultAddBtn');
   if(addBtn) addBtn.addEventListener('click', function(){ _loyMultShowForm(null); });
 
