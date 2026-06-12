@@ -4807,6 +4807,16 @@ async function _renderLoyaltyOffers(){
     +'<input id="loyOffFormIcon" type="text" placeholder="Εικονίδιο emoji (προαιρετικό)" autocomplete="off"'
     +' style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border-radius:10px;'
     +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);color:var(--text-0);outline:none">'
+    +'<div id="loyOffEmojiPicker" style="margin-top:-2px">'
+    +'<div style="font-size:12px;font-weight:600;color:var(--text-2,#6b7283);margin-bottom:6px">Διάλεξε εικονίδιο:</div>'
+    +'<div id="loyOffEmojiChips" style="display:flex;flex-wrap:wrap;gap:6px">'
+    +['🎁','⭐','💎','🏆','👑','🎉','💰','🛍️','🎟️','☕','🍫','🔥','💨','❤️','🥇','✨'].map(function(em){
+      return '<button type="button" data-loy-emoji="'+em+'" style="min-width:44px;min-height:44px;border-radius:10px;'
+        +'border:1px solid var(--border,#e5e7eb);background:var(--bg-2);font-size:22px;'
+        +'cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent;flex-shrink:0">'+em+'</button>';
+    }).join('')
+    +'</div>'
+    +'</div>'
     +'<div style="display:flex;align-items:center;gap:10px;min-height:44px">'
     +'<input id="loyOffFormActive" type="checkbox"'
     +' style="width:20px;height:20px;cursor:pointer;flex-shrink:0">'
@@ -4848,6 +4858,23 @@ async function _renderLoyaltyOffers(){
   if(saveBtn) saveBtn.addEventListener('click', function(){ _loyOffersSave(); });
   var cancelBtn = document.getElementById('loyOffFormCancelBtn');
   if(cancelBtn) cancelBtn.addEventListener('click', function(){ _loyOffersHideForm(); });
+
+  // Emoji picker chip delegation
+  var emojiChipsEl = document.getElementById('loyOffEmojiChips');
+  if(emojiChipsEl) emojiChipsEl.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-loy-emoji]');
+    if(!btn) return;
+    var emoji = btn.getAttribute('data-loy-emoji');
+    var iconEl = document.getElementById('loyOffFormIcon');
+    if(iconEl) iconEl.value = emoji;
+    _loyOffersHighlightEmoji(emoji);
+  });
+
+  // Sync highlight when user types/pastes directly in the icon input
+  var iconInputEl = document.getElementById('loyOffFormIcon');
+  if(iconInputEl) iconInputEl.addEventListener('input', function(){
+    _loyOffersHighlightEmoji(this.value.trim());
+  });
 
   // Delegated click on list (persists across reloads)
   var listWrap = document.getElementById('loyOffersListWrap');
@@ -4914,6 +4941,7 @@ function _loyOffersShowForm(reward){
     if(activeEl) activeEl.checked = true;
     if(idEl)     idEl.value     = '';
   }
+  _loyOffersHighlightEmoji(iconEl ? iconEl.value : '');
   _loyOffersToggleValueField();
   wrap.style.display = '';
   nameEl.focus();
@@ -4922,6 +4950,16 @@ function _loyOffersShowForm(reward){
 function _loyOffersHideForm(){
   var wrap = document.getElementById('loyOffersFormWrap');
   if(wrap) wrap.style.display = 'none';
+}
+
+function _loyOffersHighlightEmoji(emoji){
+  var chips = document.querySelectorAll('#loyOffEmojiChips [data-loy-emoji]');
+  for(var i = 0; i < chips.length; i++){
+    var ch = chips[i];
+    var active = emoji && ch.getAttribute('data-loy-emoji') === emoji;
+    ch.style.borderColor = active ? 'var(--accent,#6366f1)' : 'var(--border,#e5e7eb)';
+    ch.style.background  = active ? 'rgba(99,102,241,0.12)' : 'var(--bg-2)';
+  }
 }
 
 function _loyOffersEditReward(id){
