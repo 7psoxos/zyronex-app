@@ -16240,10 +16240,12 @@ window.addEventListener('popstate', function(e){
   // Re-push an entry so the next back press still fires popstate at any depth.
   var _vpStack = (window._pageHistory && window._pageHistory[window._pageHistory.length-1]) || window.CURRENT_PAGE_ID;
   if (_vpStack === 'vault' && typeof VAULT_STATE !== 'undefined' && VAULT_STATE.path && VAULT_STATE.path.length > 0){
-    try{ window.history.pushState({}, '', location.hash || '#vault'); }catch(_){}
+    window._navInProgress = true;
+    try{ window.history.pushState({ page:'vault' }, '', '#vault'); }catch(_){}
     VAULT_STATE.path.pop();
     try{ localStorage.setItem('vault_path', JSON.stringify(VAULT_STATE.path)); }catch(_){}
     if(typeof renderVault === 'function') renderVault();
+    setTimeout(function(){ window._navInProgress = false; }, 0);
     return;
   }
   // Browser back / swipe → in-app goBack (single source of truth).
