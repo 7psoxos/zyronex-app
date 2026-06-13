@@ -16478,7 +16478,7 @@ function _showPageInternal(p){
         <button class="btn btn-primary" style="min-height:44px" onclick="try{showPage('${p}')}catch(_){location.reload()}">Δοκίμασε ξανά</button>
         <button class="btn btn-ghost" style="min-height:44px" onclick="showPage('dashboard')">Αρχική</button>
       </div>
-      <div style="font-size:10px;color:var(--text-2);margin-top:14px;opacity:0.6">${(renderErr && renderErr.message ? String(renderErr.message).replace(/</g,'&lt;') : '').slice(0,120)}</div>
+      <div style="font-size:10px;color:var(--text-2);margin-top:14px;opacity:0.6">[${p}] ${(renderErr && renderErr.message ? String(renderErr.message).replace(/</g,'&lt;') : '').slice(0,160)}</div>
     </div>`;
   }
   window.CURRENT_PAGE_ID = p;
@@ -25827,7 +25827,6 @@ var ZN_HUBS = {
       {icon:'🏠', label:'Dashboard', page:'dashboard', hot:true},
       {icon:'🛒', label:'Ταμείο', page:'pos', hot:true},
       {icon:'🕒', label:'Βάρδιες', page:'shifts'},
-      {icon:'🎟️', label:'Δωροκάρτες', page:'gift-cards'},
       {icon:'📦', label:'Wolt / efood / Skroutz', page:'online-orders'},
       {icon:'🔄', label:'ZyroNex Exchange', page:'exchange', hot:true},
       {icon:'📋', label:'Αποστολές', page:'shipments'},
@@ -26615,41 +26614,11 @@ function renderSettings(){
     <div class="text-sm muted mt-2 mb-3">Αποστολή αποδείξεων, birthday wishes και stock alerts μέσω WhatsApp.</div>
     <button class="btn btn-ghost" onclick="renderWASettings()"><i data-lucide="settings" size="14"></i> Ρυθμίσεις WhatsApp</button>
   </div>
-  <!-- 🔞 Age Verify -->
-  <div class="card" style="margin-bottom:16px;border-color:rgba(231,76,60,0.3)">
-    <div class="section-title">🔞 Επαλήθευση Ηλικίας</div>
-    <div class="text-sm muted mt-2 mb-3">Πότε εμφανίζεται το pop-up στο POS.</div>
-    <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-2);border-radius:10px;margin-bottom:8px">
-      <input type="checkbox" id="ageVerifyMandatory" style="width:18px;height:18px">
-      <div><label for="ageVerifyMandatory" style="font-weight:700;cursor:pointer">Υποχρεωτικό σε κάθε πώληση</label>
-      <div style="font-size:11px;color:var(--text-3)">Αν OFF: μόνο όταν πατήσεις 🔞 στο POS (προτεινόμενο)</div></div>
-    </div>
-    <button class="btn btn-ghost" style="font-size:12px" onclick="ageVerifySaveSettings()">Αποθήκευση</button>
-  </div>
-
-  <!-- 📍 GPS -->
-  <div class="card" style="margin-bottom:16px;border-color:rgba(74,163,255,0.3)">
-    <div class="section-title">📍 GPS Clock-in Υπαλλήλων</div>
-    <div class="text-sm muted mt-2 mb-3">Επαλήθευση τοποθεσίας κατά το clock-in.</div>
-    <button class="btn btn-ghost" onclick="gpsOpenConfig()"><i data-lucide="map-pin" size="14"></i> Ρυθμίσεις GPS</button>
-  </div>
   <!-- 🎁 Gift Cards -->
   <div class="card" style="margin-bottom:16px;border-color:rgba(255,107,157,0.3)">
     <div class="section-title">🎁 Gift Cards</div>
     <div class="text-sm muted mt-2 mb-3">Έκδοση και διαχείριση δωροκαρτών. Γίνονται αποδεκτές αυτόματα στο POS.</div>
     <button class="btn btn-ghost" onclick="showPage('gift-cards')"><i data-lucide="gift" size="14"></i> Διαχείριση Gift Cards</button>
-  </div>
-  <!-- 📊 Break-Even -->
-  <div class="card" style="margin-bottom:16px;border-color:rgba(155,89,255,0.3)">
-    <div class="section-title">📊 Break-Even Calculator</div>
-    <div class="text-sm muted mt-2 mb-3">Ορισμός σταθερών κοστών για live break-even meter στο dashboard.</div>
-    <button class="btn btn-ghost" onclick="renderBreakevenSettings()"><i data-lucide="trending-up" size="14"></i> Ρύθμιση Κόστους</button>
-  </div>
-  <!-- 💼 ΔΥΠΑ -->
-  <div class="card" style="margin-bottom:16px;border-color:rgba(46,204,113,0.3)">
-    <div class="section-title">💼 ΔΥΠΑ Επιδοτήσεις</div>
-    <div class="text-sm muted mt-2 mb-3">Tracking επιδοτούμενων υπαλλήλων.</div>
-    <button class="btn btn-ghost" onclick="showPage('dypa')"><i data-lucide="briefcase" size="14"></i> Επιδοτήσεις</button>
   </div>
   <!-- 📱 IRIS Payment Configuration -->
   <div class="card" style="margin-bottom:16px;border-color:rgba(0,212,168,0.3);background:linear-gradient(135deg,rgba(0,212,168,0.04),transparent)">
@@ -26686,48 +26655,6 @@ function renderSettings(){
           • Επιβεβαιώνεις την πληρωμή <b>όταν δεις το ποσό στον λογαριασμό σου</b> (instant)<br>
           • Από 1/12/2025 είναι υποχρεωτικό για όλες τις επιχειρήσεις λιανικής
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 🏛️ ΕΡΓΑΝΗ Configuration -->
-  <div class="card" style="margin-bottom:16px;border-color:rgba(155,89,255,0.3);background:linear-gradient(135deg,rgba(155,89,255,0.04),transparent)">
-    <div class="section-title">🏛️ ΕΡΓΑΝΗ Integration</div>
-    <div class="text-sm muted mt-2 mb-3">Σύνδεσμος με το Υπουργείο Εργασίας για αυτόματη αναφορά βαρδιών.</div>
-    
-    <div style="display:grid;gap:12px;margin-top:12px">
-      <div>
-        <label class="form-label">ΕΡΓΑΝΗ Username</label>
-        <input type="text" class="form-input" id="erganiUsername" placeholder="ΑΦΜ ή username" value="">
-      </div>
-      
-      <div>
-        <label class="form-label">ΕΡΓΑΝΗ Password</label>
-        <input type="password" class="form-input" id="erganiPassword" placeholder="••••••••" value="">
-        <div class="text-xs muted mt-1">Κρυπτογραφημένο σε transit (HTTPS). Αποθηκεύεται ασφαλώς στη βάση.</div>
-      </div>
-      
-      <div>
-        <label class="form-label">ΑΦΜ Καταστήματος</label>
-        <input type="text" class="form-input" id="shopAfm" placeholder="Ελληνικό ΑΦΜ (9 ψηφία)" value="">
-        <div class="text-xs muted mt-1">Θα χρησιμοποιηθεί σε όλες τις ΕΡΓΑΝΗ submissions.</div>
-      </div>
-      
-      <div style="padding:10px;background:rgba(74,163,255,0.1);border-left:3px solid #4aa3ff;border-radius:4px">
-        <div class="text-xs" style="color:var(--text-2)">
-          <b>Πώς να βρεις τα στοιχεία σου:</b><br>
-          1. Πήγαινε στο <a href="https://eservices.yeka.gr" target="_blank" style="color:var(--accent)">https://eservices.yeka.gr</a><br>
-          2. Σύνδεση με τα στοιχεία σου (ΑΦΜ + password)<br>
-          3. Αντίγραφε το ΑΦΜ εδώ + το password που χρησιμοποιείς εκεί
-        </div>
-      </div>
-      
-      <button class="btn btn-primary" onclick="_saveErganiConfig()">
-        <i data-lucide="save" size="16"></i> Αποθήκευση ΕΡΓΑΝΗ Credentials
-      </button>
-      
-      <div id="erganiStatus" style="padding:10px;border-radius:6px;background:var(--bg-2);font-size:12px;color:var(--text-3);text-align:center;display:none">
-        Φόρτωση...
       </div>
     </div>
   </div>
@@ -26916,41 +26843,6 @@ function renderSettings(){
     <div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_alertExpiry" ${s.alertExpiry!==false?'checked':''}> <span>Alert λήξης 30 ημέρες πριν</span></label></div>
     <div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_autoReorder" ${s.autoReorder?'checked':''}> <span>Αυτόματες παραγγελίες για εξαντλημένα</span></label></div>
     <div class="form-row"><label class="form-label">Email αποστολής</label><input class="form-input" id="s_notifyEmail" value="${s.notifyEmail||''}" placeholder="admin@yoursite.gr"></div>
-    </div>
-
-    <div class="card"><div class="section-title">📧 Λογιστής — Αυτόματα Reports</div>
-    <div class="text-sm muted mt-2 mb-3">Όρισε email του λογιστή και ποια reports θα του στέλνονται. Το manual export δουλεύει αμέσως. Auto-send κάθε 1η μήνα έρχεται σε επόμενη φάση.</div>
-    <div class="form-row"><label class="form-label">Email Λογιστή *</label><input class="form-input" id="s_accountantEmail" value="${s.accountantEmail||''}" placeholder="logistis@example.gr"></div>
-    <div class="form-row"><label class="form-label">Ονοματεπώνυμο Λογιστή <span class="muted">(προαιρετικό)</span></label><input class="form-input" id="s_accountantName" value="${s.accountantName||''}" placeholder="π.χ. Γιώργος Παπαδόπουλος"></div>
-    <div class="form-row"><label class="form-label">Email αποστολής (από)</label><input class="form-input" id="s_accountantFromEmail" value="${s.accountantFromEmail||s.email||''}" placeholder="info@yourshop.gr"></div>
-
-    <div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Τι θα περιλαμβάνεται στο email</div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendSales" ${s.accSendSales!==false?'checked':''}> <span>Πωλήσεις μήνα (τζίρος, ΦΠΑ, αποδείξεις)</span></label></div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendShifts" ${s.accSendShifts!==false?'checked':''}> <span>Βάρδιες & Υπερωρίες ανά υπάλληλο</span></label></div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendCashbook" ${s.accSendCashbook?'checked':''}> <span>Ταμείο Ημέρας (cashbook entries)</span></label></div>
-    <div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendPurchases" ${s.accSendPurchases?'checked':''}> <span>Παραλαβές από Προμηθευτές</span></label></div>
-
-    <div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Τιμολόγια Online Πλατφορμών</div>
-    <div class="text-sm muted mb-2">Επίλεξε αν έχεις τιμολόγια προμήθειας από πλατφόρμες. Θα συμπεριληφθούν στο report του λογιστή.</div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accPlatEfood" ${s.accPlatEfood?'checked':''}> <span><b>e-food</b> — Τιμολόγιο προμήθειας (χρεώνει προμήθεια + ΦΠΑ 24%)</span></label></div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accPlatWolt" ${s.accPlatWolt?'checked':''}> <span><b>Wolt</b> — Τιμολόγιο προμήθειας (χρεώνει προμήθεια + ΦΠΑ 24%, πληρωμή κάθε 4+ μέρες)</span></label></div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accPlatSkroutz" ${s.accPlatSkroutz?'checked':''}> <span><b>Skroutz</b> — Τιμολόγιο προμήθειας ανά εκκαθάριση</span></label></div>
-    <div class="text-xs muted mt-1 mb-3" style="padding:8px;background:var(--bg-2);border-radius:6px">
-      ℹ️ Οι πλατφόρμες χρεώνουν προμήθεια <b>+ ΦΠΑ 24%</b> (π.χ. 27% προμήθεια = 33.48% πραγματικό κόστος). 
-      Τα τιμολόγιά τους αποστέλλονται στο email σου και πρέπει να καταχωρηθούν ως εξοδολόγιο στον λογιστή.
-    </div>
-
-    <div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Μορφή attachments</div>
-    <div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accFmtPdf" ${s.accFmtPdf!==false?'checked':''}> <span>PDF (ευανάγνωστο, για print)</span></label></div>
-    <div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accFmtCsv" ${s.accFmtCsv!==false?'checked':''}> <span>CSV / Excel (επεξεργάσιμο)</span></label></div>
-
-    <div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Auto-send (έρχεται σύντομα)</div>
-    <div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer;opacity:0.5"><input type="checkbox" id="s_accAutoSend" ${s.accAutoSend?'checked':''} disabled> <span>Αυτόματη αποστολή κάθε 1η μήνα</span></label></div>
-
-    <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="openAccountantExportModal()"><i data-lucide="send" size="16"></i> Αποστολή τώρα</button>
-      <button class="btn btn-ghost" onclick="previewAccountantReport()"><i data-lucide="eye" size="14"></i> Preview report</button>
-    </div>
     </div>
 
     <div class="card"><div class="section-title">📡 Σύνδεση ΑΑΔΕ myDATA</div>
@@ -32941,6 +32833,16 @@ function _renderAgeVerifyLogPage(){
     '<div style="background:rgba(231,76,60,0.07);border:1px solid rgba(231,76,60,0.22);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:var(--text-1);line-height:1.5">'+
       '⚖️ Σε έλεγχο, αυτό το μητρώο αποδεικνύει ότι ελέγχεις την ηλικία. Κάθε εγγραφή κρατά <b>ποιος υπάλληλος</b>, <b>πότε</b> και το <b>αποτέλεσμα</b>. Καταγράφονται και οι <b>απορρίψεις ανηλίκων</b> — απόδειξη συμμόρφωσης.'+
     '</div>'+
+    '<div class="card" style="margin-bottom:14px;border-color:rgba(231,76,60,0.3)">'+
+      '<div class="section-title" style="font-size:14px">🔞 Ρύθμιση Επαλήθευσης στο POS</div>'+
+      '<div class="text-sm muted mt-1 mb-2">Πότε εμφανίζεται το pop-up επαλήθευσης ηλικίας στο ταμείο.</div>'+
+      '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-2);border-radius:10px;margin-bottom:8px">'+
+        '<input type="checkbox" id="ageVerifyMandatory" style="width:18px;height:18px"'+(JSON.parse(localStorage.getItem('katastimaSettings')||'{}').ageVerifyMandatory?' checked':'')+'>'+
+        '<div><label for="ageVerifyMandatory" style="font-weight:700;cursor:pointer">Υποχρεωτικό σε κάθε πώληση</label>'+
+        '<div style="font-size:11px;color:var(--text-3)">Αν OFF: εμφανίζεται αυτόματα όταν το καλάθι έχει προϊόν με νικοτίνη, ή όταν πατήσεις 🔞 στο POS.</div></div>'+
+      '</div>'+
+      '<button class="btn btn-ghost" style="font-size:12px" onclick="ageVerifySaveSettings()">Αποθήκευση</button>'+
+    '</div>'+
     '<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border)">'+
       '<button onclick="AGE_LOG_FILTER=\'all\';_renderAgeVerifyLogPage()" style="flex:1;padding:9px;background:none;border:none;border-bottom:2px solid '+(AGE_LOG_FILTER==='all'?'var(--accent)':'transparent')+';color:'+(AGE_LOG_FILTER==='all'?'var(--accent)':'var(--text-2)')+';font-weight:700;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent">Όλα ('+all.length+')</button>'+
       '<button onclick="AGE_LOG_FILTER=\'verified\';_renderAgeVerifyLogPage()" style="flex:1;padding:9px;background:none;border:none;border-bottom:2px solid '+(AGE_LOG_FILTER==='verified'?'#2ecc71':'transparent')+';color:'+(AGE_LOG_FILTER==='verified'?'#2ecc71':'var(--text-2)')+';font-weight:700;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent">✅ 18+ ('+verifiedN+')</button>'+
@@ -38260,7 +38162,7 @@ async function _ageCheckBeforeCheckout(){
   var custId = window.SELECTED_CUSTOMER_ID;
   var cust = custId ? (typeof CUSTOMERS!=='undefined'?CUSTOMERS:[]).find(function(x){return x.id===custId;}):null;
   // Γνωστός πελάτης ήδη επαληθευμένος → επιτρέπεται χωρίς ξανά popup
-  if(cust && cust.age_verified) return false;
+  if(cust && (cust.age_verified || cust.ageVerified)) return false;
   // Ήδη επαληθεύτηκε σε αυτή τη συνεδρία (manual 🔞 button) → επιτρέπεται
   if(window._ageVerified === true) return false;
 
@@ -38343,7 +38245,7 @@ async function ageVerifyMarkCustomer(customerId){
   try {
     await sb.from('customers').update({age_verified:true, age_verified_at:new Date().toISOString()}).eq('id',customerId);
     var c = (typeof CUSTOMERS!=='undefined'?CUSTOMERS:[]).find(function(x){return x.id===customerId;});
-    if(c){ c.age_verified=true; c.age_verified_at=new Date().toISOString(); }
+    if(c){ c.age_verified=true; c.ageVerified=true; c.age_verified_at=new Date().toISOString(); }
     toast('✅ Ηλικία αποθηκεύτηκε για '+( c?c.name:'πελάτη'),'success',2000);
   } catch(e){ console.warn('age_verified save failed',e); }
 }
@@ -38514,11 +38416,24 @@ function beSaveConfig(){
 // ── ΔΥΠΑ TRACKER ─────────────────────────────────────────────────
 function renderDYPA(_target){
   var c=document.getElementById(_target||'content');if(!c)return;
-  c.innerHTML='<div class="page-head"><div><div class="page-title">💼 ΔΥΠΑ / Επιδοτήσεις</div><div class="page-sub">Tracking επιδοτούμενων υπαλλήλων</div></div>'+
+  c.innerHTML='<div class="page-head"><div><div class="page-title">💼 ΔΥΠΑ / ΕΡΓΑΝΗ</div><div class="page-sub">Επιδοτήσεις ΔΥΠΑ & σύνδεση ΕΡΓΑΝΗ</div></div>'+
     '<button class="btn btn-primary btn-lg" onclick="dypaOpenAdd()"><i data-lucide="plus" size="18"></i> Νέο Πρόγραμμα</button></div>'+
-    '<div id="dypaList"></div>';
+    '<div id="dypaList"></div>'+
+    '<div class="card" style="margin-top:18px;border-color:rgba(155,89,255,0.3);background:linear-gradient(135deg,rgba(155,89,255,0.04),transparent)">'+
+      '<div class="section-title">🏛️ ΕΡΓΑΝΗ Integration</div>'+
+      '<div class="text-sm muted mt-2 mb-3">Σύνδεσμος με το Υπουργείο Εργασίας για αυτόματη αναφορά βαρδιών.</div>'+
+      '<div style="display:grid;gap:12px;margin-top:12px">'+
+        '<div><label class="form-label">ΕΡΓΑΝΗ Username</label><input type="text" class="form-input" id="erganiUsername" placeholder="ΑΦΜ ή username" value=""></div>'+
+        '<div><label class="form-label">ΕΡΓΑΝΗ Password</label><input type="password" class="form-input" id="erganiPassword" placeholder="••••••••" value=""><div class="text-xs muted mt-1">Κρυπτογραφημένο σε transit (HTTPS). Αποθηκεύεται ασφαλώς στη βάση.</div></div>'+
+        '<div><label class="form-label">ΑΦΜ Καταστήματος</label><input type="text" class="form-input" id="shopAfm" placeholder="Ελληνικό ΑΦΜ (9 ψηφία)" value=""><div class="text-xs muted mt-1">Θα χρησιμοποιηθεί σε όλες τις ΕΡΓΑΝΗ submissions.</div></div>'+
+        '<div style="padding:10px;background:rgba(74,163,255,0.1);border-left:3px solid #4aa3ff;border-radius:4px"><div class="text-xs" style="color:var(--text-2)"><b>Πώς να βρεις τα στοιχεία σου:</b><br>1. Πήγαινε στο <a href="https://eservices.yeka.gr" target="_blank" style="color:var(--accent)">eservices.yeka.gr</a><br>2. Σύνδεση με τα στοιχεία σου (ΑΦΜ + password)<br>3. Αντίγραφε το ΑΦΜ + password εδώ</div></div>'+
+        '<button class="btn btn-primary" onclick="_saveErganiConfig()"><i data-lucide="save" size="16"></i> Αποθήκευση ΕΡΓΑΝΗ Credentials</button>'+
+        '<div id="erganiStatus" style="padding:10px;border-radius:6px;background:var(--bg-2);font-size:12px;color:var(--text-3);text-align:center;display:none">Φόρτωση...</div>'+
+      '</div>'+
+    '</div>';
   if(typeof lucide!=='undefined')lucide.createIcons();
   dypaLoad();
+  if(typeof _loadErganiConfig==='function')_loadErganiConfig();
 }
 async function dypaLoad(){
   var el=document.getElementById('dypaList');if(!el)return;
@@ -38743,7 +38658,8 @@ function renderTaxAgent() {
       ['library','📚 Βιβλιοθήκη'],
       ['declaration','📝 Δήλωση'],
       ['vat','🧾 ΦΠΑ/myDATA'],
-      ['dypa','💼 ΔΥΠΑ']
+      ['dypa','💼 ΔΥΠΑ'],
+      ['accountant','⚙️ Λογιστής']
     ].map(function(t){
       var active = TAXAGENT_TAB === t[0];
       return '<button onclick="_taxAgentSetTab(\''+t[0]+'\')" style="flex:1;min-width:90px;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:'+(active?'700':'500')+';background:'+(active?'var(--accent)':'transparent')+';color:'+(active?'#000':'var(--text-1)')+'">'+t[1]+'</button>';
@@ -38754,6 +38670,7 @@ function renderTaxAgent() {
   if (TAXAGENT_TAB === 'declaration') { _taxAgentRenderDeclaration(); return; }
   if (TAXAGENT_TAB === 'vat') { if(typeof renderVAT==='function') renderVAT('taTabBody'); return; }
   if (TAXAGENT_TAB === 'dypa') { if(typeof renderDYPA==='function') renderDYPA('taTabBody'); return; }
+  if (TAXAGENT_TAB === 'accountant') { _taxAgentRenderAccountant(); return; }
   // else chat → render into taTabBody
   _taxAgentRenderChat();
 }
@@ -38761,6 +38678,63 @@ function renderTaxAgent() {
 function _taxAgentSetTab(tab) {
   TAXAGENT_TAB = tab;
   renderTaxAgent();
+}
+
+function _taxAgentRenderAccountant() {
+  var c = document.getElementById('taTabBody');
+  if (!c) return;
+  var s = (typeof getSettings === 'function') ? getSettings() : {};
+  var ck = function(v){ return v ? 'checked' : ''; };
+  c.innerHTML =
+    '<div class="card"><div class="section-title">📧 Λογιστής — Αυτόματα Reports</div>' +
+    '<div class="text-sm muted mt-2 mb-3">Όρισε email του λογιστή και ποια reports θα του στέλνονται. Το manual export δουλεύει αμέσως. Auto-send κάθε 1η μήνα έρχεται σε επόμενη φάση.</div>' +
+    '<div class="form-row"><label class="form-label">Email Λογιστή *</label><input class="form-input" id="s_accountantEmail" value="'+(s.accountantEmail||'')+'" placeholder="logistis@example.gr"></div>' +
+    '<div class="form-row"><label class="form-label">Ονοματεπώνυμο Λογιστή <span class="muted">(προαιρετικό)</span></label><input class="form-input" id="s_accountantName" value="'+(s.accountantName||'')+'" placeholder="π.χ. Γιώργος Παπαδόπουλος"></div>' +
+    '<div class="form-row"><label class="form-label">Email αποστολής (από)</label><input class="form-input" id="s_accountantFromEmail" value="'+(s.accountantFromEmail||s.email||'')+'" placeholder="info@yourshop.gr"></div>' +
+    '<div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Τι θα περιλαμβάνεται στο email</div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendSales" '+ck(s.accSendSales!==false)+'> <span>Πωλήσεις μήνα (τζίρος, ΦΠΑ, αποδείξεις)</span></label></div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendShifts" '+ck(s.accSendShifts!==false)+'> <span>Βάρδιες & Υπερωρίες ανά υπάλληλο</span></label></div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendCashbook" '+ck(s.accSendCashbook)+'> <span>Ταμείο Ημέρας (cashbook entries)</span></label></div>' +
+    '<div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accSendPurchases" '+ck(s.accSendPurchases)+'> <span>Παραλαβές από Προμηθευτές</span></label></div>' +
+    '<div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Τιμολόγια Online Πλατφορμών</div>' +
+    '<div class="text-sm muted mb-2">Επίλεξε αν έχεις τιμολόγια προμήθειας από πλατφόρμες. Θα συμπεριληφθούν στο report του λογιστή.</div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accPlatEfood" '+ck(s.accPlatEfood)+'> <span><b>e-food</b> — Τιμολόγιο προμήθειας (χρεώνει προμήθεια + ΦΠΑ 24%)</span></label></div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accPlatWolt" '+ck(s.accPlatWolt)+'> <span><b>Wolt</b> — Τιμολόγιο προμήθειας (χρεώνει προμήθεια + ΦΠΑ 24%, πληρωμή κάθε 4+ μέρες)</span></label></div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accPlatSkroutz" '+ck(s.accPlatSkroutz)+'> <span><b>Skroutz</b> — Τιμολόγιο προμήθειας ανά εκκαθάριση</span></label></div>' +
+    '<div class="text-xs muted mt-1 mb-3" style="padding:8px;background:var(--bg-2);border-radius:6px">ℹ️ Οι πλατφόρμες χρεώνουν προμήθεια <b>+ ΦΠΑ 24%</b> (π.χ. 27% προμήθεια = 33.48% πραγματικό κόστος). Τα τιμολόγιά τους αποστέλλονται στο email σου και πρέπει να καταχωρηθούν ως εξοδολόγιο στον λογιστή.</div>' +
+    '<div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Μορφή attachments</div>' +
+    '<div class="form-row" style="margin-bottom:6px"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accFmtPdf" '+ck(s.accFmtPdf!==false)+'> <span>PDF (ευανάγνωστο, για print)</span></label></div>' +
+    '<div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_accFmtCsv" '+ck(s.accFmtCsv!==false)+'> <span>CSV / Excel (επεξεργάσιμο)</span></label></div>' +
+    '<div class="text-xs fw-700 mt-3 mb-2" style="text-transform:uppercase;letter-spacing:1px;color:var(--text-2)">Auto-send (έρχεται σύντομα)</div>' +
+    '<div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer;opacity:0.5"><input type="checkbox" id="s_accAutoSend" '+ck(s.accAutoSend)+' disabled> <span>Αυτόματη αποστολή κάθε 1η μήνα</span></label></div>' +
+    '<div class="flex gap-2 mt-3" style="flex-wrap:wrap">' +
+      '<button class="btn btn-primary" onclick="saveAccountantSettings()"><i data-lucide="save" size="16"></i> Αποθήκευση</button>' +
+      '<button class="btn btn-ghost" onclick="openAccountantExportModal()"><i data-lucide="send" size="14"></i> Αποστολή τώρα</button>' +
+      '<button class="btn btn-ghost" onclick="previewAccountantReport()"><i data-lucide="eye" size="14"></i> Preview report</button>' +
+    '</div>' +
+    '</div>';
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+function saveAccountantSettings() {
+  var $val = function(id, def){ var e=document.getElementById(id); return (e&&e.value!=null)?e.value:def; };
+  var $chk = function(id, def){ var e=document.getElementById(id); return e?e.checked:def; };
+  var s = (typeof getSettings === 'function') ? getSettings() : {};
+  s.accountantEmail = $val('s_accountantEmail', s.accountantEmail||'');
+  s.accountantName = $val('s_accountantName', s.accountantName||'');
+  s.accountantFromEmail = $val('s_accountantFromEmail', s.accountantFromEmail||'');
+  s.accSendSales = $chk('s_accSendSales', s.accSendSales!==false);
+  s.accSendShifts = $chk('s_accSendShifts', s.accSendShifts!==false);
+  s.accSendCashbook = $chk('s_accSendCashbook', !!s.accSendCashbook);
+  s.accSendPurchases = $chk('s_accSendPurchases', !!s.accSendPurchases);
+  s.accPlatEfood = $chk('s_accPlatEfood', !!s.accPlatEfood);
+  s.accPlatWolt = $chk('s_accPlatWolt', !!s.accPlatWolt);
+  s.accPlatSkroutz = $chk('s_accPlatSkroutz', !!s.accPlatSkroutz);
+  s.accFmtPdf = $chk('s_accFmtPdf', s.accFmtPdf!==false);
+  s.accFmtCsv = $chk('s_accFmtCsv', s.accFmtCsv!==false);
+  s.accAutoSend = $chk('s_accAutoSend', !!s.accAutoSend);
+  localStorage.setItem('katastimaSettings', JSON.stringify(s));
+  if (typeof toast === 'function') toast('✅ Στοιχεία λογιστή αποθηκεύτηκαν','success');
 }
 
 function _taxAgentRenderChat() {
