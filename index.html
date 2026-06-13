@@ -2634,12 +2634,27 @@ if(window.navigator && window.navigator.share){
   .zn-dsk-hub-label{flex:1;}
   .zn-dsk-hub-arrow{opacity:0.35;flex-shrink:0;transition:opacity 0.12s;}
   .zn-dsk-hub-btn.active .zn-dsk-hub-arrow{opacity:0.75;}
-  /* Hub page wrapper rendered in #content */
+  /* Hub page wrapper rendered in #content (mobile fallback — desktop overridden below) */
   .zn-hub-page-wrap{padding:20px 16px 24px;}
   .zn-hub-page-header{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
   .zn-hub-page-icon{font-size:36px;line-height:1;}
   .zn-hub-page-title{font-size:20px;font-weight:800;margin-bottom:2px;}
   .zn-hub-page-sub{font-size:12px;color:var(--text-2);}
+  /* ── FlowCore desktop tile restyle (≥901px only) ── */
+  @media(min-width:901px){
+    #znDesktopHubNav .zn-dsk-hub-btn{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:11px;font-size:14.5px;color:#aeb8d4;background:transparent;border:0;width:100%;text-align:left;cursor:pointer}
+    #znDesktopHubNav .zn-dsk-hub-btn.active{background:#1d2a52;color:#fff;font-weight:700}
+    .zn-hub-page-wrap{padding:24px 26px;background:radial-gradient(1200px 500px at 70% -10%,#2a1f55,#0f1530);min-height:100%}
+    .zn-hub-page-header{background:linear-gradient(90deg,#7b2ff7,#e1306c);color:#fff;font-size:21px;font-weight:800;padding:16px 22px;border-radius:14px;margin-bottom:20px}
+    .zn-hub-page-wrap .zn-hub-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+    .zn-hub-page-wrap .zn-hub-card{position:relative;background:#f4f5fb;color:#1a1a2e;border-radius:17px;padding:20px 16px;min-height:140px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 8px 22px rgba(0,0,0,.25);cursor:pointer;transition:transform .12s,box-shadow .12s}
+    .zn-hub-page-wrap .zn-hub-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.32)}
+    .zn-hub-page-wrap .zhn-ic{font-size:36px;margin-bottom:10px}
+    .zn-hub-page-wrap .zhn-tt{font-size:15.5px;font-weight:800}
+    .zn-hub-page-wrap .zhn-ts{font-size:12px;color:#5a6276;margin-top:3px}
+    .zn-hub-page-wrap .zhn-new{position:absolute;top:11px;right:11px;background:#22c55e;color:#fff;font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:20px}
+    .zn-hub-page-wrap .zhn-hot{position:absolute;top:13px;right:13px;color:#ef4444;font-size:11px}
+  }
 </style>
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
@@ -25811,6 +25826,8 @@ var ZN_HUBS = {
     pages:[
       {icon:'🏠', label:'Dashboard', page:'dashboard', hot:true},
       {icon:'🛒', label:'Ταμείο', page:'pos', hot:true},
+      {icon:'🕒', label:'Βάρδιες', page:'shifts'},
+      {icon:'🎟️', label:'Δωροκάρτες', page:'gift-cards'},
       {icon:'📦', label:'Wolt / efood / Skroutz', page:'online-orders'},
       {icon:'🔄', label:'ZyroNex Exchange', page:'exchange', hot:true},
       {icon:'📋', label:'Αποστολές', page:'shipments'},
@@ -25853,6 +25870,8 @@ var ZN_HUBS = {
       {icon:'🗓️', label:'Ημερολόγιο Συμμόρφωσης', page:'compliance-calendar'},
       {icon:'⚖️', label:'Νεκρό Σημείο', page:'breakeven'},
       {icon:'👨‍💼', label:'Λογιστήριο AI', page:'taxagent', hot:true},
+      {icon:'🧾', label:'ΦΠΑ & myDATA', page:'vat', hot:true},
+      {icon:'🏛️', label:'ΔΥΠΑ / ΕΡΓΑΝΗ', page:'dypa'},
       {icon:'⚖️', label:'Ισοζύγια', page:'balance'},
       {icon:'📊', label:'Επιχειρηματική Ανάλυση', page:'bi', plan:'pro'},
       {icon:'🧭', label:'Συνολική Εικόνα', page:'warroom', hot:true},
@@ -25889,6 +25908,16 @@ var ZN_HUBS = {
       {icon:'⚖️', label:'Νομικά', page:'legal'},
     ]
   }
+};
+
+// ── Hub tile badge / subtitle lookup tables ──────────────────────────────────
+var ZN_TILE_NEW = {vat:1, dypa:1, shifts:1, 'gift-cards':1};
+var ZN_TILE_DESC = {
+  dashboard:'Κεντρικός πίνακας', pos:'POS & εκδόσεις', shifts:'Έλεγχος βαρδιών', 'gift-cards':'Έκδοση & εξαργύρωση', 'online-orders':'Online παραγγελίες', exchange:'Ανταλλαγές προϊόντων', shipments:'Διαχείριση αποστολών', documents:'Παραστατικά & αρχεία',
+  inventory:'Προϊόντα & στοκ', suppliers:'Διαχείριση προμηθευτών', purchases:'Παραγγελίες & παραλαβές', waste:'Καταστροφές & waste', batches:'Lot & λήξεις', hardware:'Συσκευές & εξοπλισμός', 'dead-stock':'Ακίνητο απόθεμα', compliance:'Κανονιστική TPD', 'data-cleanup':'Καθαρισμός δεδομένων',
+  customers:'Καρτέλες πελατών', loyalty:'Πόντοι & ανταμοιβές', 'customer-intel':'Segmentation & insights', campaigns:'Marketing automation', pulse:'Έξυπνες προσφορές', mixology:'Συνταγές αναμείξεων',
+  reports:'Πωλήσεις & απόδοση', cashbook:'Άνοιγμα/κλείσιμο', banking:'Συμφωνία λογαριασμών', 'expense-calendar':'Πάγια & έξοδα', 'compliance-calendar':'Προθεσμίες', breakeven:'Break-even ανάλυση', taxagent:'Αυτόματη λογιστική', vat:'Δηλώσεις & ΑΑΔΕ', dypa:'Μισθοδοσία & δηλώσεις', balance:'Λογιστικά ισοζύγια', bi:'BI & insights', warroom:'War Room', 'energy-tracker':'ΔΕΗ & πάγια',
+  kiosk:'Οθόνη πελάτη', plugins:'Πρόσθετα', sitebuilder:'Κατασκευή site', vault:'Διαχείριση αρχείων', users:'Προσωπικό & βάρδιες', alerts:'Ειδοποιήσεις', oracle:'AI σύμβουλος', brain:'AI μνήμη', 'seasonal-intel':'Σεζόν & καιρός', 'supplier-scorecard':'Scorecards', 'remember-this':'Υπενθυμίσεις', 'dosage-tracker':'Δοσολογία νικοτίνης', pricewar:'Ανταγωνισμός τιμών', ai:'AI εργαλεία', agents:'AI agents', competitors:'Παρακολούθηση', helpdesk:'Γνωσιακή βάση', 'shop-changelog':'Ιστορικό αλλαγών', 'age-log':'Μητρώο ηλικίας', settings:'Ρυθμίσεις', subscription:'Συνδρομή & billing', help:'Βοήθεια', support:'Υποστήριξη', legal:'Όροι & GDPR'
 };
 
 // Current open tab (for hub toggle logic)
@@ -26019,19 +26048,21 @@ function znRenderHubContent(hubId){
     var isPlanLocked = !isOwner && plan === 'basic' && p.plan === 'pro';
     var cardClass = 'zn-hub-card' + (p.hot ? ' hot' : '') + (isPlanLocked ? ' plan-locked' : '');
     var oc = isPlanLocked ? '' : 'onclick="showPage(\'' + p.page + '\')"';
-    return '<div class="' + cardClass + '" ' + oc + ' title="' + p.label + '">'
-      + '<span class="zn-hub-card-icon">'
-      + (p.img === 'robot' && typeof ZN_ROBOT_IMG !== 'undefined'
-          ? '<img src="' + ZN_ROBOT_IMG + '" alt="" style="height:26px;width:auto;vertical-align:middle;filter:drop-shadow(0 0 5px rgba(0,212,168,0.45))">'
-          : p.icon)
-      + '</span><span class="zn-hub-card-label">' + p.label + '</span></div>';
+    var badge = (typeof ZN_TILE_NEW !== 'undefined' && ZN_TILE_NEW[p.page])
+      ? '<span class="zhn-new">ΝΕΟ</span>'
+      : (p.hot ? '<span class="zhn-hot">●</span>' : '');
+    var desc = (typeof ZN_TILE_DESC !== 'undefined' && ZN_TILE_DESC[p.page]) || '';
+    var iconHtml = (p.img === 'robot' && typeof ZN_ROBOT_IMG !== 'undefined')
+      ? '<img src="' + ZN_ROBOT_IMG + '" alt="" style="height:36px;width:auto;vertical-align:middle;filter:drop-shadow(0 0 5px rgba(0,212,168,0.45))">'
+      : p.icon;
+    var inner = badge
+      + '<div class="zhn-ic">' + iconHtml + '</div>'
+      + '<div class="zhn-tt">' + p.label + '</div>'
+      + (desc ? '<div class="zhn-ts">' + desc + '</div>' : '');
+    return '<div class="' + cardClass + '" ' + oc + ' data-page="' + p.page + '" title="' + p.label + '">' + inner + '</div>';
   }).join('');
   c.innerHTML = '<div class="zn-hub-page-wrap">'
-    + '<div class="zn-hub-page-header">'
-    + '<span class="zn-hub-page-icon">' + hub.icon + '</span>'
-    + '<div><div class="zn-hub-page-title" style="color:' + hub.color + '">' + hub.label + '</div>'
-    + '<div class="zn-hub-page-sub">' + visiblePages.length + ' λειτουργίες</div></div>'
-    + '</div>'
+    + '<div class="zn-hub-page-header">' + hub.label + '</div>'
     + '<div class="zn-hub-grid">' + tilesHtml + '</div>'
     + '</div>';
   if(typeof lucide !== 'undefined') lucide.createIcons();
