@@ -32794,34 +32794,34 @@ function handleReactivation(previousExpiry) {
 // === ROUTER HELPERS (back-btn, sidebar-perms, goBack) ===
 
 function _updateBackBtn() {
-  var btn = document.getElementById('tabBarBackBtn'); // New: tab bar back button
+  var btn  = document.getElementById('tabBarBackBtn');
+  var fBtn = document.getElementById('floatingBackBtn');
   var logo = document.getElementById('topbarLogo');
   var search = document.getElementById('topbarSearch');
 
-  // Determine current page
   var hist = window._pageHistory || [];
   var currentPage = hist[hist.length - 1] || 'dashboard';
   var onDashboard = (currentPage === 'dashboard');
 
-  // Tab bar back button: show when not already at the section home page
-  if (btn) {
-    if (onDashboard) {
-      btn.style.display = 'none';
-    } else {
-      var inKB = (currentPage === 'help');
-      var hasKBHistory = inKB && window._helpDocHistory && window._helpDocHistory.length >= 1;
-      var tab3 = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? ZN_PAGE_TO_TAB[currentPage] : null;
-      var tabHome3 = (typeof ZN_TAB_HOME !== 'undefined' && tab3) ? ZN_TAB_HOME[tab3] : null;
-      var isAtSectionHome = tabHome3 && (tabHome3 === currentPage);
-      var canGoBack = hasKBHistory || (typeof _settingsSubView !== 'undefined' && _settingsSubView) || !isAtSectionHome;
-      btn.style.display = canGoBack ? 'flex' : 'none';
-    }
+  // Determine whether there is anywhere to go back to
+  var canGoBack = false;
+  if (!onDashboard) {
+    var inKB = (currentPage === 'help');
+    var hasKBHistory = inKB && window._helpDocHistory && window._helpDocHistory.length >= 1;
+    canGoBack = hasKBHistory
+      || (typeof _settingsSubView !== 'undefined' && _settingsSubView)
+      || hist.length >= 2;
   }
 
-  // Logo: always visible, search hidden on mobile (CSS handles it)
+  // Tab bar back button (mobile — inside #znTabBar)
+  if (btn) btn.style.display = canGoBack ? 'flex' : 'none';
+
+  // Floating back button (desktop — fixed position, CSS controls desktop-only visibility)
+  if (fBtn) fBtn.style.display = canGoBack ? 'flex' : 'none';
+
+  // Logo: always visible
   if (logo) {
     logo.style.display = 'flex';
-    // Populate logo content
     var logoUrl = (typeof getCustomLogo === 'function') ? getCustomLogo() : null;
     var settings = {};
     try { settings = typeof getAppSettings === 'function' ? getAppSettings() : {}; } catch(e){}
@@ -32839,7 +32839,7 @@ function _updateBackBtn() {
       }
     }
   }
-  // Search: only on non-dashboard, desktop only (CSS hides on mobile)
+  // Search: only on desktop (CSS hides on mobile via display:none)
   if (search) {
     search.style.display = (window.innerWidth >= 768 ? 'flex' : 'none');
   }
@@ -32893,19 +32893,14 @@ function goBack() {
       return;
     }
   }
-  // PRIORITY 2.5: At KB welcome grid (no doc history) → leave Help, go to the
-  // PREVIOUS page from the page stack (NOT dashboard). This is the fix for
-  // "back from Help always goes to dashboard".
-  // Falls through to PRIORITY 3 which pops _pageHistory correctly.
-  // PRIORITY 3: Parent-tab navigation — always go to the home page of the
-  // current page's section (ZN_TAB_HOME). One rule for every page.
-  var currentPg2 = window._pageHistory && window._pageHistory[window._pageHistory.length - 1];
-  if(!currentPg2 || currentPg2 === 'dashboard') return; // already at root
-  var tab2 = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? ZN_PAGE_TO_TAB[currentPg2] : null;
-  var tabHome2 = (typeof ZN_TAB_HOME !== 'undefined' && tab2) ? (ZN_TAB_HOME[tab2] || 'dashboard') : 'dashboard';
-  if(tabHome2 === currentPg2) return; // already at section home
+  // PRIORITY 3: Pop the actual previous page from the history stack.
+  var h = window._pageHistory || [];
+  if (h.length < 2) return;       // at root — nothing to go back to
+  h.pop();                        // remove current page from stack
+  var prev = h[h.length - 1];
+  if (!prev) return;
   window._navByBack = true;
-  showPage(tabHome2);
+  showPage(prev);
 }
 
 function applyPermissionsToSidebar(){

@@ -2578,6 +2578,34 @@ if(window.navigator && window.navigator.share){
   html.zn-light .bl-logo-dark{display:none !important;}
   html.zn-light .bl-logo-light{display:block !important;margin-left:auto;margin-right:auto;}
   @keyframes blFill{from{stroke-dashoffset:201}to{stroke-dashoffset:34}}
+  /* ── Desktop floating back button ── */
+  @media(min-width:901px){
+    #floatingBackBtn{
+      position:fixed;
+      top:calc(max(14px,env(safe-area-inset-top,0px)) + 56px + 8px);
+      left:calc(240px + 16px);
+      z-index:40;
+      min-width:44px;min-height:44px;
+      width:44px;height:44px;
+      padding:0;
+      border-radius:10px;
+      background:var(--bg-2);
+      border:1px solid var(--border);
+      color:var(--text-0);
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 2px 8px rgba(0,0,0,.25);
+      transition:background 0.15s,border-color 0.15s;
+    }
+    #floatingBackBtn:hover{background:var(--bg-3);border-color:var(--border-strong);}
+    .app.sidebar-collapsed #floatingBackBtn{left:calc(56px + 16px);}
+  }
+  /* Never show floating back button on mobile */
+  @media(max-width:900px){
+    #floatingBackBtn{display:none !important}
+  }
 </style>
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
@@ -2749,7 +2777,7 @@ window.onerror = function(msg, src, line, col, err) {
 <main class="main">
   <div class="topbar">
     <button class="hamburger" onclick="toggleSidebar()"><i data-lucide="menu" size="20"></i></button>
-    <button id="floatingBackBtn" onclick="goBack()" title="Πίσω" style="display:none"></button>
+    <button id="floatingBackBtn" onclick="goBack()" title="Πίσω" style="display:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
     <!-- Logo — shown on dashboard only, replaces search -->
     <div id="topbarLogo" style="display:none;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer" onclick="showPage('dashboard')">
       <img id="topbarLogoImg" src="" alt="" style="height:36px;width:auto;max-width:120px;object-fit:contain;border-radius:6px;display:none">
@@ -16219,23 +16247,15 @@ function znHubForPage(id){
 }
 
 // NAV CONTRACT — DO NOT BREAK:
-// History is captured ONLY at the top of _showPageInternal (the single render chokepoint).
-// znGoBack closes the current page and re-opens its section hub menu (znHubForPage -> open panel),
-// falling back to dashboard only if no hub. Never move capture elsewhere; never make X hardcode dashboard.
+// znGoBack (X button on sub-pages) re-opens the hub panel for the current page's section,
+// falling back to goBack() if no hub exists. Never call showPage('dashboard') here —
+// that would push a phantom dashboard entry into _pageHistory.
 window.znGoBack = function(){
-  var cur = window._znCurView;
-  var hub = (typeof znHubForPage==='function') ? znHubForPage(cur) : null;
-  if(typeof window.znDiagUpdate==='function') window.znDiagUpdate('X -> section menu: ' + (hub || 'dashboard-fallback'));
-  if(hub){
-    if(typeof showPage==='function') showPage('dashboard');
-    setTimeout(function(){
-      var _bd=document.getElementById('znHubBackdrop');
-      if(_bd) _bd.classList.add('zn-menu-opaque');
-      if(typeof znHubOpen==='function') znHubOpen(hub);
-      if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
-    }, 0);
-  } else if(typeof showPage==='function'){
-    showPage('dashboard');
+  var hub = (typeof znHubForPage === 'function') ? znHubForPage(window._znCurView) : null;
+  if (hub) {
+    if (typeof znHubOpen === 'function') znHubOpen(hub);
+  } else {
+    if (typeof goBack === 'function') goBack();
   }
 };
 
