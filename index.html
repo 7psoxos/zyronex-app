@@ -24372,7 +24372,11 @@ function getInitialPage(){
     'hardware','batches','waste','competitors','banking','balance','documents',
     'data-cleanup','help','legal','dead-stock','expense-calendar','compliance','audit',
     'shop-changelog','compliance-calendar','breakeven','age-log',
-    'online-orders','support','helpdesk','security','inspector-competitors','plugins'];
+    'online-orders','support','helpdesk','security','inspector-competitors','plugins',
+    // Previously missing from validPages
+    'vault','agents','exchange','gift-cards','dypa','taxagent','pulse','sitebuilder','subscription',
+    // Phase 4 category home pages
+    'cat-sales','cat-stock','cat-crm','cat-finance','cat-system'];
 
   // 1) Αν δεν υπάρχει hash στο URL → προσπάθησε να επαναφέρεις την τελευταία σελίδα (επιβίωση από refresh)
   const hashPage = (location.hash||'').replace('#','').trim();
