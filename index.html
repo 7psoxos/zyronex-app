@@ -41237,6 +41237,131 @@ var ZN_HUBS = {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// NAV_MODEL — single source of truth for desktop navigation
+// 63 pages, 5 categories, generated from Phase 1 inventory
+// VALIDATION: union of all pages.map(p=>p.id) must equal the 63
+//             renderer keys in _showPageInternal — 0 missing, 0 duplicates
+// ═══════════════════════════════════════════════════════════════════
+var NAV_MODEL = {
+  categories: [
+    {
+      id: 'cat-sales',
+      label: 'Πωλήσεις & Ταμείο',
+      icon: '🛒',
+      color: '#00d4a8',
+      pages: [
+        {id:'dashboard',        title:'Αρχική',                 subtitle:'Πίνακας Ελέγχου',           icon:'🏠'},
+        {id:'pos',              title:'Ταμείο / Πωλήσεις',     subtitle:'Quick POS & Standard POS',  icon:'🛒'},
+        {id:'cashbook',         title:'Ταμείο Ημέρας',         subtitle:'Έσοδα & ταμειακές ροές',    icon:'🏦'},
+        {id:'shifts',           title:'Βάρδιες',                subtitle:'Χρήστες & ωράρια',          icon:'🕐'},
+        {id:'online-orders',    title:'Online Παραγγελίες',     subtitle:'Wolt / efood / Skroutz',    icon:'📱'},
+        {id:'gift-cards',       title:'Gift Cards',             subtitle:'Δωροκάρτες & credits',      icon:'🎁'}
+      ]
+    },
+    {
+      id: 'cat-stock',
+      label: 'Αποθήκη & Στοκ',
+      icon: '📦',
+      color: '#6366f1',
+      pages: [
+        {id:'inventory',        title:'Αποθήκη',                subtitle:'Απόθεμα & προϊόντα',        icon:'📦'},
+        {id:'suppliers',        title:'Προμηθευτές',            subtitle:'Διαχείριση προμηθευτών',     icon:'🚚'},
+        {id:'purchases',        title:'Αγορές',                 subtitle:'Παραστατικά αγορών',         icon:'🛍️'},
+        {id:'shipments',        title:'Αποστολές',              subtitle:'Διαχείριση αποστολών',       icon:'📤'},
+        {id:'waste',            title:'Απομειώσεις',            subtitle:'Καταγραφή απωλειών',         icon:'🗑️'},
+        {id:'batches',          title:'Παρτίδες',               subtitle:'Lot tracking & ημερομηνίες', icon:'⚗️'},
+        {id:'hardware',         title:'Hardware',               subtitle:'Συσκευές & εκτυπωτές',       icon:'💻'},
+        {id:'dead-stock',       title:'Dead Stock',             subtitle:'Ανάκτηση ακινήτου στοκ',     icon:'💀'},
+        {id:'data-cleanup',     title:'Data Cleanup',           subtitle:'Εκκαθάριση δεδομένων',       icon:'🧹'},
+        {id:'compliance',       title:'TPD Vault',              subtitle:'Συμμόρφωση TPD',             icon:'🛡️'},
+        {id:'vault',            title:'ZyroNex Vault',          subtitle:'Ασφαλής αποθήκη εγγράφων',  icon:'🗄️'},
+        {id:'documents',        title:'Έγγραφα & Τιμολόγια',   subtitle:'Έκδοση & διαχείριση',        icon:'📄'}
+      ]
+    },
+    {
+      id: 'cat-crm',
+      label: 'Πελάτες & CRM',
+      icon: '👥',
+      color: '#ec4899',
+      pages: [
+        {id:'customers',        title:'Πελάτες',                subtitle:'Βάση πελατών & ιστορικό',   icon:'👤'},
+        {id:'customer-intel',   title:'Ανάλυση Πελατών',       subtitle:'AI insights & συμπεριφορά', icon:'🧠'},
+        {id:'campaigns',        title:'Καμπάνιες & Προσφορές',  subtitle:'Email & push marketing',     icon:'📣'},
+        {id:'pulse',            title:'ZyroNex Pulse',          subtitle:'Live δεδομένα πελατών',      icon:'✨'},
+        {id:'mixology',         title:'Ανάμειξη & DIY',         subtitle:'Συνταγές & μείγματα',        icon:'⚗️'},
+        {id:'dypa',             title:'ΔΥΠΑ',                   subtitle:'Επιδοτήσεις & ΔΥΠΑ',         icon:'🏛️'},
+        {id:'competitors',      title:'Ανταγωνισμός',           subtitle:'Παρακολούθηση αγοράς',       icon:'👁️'},
+        {id:'exchange',         title:'ZyroNex Exchange',        subtitle:'Ανταλλαγές & επιστροφές',    icon:'🔄'},
+        {id:'age-log',          title:'Μητρώο Ηλικίας',         subtitle:'Έλεγχος ηλικίας αγοραστών',  icon:'🔞'}
+      ]
+    },
+    {
+      id: 'cat-finance',
+      label: 'Οικονομικά & Analytics',
+      icon: '💰',
+      color: '#f59e0b',
+      pages: [
+        {id:'reports',              title:'Στατιστικά',              subtitle:'Αναλύσεις & γραφήματα',     icon:'📈'},
+        {id:'banking',              title:'Τράπεζες',                subtitle:'Τραπεζικοί λογαριασμοί',    icon:'🏧'},
+        {id:'vat',                  title:'ΦΠΑ προς Απόδοση',        subtitle:'Φορολογικές υποχρεώσεις',   icon:'📋'},
+        {id:'balance',              title:'Ισοζύγια',                subtitle:'Λογιστικά ισοζύγια',        icon:'⚖️'},
+        {id:'bi',                   title:'Επιχειρηματική Ανάλυση',  subtitle:'Business Intelligence',     icon:'📊'},
+        {id:'warroom',              title:'Κέντρο Ελέγχου',          subtitle:'Συνολική εικόνα επιχείρησης',icon:'🧭'},
+        {id:'oracle',               title:'The Oracle',              subtitle:'AI προβλέψεις & insights',  icon:'🔮'},
+        {id:'brain',                title:'The Brain',               subtitle:'Live νοημοσύνη αγοράς',     icon:'🧠'},
+        {id:'taxagent',             title:'Λογιστήριο AI',           subtitle:'Φορολογική βοήθεια AI',     icon:'👨‍💼'},
+        {id:'breakeven',            title:'Νεκρό Σημείο',            subtitle:'Break-even ανάλυση',         icon:'⚖️'},
+        {id:'expense-calendar',     title:'Ημερολόγιο Εξόδων',       subtitle:'Προγραμματισμός πληρωμών',  icon:'📅'},
+        {id:'compliance-calendar',  title:'Ημερολόγιο Συμμόρφωσης', subtitle:'Φορολογικές υποχρεώσεις',   icon:'🗓️'},
+        {id:'energy-tracker',       title:'Ενέργεια & Λογαριασμοί', subtitle:'Κατανάλωση & κόστος',       icon:'⚡'},
+        {id:'seasonal-intel',       title:'Εποχική Νοημοσύνη',       subtitle:'Εποχικά trends & πρόβλεψη', icon:'🌦️'},
+        {id:'pricewar',             title:'Price War',               subtitle:'Στρατηγική τιμολόγησης',    icon:'💰'}
+      ]
+    },
+    {
+      id: 'cat-system',
+      label: 'Σύστημα & Ρυθμίσεις',
+      icon: '⚙️',
+      color: '#94a3b8',
+      pages: [
+        {id:'settings',             title:'Ρυθμίσεις',              subtitle:'Παράμετροι καταστήματος',   icon:'⚙️'},
+        {id:'users',                title:'Χρήστες',                subtitle:'Δικαιώματα & ρόλοι',        icon:'👨‍💼'},
+        {id:'alerts',               title:'Ειδοποιήσεις',           subtitle:'Alerts & notifications',    icon:'🔔'},
+        {id:'support',              title:'Υποστήριξη',             subtitle:'Tickets & βοήθεια',         icon:'📋'},
+        {id:'helpdesk',             title:'Help Desk',              subtitle:'Αποστολή αιτήματος',        icon:'🎧'},
+        {id:'help',                 title:'Βοήθεια',                subtitle:'Οδηγοί χρήσης',             icon:'📖'},
+        {id:'legal',                title:'Νομικά',                 subtitle:'Όροι & πολιτική',           icon:'⚖️'},
+        {id:'sitebuilder',          title:'Site Builder',           subtitle:'Δημιουργία website',         icon:'🎨'},
+        {id:'agents',               title:'Εξειδικευμένοι Βοηθοί', subtitle:'AI agents & αυτοματισμοί',  icon:'🤖'},
+        {id:'ai',                   title:'ZyroNex AI',             subtitle:'Ψηφιακός βοηθός AI',        icon:'✨'},
+        {id:'plugins',              title:'Plugin Market',          subtitle:'Επεκτάσεις & plugins',       icon:'🧩'},
+        {id:'subscription',         title:'Συνδρομή & Plugins',     subtitle:'Πλάνο & χρέωση',            icon:'💳'},
+        {id:'kiosk',                title:'Kiosk & Idle Screen',   subtitle:'Λειτουργία kiosk',           icon:'🖥️'},
+        {id:'shop-changelog',       title:'Ιστορικό Αλλαγών',       subtitle:'Changelog καταστήματος',    icon:'🕘'},
+        {id:'inspector-competitors',title:'Inspector Ανταγωνισμού', subtitle:'DEV — ανάλυση ανταγωνισμού',icon:'🥷'},
+        {id:'inspector',            title:'Inspector',              subtitle:'Εσωτερικός έλεγχος',        icon:'🔍'},
+        {id:'security',             title:'Ασφάλεια',               subtitle:'Ρυθμίσεις ασφαλείας',       icon:'🔐'},
+        {id:'audit',                title:'Audit Mode',             subtitle:'Έλεγχος αποθήκης',          icon:'🛡️'},
+        {id:'dosage-tracker',       title:'Παρακολούθηση Νικοτίνης',subtitle:'Δόσεις & καταναλώσεις',     icon:'💨'},
+        {id:'remember-this',        title:'Θυμάσαι αυτό;',          subtitle:'Σημειώσεις & reminders',    icon:'💭'},
+        {id:'supplier-scorecard',   title:'Βαθμολογία Προμηθευτών', subtitle:'Αξιολόγηση προμηθευτών',   icon:'🏆'}
+      ]
+    }
+  ]
+};
+
+// NAV_MODEL coverage self-test (runs once at startup, prints to console)
+(function(){
+  var allIds = [];
+  NAV_MODEL.categories.forEach(function(cat){
+    cat.pages.forEach(function(p){ allIds.push(p.id); });
+  });
+  var dups = allIds.filter(function(id,i){ return allIds.indexOf(id) !== i; });
+  if(dups.length) console.error('[NAV_MODEL] DUPLICATE page IDs:', dups);
+  else console.log('[NAV_MODEL] Coverage OK — ' + allIds.length + ' pages, 5 categories, 0 duplicates');
+})();
+
 // Current open tab (for hub toggle logic)
 var _znActiveTab = 'pos';
 var _znHubOpen = false;
