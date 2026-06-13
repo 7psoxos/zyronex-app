@@ -16159,6 +16159,12 @@ function showPage(p, _navOpts) {
   // showPage() off our own push/replaceState calls (prevents back-stack corruption).
   window._navInProgress = true;
   if (!(_navOpts && _navOpts.fromBack)) {
+    // Entering ZyroNex Vault via navigation always starts at the category grid,
+    // not a stale deep folder restored from localStorage.
+    if (p === 'vault' && typeof VAULT_STATE !== 'undefined') {
+      VAULT_STATE.path = [];
+      try { localStorage.removeItem('vault_path'); } catch(_){}
+    }
     var _prv = window.CURRENT_PAGE_ID;
     if (_prv && _prv !== p) {
       ZN_NAV_STACK.push(_prv);
@@ -16228,6 +16234,16 @@ window.addEventListener('popstate', function(e){
   if (typeof _settingsSubView !== 'undefined' && _settingsSubView){
     try{ window.history.pushState({}, '', '#settings'); }catch(_){}
     _settingsBackToGrid();
+    return;
+  }
+  // ZyroNex Vault: back/swipe goes UP one folder, not out of the page.
+  // Re-push an entry so the next back press still fires popstate at any depth.
+  var _vpStack = (window._pageHistory && window._pageHistory[window._pageHistory.length-1]) || window.CURRENT_PAGE_ID;
+  if (_vpStack === 'vault' && typeof VAULT_STATE !== 'undefined' && VAULT_STATE.path && VAULT_STATE.path.length > 0){
+    try{ window.history.pushState({}, '', location.hash || '#vault'); }catch(_){}
+    VAULT_STATE.path.pop();
+    try{ localStorage.setItem('vault_path', JSON.stringify(VAULT_STATE.path)); }catch(_){}
+    if(typeof renderVault === 'function') renderVault();
     return;
   }
   // Browser back / swipe → in-app goBack (single source of truth).

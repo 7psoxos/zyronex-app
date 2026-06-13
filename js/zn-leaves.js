@@ -32896,6 +32896,13 @@ function goBack() {
       return;
     }
   }
+  // PRIORITY 2.7: Inside ZyroNex Vault folder → go up one folder, not out of the page
+  if (currentPage === 'vault' && typeof VAULT_STATE !== 'undefined' && VAULT_STATE.path && VAULT_STATE.path.length > 0) {
+    VAULT_STATE.path.pop();
+    try { localStorage.setItem('vault_path', JSON.stringify(VAULT_STATE.path)); } catch(e) {}
+    if (typeof renderVault === 'function') renderVault();
+    return;
+  }
   // PRIORITY 3: Pop the actual previous page from the history stack.
   var h = window._pageHistory || [];
   if (h.length < 2) return;       // at root — nothing to go back to
