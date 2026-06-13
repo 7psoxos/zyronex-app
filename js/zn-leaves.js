@@ -6085,6 +6085,7 @@ function renderLoyalty(){
     +'<button id="loyTab_offers" class="shifts-tab'+(t==='offers'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'offers\')">Προσφορές &amp; Ανταμοιβές</button>'
     +'<button id="loyTab_activity" class="shifts-tab'+(t==='activity'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'activity\')">Δραστηριότητα</button>'
     +'<button id="loyTab_settings" class="shifts-tab'+(t==='settings'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'settings\')">Ρυθμίσεις Προγράμματος</button>'
+    +'<button class="shifts-tab" style="min-height:44px;font-size:14px" onclick="showPage(\'gift-cards\')">🎟️ Δωροκάρτες</button>'
     +'</div>'
     +'<div id="loyBody_overview" style="'+(t!=='overview'?'display:none':'')+'">'
     +'</div>'
@@ -17314,6 +17315,7 @@ function _renderShiftsPageWithTabs(){
         <div class="page-title">Χρήστες & Βάρδιες</div>
         <div class="page-sub">Διαχείριση ωραρίου & υπερωριών</div>
       </div>
+      ${isAdmin ? '<div class="flex gap-2"><button class="btn btn-ghost" onclick="gpsOpenConfig()"><i data-lucide=\"map-pin\" size=\"15\"></i> GPS Clock-in</button></div>' : ''}
     </div>
     <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
       <button onclick="_usersSetTab('users')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:500;background:transparent;color:var(--text-1)">👨‍💼 Χρήστες</button>
@@ -28109,7 +28111,7 @@ function renderCart(){
   var _ageVerifiedCust = false;
   if(window.SELECTED_CUSTOMER_ID){
     var _avc=(typeof CUSTOMERS!=='undefined'?CUSTOMERS:[]).find(function(x){return x.id===window.SELECTED_CUSTOMER_ID;});
-    if(_avc&&_avc.age_verified) _ageVerifiedCust=true;
+    if(_avc&&(_avc.age_verified||_avc.ageVerified)) _ageVerifiedCust=true;
   }
   var ageBtn=document.getElementById('ageVerifyBtn');
   if(ageBtn){
@@ -30617,6 +30619,7 @@ window.getAppSettings = getAppSettings;
 function saveSettings(){
   const $val = (id, def='') => document.getElementById(id)?.value ?? def;
   const $chk = (id, def=false) => document.getElementById(id)?.checked ?? def;
+  const _ex = (typeof getSettings==='function') ? getSettings() : {};
   const settings = {
     shopName: $val('s_shopName'),
     afm: $val('s_afm'),
@@ -30643,16 +30646,20 @@ function saveSettings(){
     monthlyReport: $chk('s_monthlyReport'),
     reportEmail: $val('s_reportEmail'),
     // Accountant
-    accountantEmail: $val('s_accountantEmail'),
-    accountantName: $val('s_accountantName'),
-    accountantFromEmail: $val('s_accountantFromEmail'),
-    accSendSales: $chk('s_accSendSales', true),
-    accSendShifts: $chk('s_accSendShifts', true),
-    accSendCashbook: $chk('s_accSendCashbook'),
-    accSendPurchases: $chk('s_accSendPurchases'),
-    accFmtPdf: $chk('s_accFmtPdf', true),
-    accFmtCsv: $chk('s_accFmtCsv', true),
-    accAutoSend: $chk('s_accAutoSend'),
+    // Accountant (edited in Finance → Λογιστήριο; preserve here so a general save won't blank them)
+    accountantEmail: $val('s_accountantEmail', _ex.accountantEmail||''),
+    accountantName: $val('s_accountantName', _ex.accountantName||''),
+    accountantFromEmail: $val('s_accountantFromEmail', _ex.accountantFromEmail||''),
+    accSendSales: $chk('s_accSendSales', _ex.accSendSales!==false),
+    accSendShifts: $chk('s_accSendShifts', _ex.accSendShifts!==false),
+    accSendCashbook: $chk('s_accSendCashbook', !!_ex.accSendCashbook),
+    accSendPurchases: $chk('s_accSendPurchases', !!_ex.accSendPurchases),
+    accPlatEfood: $chk('s_accPlatEfood', !!_ex.accPlatEfood),
+    accPlatWolt: $chk('s_accPlatWolt', !!_ex.accPlatWolt),
+    accPlatSkroutz: $chk('s_accPlatSkroutz', !!_ex.accPlatSkroutz),
+    accFmtPdf: $chk('s_accFmtPdf', _ex.accFmtPdf!==false),
+    accFmtCsv: $chk('s_accFmtCsv', _ex.accFmtCsv!==false),
+    accAutoSend: $chk('s_accAutoSend', !!_ex.accAutoSend),
     // AADE myDATA
     aadeCompany: $val('s_aadeCompany'),
     aadeVat: $val('s_aadeVat'),
@@ -30862,8 +30869,6 @@ var _settingsCategories = [
   { id:'payments',    icon:'💳', label:'Πληρωμές',           desc:'Μέθοδοι, split, gift cards',                color:'#34d399' },
   { id:'users',       icon:'👥', label:'Χρήστες & Ρόλοι',   desc:'Χρήστες, δικαιώματα, PIN',                  color:'#f59e0b' },
   { id:'notifications',icon:'🔔',label:'Ειδοποιήσεις',       desc:'Email reports, WhatsApp, alerts',            color:'#818cf8' },
-  { id:'age',         icon:'🔞', label:'Ηλικία & Compliance',desc:'Age verification, TPD, mandatory mode',      color:'#e74c3c' },
-  { id:'gps',         icon:'📍', label:'GPS & Βάρδιες',      desc:'GPS clock-in, ακτίνα, notify',              color:'#2ecc71' },
   { id:'programs',    icon:'🎁', label:'Προγράμματα',        desc:'Gift cards, ΔΥΠΑ, loyalty',                  color:'#f39c12' },
   { id:'exchange',    icon:'🔄', label:'ZyroNex Exchange',   desc:'Προφίλ B2B, ΑΦΜ, δίκτυο',                  color:'#818cf8' },
   { id:'email',       icon:'📧', label:'Email & Reports',    desc:'Resend API, αυτόματα reports',               color:'#60a5fa' },
@@ -30878,8 +30883,6 @@ var _settingsSections = {
   payments:     ['💳','split','gift','Gift Card','payment','πληρωμ'],
   users:        ['👥','χρήστ','user','PIN','ρόλ'],
   notifications:['🔔','ειδοποίηση','email report','WhatsApp','notification','Αποστολή'],
-  age:          ['🔞','ηλικ','age','Age Verif'],
-  gps:          ['📍','GPS','gps','βάρδι','clock'],
   programs:     ['🎁','ΔΥΠΑ','loyalty','πρόγραμμα'],
   exchange:     ['🔄','Exchange','B2B','exchange'],
   email:        ['📧','Resend','email','Email'],
