@@ -2578,6 +2578,83 @@ if(window.navigator && window.navigator.share){
   html.zn-light .bl-logo-dark{display:none !important;}
   html.zn-light .bl-logo-light{display:block !important;margin-left:auto;margin-right:auto;}
   @keyframes blFill{from{stroke-dashoffset:201}to{stroke-dashoffset:34}}
+  /* ── Desktop floating back button ── */
+  @media(min-width:901px){
+    #floatingBackBtn{
+      position:fixed;
+      top:calc(max(14px,env(safe-area-inset-top,0px)) + 56px + 8px);
+      left:calc(240px + 16px);
+      z-index:40;
+      min-width:44px;min-height:44px;
+      width:44px;height:44px;
+      padding:0;
+      border-radius:10px;
+      background:var(--bg-2);
+      border:1px solid var(--border);
+      color:var(--text-0);
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 2px 8px rgba(0,0,0,.25);
+      transition:background 0.15s,border-color 0.15s;
+    }
+    #floatingBackBtn:hover{background:var(--bg-3);border-color:var(--border-strong);}
+    .app.sidebar-collapsed #floatingBackBtn{left:calc(56px + 16px);}
+  }
+  /* Never show floating back button on mobile */
+  @media(max-width:900px){
+    #floatingBackBtn{display:none !important}
+  }
+  /* ── Part 3: Desktop sidebar hub categories ── */
+  @media(min-width:901px){
+    /* Hide the flat nav-sections + nav-groups; show the hub category nav instead */
+    .sidebar .nav-section,.sidebar .nav-group{display:none !important;}
+    #znDesktopHubNav{display:flex;flex-direction:column;gap:2px;padding:8px 8px;flex:1;overflow-y:auto;min-height:0;}
+  }
+  @media(max-width:900px){
+    #znDesktopHubNav{display:none !important;}
+  }
+  /* Hub category button — desktop only */
+  .zn-dsk-hub-btn{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 14px 10px 12px;
+    border-radius:10px;border:1px solid transparent;
+    background:transparent;
+    color:var(--text-1);
+    cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;
+    text-align:left;min-height:44px;width:100%;
+    -webkit-tap-highlight-color:transparent;
+    transition:background 0.12s,color 0.12s,border-color 0.12s;
+    -webkit-appearance:none;
+  }
+  .zn-dsk-hub-btn:hover{background:rgba(255,255,255,0.06);color:var(--text-0);}
+  .zn-dsk-hub-btn.active{background:rgba(0,212,168,0.12);color:var(--accent);border-color:rgba(0,212,168,0.2);}
+  .zn-dsk-hub-icon{font-size:20px;line-height:1;flex-shrink:0;width:24px;text-align:center;}
+  .zn-dsk-hub-label{flex:1;}
+  .zn-dsk-hub-arrow{opacity:0.35;flex-shrink:0;transition:opacity 0.12s;}
+  .zn-dsk-hub-btn.active .zn-dsk-hub-arrow{opacity:0.75;}
+  /* Hub page wrapper rendered in #content (mobile fallback — desktop overridden below) */
+  .zn-hub-page-wrap{padding:20px 16px 24px;}
+  .zn-hub-page-header{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .zn-hub-page-icon{font-size:36px;line-height:1;}
+  .zn-hub-page-title{font-size:20px;font-weight:800;margin-bottom:2px;}
+  .zn-hub-page-sub{font-size:12px;color:var(--text-2);}
+  /* ── FlowCore desktop tile restyle (≥901px only) ── */
+  @media(min-width:901px){
+    #znDesktopHubNav .zn-dsk-hub-btn{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:11px;font-size:14.5px;color:#aeb8d4;background:transparent;border:0;width:100%;text-align:left;cursor:pointer}
+    #znDesktopHubNav .zn-dsk-hub-btn.active{background:#1d2a52;color:#fff;font-weight:700}
+    .zn-hub-page-wrap{padding:24px 26px;background:radial-gradient(1200px 500px at 70% -10%,#2a1f55,#0f1530);min-height:100%}
+    .zn-hub-page-header{background:linear-gradient(90deg,#7b2ff7,#e1306c);color:#fff;font-size:21px;font-weight:800;padding:16px 22px;border-radius:14px;margin-bottom:20px}
+    .zn-hub-page-wrap .zn-hub-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+    .zn-hub-page-wrap .zn-hub-card{position:relative;background:#f4f5fb;color:#1a1a2e;border-radius:17px;padding:20px 16px;min-height:140px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 8px 22px rgba(0,0,0,.25);cursor:pointer;transition:transform .12s,box-shadow .12s}
+    .zn-hub-page-wrap .zn-hub-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.32)}
+    .zn-hub-page-wrap .zhn-ic{font-size:36px;margin-bottom:10px}
+    .zn-hub-page-wrap .zhn-tt{font-size:15.5px;font-weight:800}
+    .zn-hub-page-wrap .zhn-ts{font-size:12px;color:#5a6276;margin-top:3px}
+    .zn-hub-page-wrap .zhn-new{position:absolute;top:11px;right:11px;background:#22c55e;color:#fff;font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:20px}
+    .zn-hub-page-wrap .zhn-hot{position:absolute;top:13px;right:13px;color:#ef4444;font-size:11px}
+  }
 </style>
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
@@ -2670,8 +2747,10 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-group" id="nav-leitourgia">
   <div class="nav-item active" data-page="dashboard"><i data-lucide="layout-dashboard" size="18"></i> Αρχική</div>
   <div class="nav-item" data-page="pos"><i data-lucide="scan-line" size="18"></i> Ταμείο / Πωλήσεις</div>
+  <div class="nav-item" data-page="exchange"><i data-lucide="arrow-left-right" size="18"></i> 🔄 ZyroNex Exchange</div>
   <div class="nav-item" data-page="inventory"><i data-lucide="boxes" size="18"></i> Αποθήκη <span class="badge-alert" id="invAlert">0</span></div>
   <div class="nav-item" data-page="customers"><i data-lucide="users" size="18"></i> Πελάτες</div>
+  <div class="nav-item" data-page="loyalty"><i data-lucide="gift" size="18"></i> 🎁 Loyalty</div>
   <div class="nav-item" data-page="shipments"><i data-lucide="package" size="18"></i> Αποστολές</div>
   <div class="nav-item" data-page="suppliers"><i data-lucide="truck" size="18"></i> Προμηθευτές</div>
   <div class="nav-item" data-page="purchases"><i data-lucide="shopping-cart" size="18"></i> Αγορές</div>
@@ -2681,6 +2760,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item" data-page="shifts"><i data-lucide="clock" size="18"></i> Βάρδιες</div>
   <div class="nav-item" data-page="waste"><i data-lucide="trash-2" size="18"></i> Απομειώσεις</div>
   <div class="nav-item" data-page="batches"><i data-lucide="layers" size="18"></i> Παρτίδες</div>
+  <div class="nav-item" data-page="dead-stock"><i data-lucide="skull" size="18"></i> 💀 Dead Stock</div>
   <div class="nav-item" data-page="competitors"><i data-lucide="eye" size="18"></i> Ανταγωνισμός</div>
   <div class="nav-item" data-page="hardware"><i data-lucide="cpu" size="18"></i> Hardware</div>
   </div>
@@ -2691,6 +2771,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item" data-page="banking"><i data-lucide="landmark" size="18"></i> Τράπεζες</div>
   <div class="nav-item" data-page="expense-calendar"><i data-lucide="calendar-clock" size="18"></i> 📅 Ημερολόγιο Εξόδων <span class="badge-alert" id="expCalBadge" style="display:none">0</span></div>
   <div class="nav-item" data-page="compliance-calendar"><i data-lucide="calendar-check" size="18"></i> 🗓️ Ημερολόγιο Συμμόρφωσης <span class="badge-alert" id="complianceCalBadge" style="display:none">0</span></div>
+  <div class="nav-item" data-page="taxagent"><i data-lucide="bot" size="18"></i> 👨‍💼 Λογιστήριο AI</div>
   <div class="nav-item" data-page="breakeven"><i data-lucide="scale" size="18"></i> ⚖️ Νεκρό Σημείο</div>
   <div class="nav-item" data-page="reports"><i data-lucide="bar-chart-3" size="18"></i> Στατιστικά</div>
   <div class="nav-item" data-page="vat"><i data-lucide="receipt" size="18"></i> ΦΠΑ προς Απόδοση</div>
@@ -2723,6 +2804,9 @@ window.onerror = function(msg, src, line, col, err) {
 
   <div class="nav-section" onclick="toggleNavSection(this)" data-section="systima"><span>ΣΥΣΤΗΜΑ</span><div style="display:flex;align-items:center;gap:4px"><button onclick="openSectionHelp('systima',event)" title="Οδηγός ενότητας" style="background:none;border:none;cursor:pointer;color:var(--text-2);padding:2px 4px;border-radius:4px;font-size:13px;line-height:1;min-width:22px;min-height:22px;display:flex;align-items:center;justify-content:center" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-2)'">❓</button><div class="nav-section-arrow"><svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div></div></div>
   <div class="nav-group" id="nav-systima">
+  <div class="nav-item" data-page="kiosk"><i data-lucide="monitor" size="18"></i> 🖥️ Kiosk &amp; Idle Screen</div>
+  <div class="nav-item" data-page="plugins"><i data-lucide="puzzle" size="18"></i> 🧩 Plugin Market</div>
+  <div class="nav-item" data-page="agents"><i data-lucide="bot" size="18"></i> 🤖 Εξειδικευμένοι Βοηθοί</div>
   <div class="nav-item" data-page="users"><i data-lucide="user-cog" size="18"></i> Χρήστες / Δικαιώματα</div>
   <div class="nav-item" data-page="shifts"><i data-lucide="clock" size="18"></i> Βάρδιες</div>
   <div class="nav-item" data-page="data-cleanup"><i data-lucide="sparkles" size="18"></i> Data Cleanup <span class="badge-alert" id="cleanupBadge" style="display:none">0</span></div>
@@ -2749,7 +2833,7 @@ window.onerror = function(msg, src, line, col, err) {
 <main class="main">
   <div class="topbar">
     <button class="hamburger" onclick="toggleSidebar()"><i data-lucide="menu" size="20"></i></button>
-    <button id="floatingBackBtn" onclick="goBack()" title="Πίσω" style="display:none"></button>
+    <button id="floatingBackBtn" onclick="goBack()" title="Πίσω" style="display:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
     <!-- Logo — shown on dashboard only, replaces search -->
     <div id="topbarLogo" style="display:none;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer" onclick="showPage('dashboard')">
       <img id="topbarLogoImg" src="" alt="" style="height:36px;width:auto;max-width:120px;object-fit:contain;border-radius:6px;display:none">
@@ -16219,23 +16303,15 @@ function znHubForPage(id){
 }
 
 // NAV CONTRACT — DO NOT BREAK:
-// History is captured ONLY at the top of _showPageInternal (the single render chokepoint).
-// znGoBack closes the current page and re-opens its section hub menu (znHubForPage -> open panel),
-// falling back to dashboard only if no hub. Never move capture elsewhere; never make X hardcode dashboard.
+// znGoBack (X button on sub-pages) re-opens the hub panel for the current page's section,
+// falling back to goBack() if no hub exists. Never call showPage('dashboard') here —
+// that would push a phantom dashboard entry into _pageHistory.
 window.znGoBack = function(){
-  var cur = window._znCurView;
-  var hub = (typeof znHubForPage==='function') ? znHubForPage(cur) : null;
-  if(typeof window.znDiagUpdate==='function') window.znDiagUpdate('X -> section menu: ' + (hub || 'dashboard-fallback'));
-  if(hub){
-    if(typeof showPage==='function') showPage('dashboard');
-    setTimeout(function(){
-      var _bd=document.getElementById('znHubBackdrop');
-      if(_bd) _bd.classList.add('zn-menu-opaque');
-      if(typeof znHubOpen==='function') znHubOpen(hub);
-      if(typeof znSyncTabBar==='function') znSyncTabBar(null, hub);
-    }, 0);
-  } else if(typeof showPage==='function'){
-    showPage('dashboard');
+  var hub = (typeof znHubForPage === 'function') ? znHubForPage(window._znCurView) : null;
+  if (hub) {
+    if (typeof znHubOpen === 'function') znHubOpen(hub);
+  } else {
+    if (typeof goBack === 'function') goBack();
   }
 };
 
@@ -16266,7 +16342,8 @@ window.znDiagUpdate = function(extra){
 };
 
 // Pages where X should be hidden: tab home pages + dashboard
-var _PRIMARY_PAGES = ['dashboard', 'pos', 'inventory', 'customers', 'reports', 'settings', 'sitebuilder'];
+var _PRIMARY_PAGES = ['dashboard', 'pos', 'inventory', 'customers', 'reports', 'settings', 'sitebuilder',
+  'hub-pos', 'hub-inventory', 'hub-customers', 'hub-finance', 'hub-system'];
 
 function _updatePageCloseBtn(p){
   try {
@@ -16345,6 +16422,8 @@ function _showPageInternal(p){
   document.querySelectorAll('.nav-item[data-page]').forEach(n=>{
     n.classList.toggle('active',n.dataset.page===p);
   });
+  // Sync desktop hub sidebar active state
+  if(typeof _updateDesktopHubActive === 'function') _updateDesktopHubActive(p);
   const renderers={dashboard:renderDashboard,security:renderSecurity,pos:renderPOS,inventory:renderInventory,
     customers:renderCustomers,suppliers:renderSuppliers,cashbook:renderCashbook,reports:renderReports,
     vat:renderVAT,bi:renderBI,shipments:renderShipments,purchases:renderPurchases,shifts:renderShifts,competitors:renderCompetitors,waste:renderWaste,batches:renderBatches,hardware:renderHardware,warroom:renderWarRoom,kiosk:function(){renderKiosk('settings')},oracle:renderOracle,brain:renderBrain,
@@ -16373,7 +16452,12 @@ function _showPageInternal(p){
     'compliance-calendar':renderComplianceCalendar,
     breakeven:renderBreakeven,
     plugins:renderPluginMarket,
-    subscription:renderSubscription};
+    subscription:renderSubscription,
+    'hub-pos':function(){znRenderHubContent('pos');},
+    'hub-inventory':function(){znRenderHubContent('inventory');},
+    'hub-customers':function(){znRenderHubContent('customers');},
+    'hub-finance':function(){znRenderHubContent('finance');},
+    'hub-system':function(){znRenderHubContent('system');}};
   try {
     (renderers[p]||renderDashboard)();
   } catch(renderErr) {
@@ -25730,6 +25814,9 @@ var ZN_PAGE_TO_TAB = {
   'dosage-tracker':'system', 'remember-this':'system',
   'supplier-scorecard':'system', 'shop-changelog':'system',
   'age-log':'system', 'seasonal-intel':'system',
+  // Hub pages (desktop sidebar categories rendered as tile pages)
+  'hub-pos':'pos', 'hub-inventory':'inventory', 'hub-customers':'customers',
+  'hub-finance':'finance', 'hub-system':'system',
 };
 
 // Hub definitions — pages shown in hub panel per tab
@@ -25739,6 +25826,8 @@ var ZN_HUBS = {
     pages:[
       {icon:'🏠', label:'Dashboard', page:'dashboard', hot:true},
       {icon:'🛒', label:'Ταμείο', page:'pos', hot:true},
+      {icon:'🕒', label:'Βάρδιες', page:'shifts'},
+      {icon:'🎟️', label:'Δωροκάρτες', page:'gift-cards'},
       {icon:'📦', label:'Wolt / efood / Skroutz', page:'online-orders'},
       {icon:'🔄', label:'ZyroNex Exchange', page:'exchange', hot:true},
       {icon:'📋', label:'Αποστολές', page:'shipments'},
@@ -25781,6 +25870,8 @@ var ZN_HUBS = {
       {icon:'🗓️', label:'Ημερολόγιο Συμμόρφωσης', page:'compliance-calendar'},
       {icon:'⚖️', label:'Νεκρό Σημείο', page:'breakeven'},
       {icon:'👨‍💼', label:'Λογιστήριο AI', page:'taxagent', hot:true},
+      {icon:'🧾', label:'ΦΠΑ & myDATA', page:'vat', hot:true},
+      {icon:'🏛️', label:'ΔΥΠΑ / ΕΡΓΑΝΗ', page:'dypa'},
       {icon:'⚖️', label:'Ισοζύγια', page:'balance'},
       {icon:'📊', label:'Επιχειρηματική Ανάλυση', page:'bi', plan:'pro'},
       {icon:'🧭', label:'Συνολική Εικόνα', page:'warroom', hot:true},
@@ -25817,6 +25908,16 @@ var ZN_HUBS = {
       {icon:'⚖️', label:'Νομικά', page:'legal'},
     ]
   }
+};
+
+// ── Hub tile badge / subtitle lookup tables ──────────────────────────────────
+var ZN_TILE_NEW = {vat:1, dypa:1, shifts:1, 'gift-cards':1};
+var ZN_TILE_DESC = {
+  dashboard:'Κεντρικός πίνακας', pos:'POS & εκδόσεις', shifts:'Έλεγχος βαρδιών', 'gift-cards':'Έκδοση & εξαργύρωση', 'online-orders':'Online παραγγελίες', exchange:'Ανταλλαγές προϊόντων', shipments:'Διαχείριση αποστολών', documents:'Παραστατικά & αρχεία',
+  inventory:'Προϊόντα & στοκ', suppliers:'Διαχείριση προμηθευτών', purchases:'Παραγγελίες & παραλαβές', waste:'Καταστροφές & waste', batches:'Lot & λήξεις', hardware:'Συσκευές & εξοπλισμός', 'dead-stock':'Ακίνητο απόθεμα', compliance:'Κανονιστική TPD', 'data-cleanup':'Καθαρισμός δεδομένων',
+  customers:'Καρτέλες πελατών', loyalty:'Πόντοι & ανταμοιβές', 'customer-intel':'Segmentation & insights', campaigns:'Marketing automation', pulse:'Έξυπνες προσφορές', mixology:'Συνταγές αναμείξεων',
+  reports:'Πωλήσεις & απόδοση', cashbook:'Άνοιγμα/κλείσιμο', banking:'Συμφωνία λογαριασμών', 'expense-calendar':'Πάγια & έξοδα', 'compliance-calendar':'Προθεσμίες', breakeven:'Break-even ανάλυση', taxagent:'Αυτόματη λογιστική', vat:'Δηλώσεις & ΑΑΔΕ', dypa:'Μισθοδοσία & δηλώσεις', balance:'Λογιστικά ισοζύγια', bi:'BI & insights', warroom:'War Room', 'energy-tracker':'ΔΕΗ & πάγια',
+  kiosk:'Οθόνη πελάτη', plugins:'Πρόσθετα', sitebuilder:'Κατασκευή site', vault:'Διαχείριση αρχείων', users:'Προσωπικό & βάρδιες', alerts:'Ειδοποιήσεις', oracle:'AI σύμβουλος', brain:'AI μνήμη', 'seasonal-intel':'Σεζόν & καιρός', 'supplier-scorecard':'Scorecards', 'remember-this':'Υπενθυμίσεις', 'dosage-tracker':'Δοσολογία νικοτίνης', pricewar:'Ανταγωνισμός τιμών', ai:'AI εργαλεία', agents:'AI agents', competitors:'Παρακολούθηση', helpdesk:'Γνωσιακή βάση', 'shop-changelog':'Ιστορικό αλλαγών', 'age-log':'Μητρώο ηλικίας', settings:'Ρυθμίσεις', subscription:'Συνδρομή & billing', help:'Βοήθεια', support:'Υποστήριξη', legal:'Όροι & GDPR'
 };
 
 // Current open tab (for hub toggle logic)
@@ -25926,6 +26027,110 @@ function znHubNavigate(page){
   showPage(page);
   znHubClose(true); // instant close, no animation lag
 }
+
+// ── znRenderHubContent: render hub tiles as a full page in #content (desktop) ──
+function znRenderHubContent(hubId){
+  var hub = (typeof ZN_HUBS !== 'undefined') ? ZN_HUBS[hubId] : null;
+  var c = document.getElementById('content');
+  if(!hub || !c){ if(c) c.innerHTML = ''; return; }
+  var isDev = (typeof isDeveloperOwner === 'function' && isDeveloperOwner());
+  var isAdmin = isDev || (typeof CURRENT_USER !== 'undefined' && CURRENT_USER && (CURRENT_USER.perms||[]).includes('*'));
+  var plan = (typeof getCurrentPlan === 'function') ? getCurrentPlan() : 'pro';
+  var isOwner = (typeof _isOwnerBypass === 'function') ? _isOwnerBypass() : isAdmin;
+  var visiblePages = hub.pages.filter(function(p){
+    var need = (typeof PAGE_PERMS !== 'undefined') ? PAGE_PERMS[p.page] : null;
+    if(!isAdmin && need && typeof can === 'function' && !can(need)) return false;
+    if(p.page === 'inspector-competitors' && !isDev) return false;
+    if(p.plugin && typeof isPluginActive === 'function' && !isPluginActive(p.plugin)) return false;
+    return true;
+  });
+  var tilesHtml = visiblePages.map(function(p){
+    var isPlanLocked = !isOwner && plan === 'basic' && p.plan === 'pro';
+    var cardClass = 'zn-hub-card' + (p.hot ? ' hot' : '') + (isPlanLocked ? ' plan-locked' : '');
+    var oc = isPlanLocked ? '' : 'onclick="showPage(\'' + p.page + '\')"';
+    var badge = (typeof ZN_TILE_NEW !== 'undefined' && ZN_TILE_NEW[p.page])
+      ? '<span class="zhn-new">ΝΕΟ</span>'
+      : (p.hot ? '<span class="zhn-hot">●</span>' : '');
+    var desc = (typeof ZN_TILE_DESC !== 'undefined' && ZN_TILE_DESC[p.page]) || '';
+    var iconHtml = (p.img === 'robot' && typeof ZN_ROBOT_IMG !== 'undefined')
+      ? '<img src="' + ZN_ROBOT_IMG + '" alt="" style="height:36px;width:auto;vertical-align:middle;filter:drop-shadow(0 0 5px rgba(0,212,168,0.45))">'
+      : p.icon;
+    var inner = badge
+      + '<div class="zhn-ic">' + iconHtml + '</div>'
+      + '<div class="zhn-tt">' + p.label + '</div>'
+      + (desc ? '<div class="zhn-ts">' + desc + '</div>' : '');
+    return '<div class="' + cardClass + '" ' + oc + ' data-page="' + p.page + '" title="' + p.label + '">' + inner + '</div>';
+  }).join('');
+  c.innerHTML = '<div class="zn-hub-page-wrap">'
+    + '<div class="zn-hub-page-header">' + hub.label + '</div>'
+    + '<div class="zn-hub-grid">' + tilesHtml + '</div>'
+    + '</div>';
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ── Desktop sidebar: build hub category nav (desktop ≥901px only) ──
+function _updateDesktopHubActive(page){
+  var nav = document.getElementById('znDesktopHubNav');
+  if(!nav) return;
+  var tabId = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? (ZN_PAGE_TO_TAB[page] || null) : null;
+  // For hub pages like 'hub-pos', ZN_PAGE_TO_TAB returns 'pos'; button data-hub is 'pos'
+  // For regular pages like 'cashbook', ZN_PAGE_TO_TAB returns 'finance'
+  var hubId = tabId;
+  // If page itself IS a hub page (hub-pos → show 'pos' active)
+  if(page && page.indexOf('hub-') === 0) hubId = page.replace('hub-','');
+  nav.querySelectorAll('.zn-dsk-hub-btn').forEach(function(btn){
+    btn.classList.toggle('active', btn.dataset.hub === hubId);
+  });
+  // Dashboard nav-item active state
+  var dash = nav.querySelector('.nav-item[data-page="dashboard"]');
+  if(dash) dash.classList.toggle('active', page === 'dashboard');
+}
+
+(function(){
+  function _buildDesktopHubSidebar(){
+    if(document.getElementById('znDesktopHubNav')) return;
+    var sidebar = document.getElementById('sidebar') || document.querySelector('.sidebar');
+    if(!sidebar) return;
+
+    var nav = document.createElement('div');
+    nav.id = 'znDesktopHubNav';
+
+    // Dashboard shortcut (reuses existing nav-item CSS)
+    var dash = document.createElement('div');
+    dash.className = 'nav-item';
+    dash.dataset.page = 'dashboard';
+    dash.setAttribute('onclick', "showPage('dashboard')");
+    dash.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Αρχική';
+    nav.appendChild(dash);
+
+    // Hub category buttons
+    var hubs = typeof ZN_HUBS !== 'undefined' ? ZN_HUBS : {};
+    var hubOrder = ['pos','inventory','customers','finance','system'];
+    hubOrder.forEach(function(hid){
+      var h = hubs[hid];
+      if(!h) return;
+      var btn = document.createElement('button');
+      btn.className = 'zn-dsk-hub-btn';
+      btn.dataset.hub = hid;
+      btn.setAttribute('onclick', "showPage('hub-" + hid + "')");
+      btn.innerHTML = '<span class="zn-dsk-hub-icon">' + h.icon + '</span>'
+        + '<span class="zn-dsk-hub-label">' + h.label + '</span>'
+        + '<svg class="zn-dsk-hub-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>';
+      nav.appendChild(btn);
+    });
+
+    // Insert before first nav-section (or append)
+    var firstSection = sidebar.querySelector('.nav-section');
+    if(firstSection) sidebar.insertBefore(nav, firstSection);
+    else sidebar.appendChild(nav);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', _buildDesktopHubSidebar);
+  } else {
+    _buildDesktopHubSidebar();
+  }
+})();
 
 // Called by showPage() to keep tab bar in sync.
 // SINGLE SOURCE OF TRUTH: the active tab is DERIVED from the current page,
