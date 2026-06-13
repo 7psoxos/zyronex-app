@@ -2606,6 +2606,40 @@ if(window.navigator && window.navigator.share){
   @media(max-width:900px){
     #floatingBackBtn{display:none !important}
   }
+  /* ── Part 3: Desktop sidebar hub categories ── */
+  @media(min-width:901px){
+    /* Hide the flat nav-sections + nav-groups; show the hub category nav instead */
+    .sidebar .nav-section,.sidebar .nav-group{display:none !important;}
+    #znDesktopHubNav{display:flex;flex-direction:column;gap:2px;padding:8px 8px;flex:1;overflow-y:auto;min-height:0;}
+  }
+  @media(max-width:900px){
+    #znDesktopHubNav{display:none !important;}
+  }
+  /* Hub category button — desktop only */
+  .zn-dsk-hub-btn{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 14px 10px 12px;
+    border-radius:10px;border:1px solid transparent;
+    background:transparent;
+    color:var(--text-1);
+    cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;
+    text-align:left;min-height:44px;width:100%;
+    -webkit-tap-highlight-color:transparent;
+    transition:background 0.12s,color 0.12s,border-color 0.12s;
+    -webkit-appearance:none;
+  }
+  .zn-dsk-hub-btn:hover{background:rgba(255,255,255,0.06);color:var(--text-0);}
+  .zn-dsk-hub-btn.active{background:rgba(0,212,168,0.12);color:var(--accent);border-color:rgba(0,212,168,0.2);}
+  .zn-dsk-hub-icon{font-size:20px;line-height:1;flex-shrink:0;width:24px;text-align:center;}
+  .zn-dsk-hub-label{flex:1;}
+  .zn-dsk-hub-arrow{opacity:0.35;flex-shrink:0;transition:opacity 0.12s;}
+  .zn-dsk-hub-btn.active .zn-dsk-hub-arrow{opacity:0.75;}
+  /* Hub page wrapper rendered in #content */
+  .zn-hub-page-wrap{padding:20px 16px 24px;}
+  .zn-hub-page-header{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .zn-hub-page-icon{font-size:36px;line-height:1;}
+  .zn-hub-page-title{font-size:20px;font-weight:800;margin-bottom:2px;}
+  .zn-hub-page-sub{font-size:12px;color:var(--text-2);}
 </style>
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
@@ -16293,7 +16327,8 @@ window.znDiagUpdate = function(extra){
 };
 
 // Pages where X should be hidden: tab home pages + dashboard
-var _PRIMARY_PAGES = ['dashboard', 'pos', 'inventory', 'customers', 'reports', 'settings', 'sitebuilder'];
+var _PRIMARY_PAGES = ['dashboard', 'pos', 'inventory', 'customers', 'reports', 'settings', 'sitebuilder',
+  'hub-pos', 'hub-inventory', 'hub-customers', 'hub-finance', 'hub-system'];
 
 function _updatePageCloseBtn(p){
   try {
@@ -16372,6 +16407,8 @@ function _showPageInternal(p){
   document.querySelectorAll('.nav-item[data-page]').forEach(n=>{
     n.classList.toggle('active',n.dataset.page===p);
   });
+  // Sync desktop hub sidebar active state
+  if(typeof _updateDesktopHubActive === 'function') _updateDesktopHubActive(p);
   const renderers={dashboard:renderDashboard,security:renderSecurity,pos:renderPOS,inventory:renderInventory,
     customers:renderCustomers,suppliers:renderSuppliers,cashbook:renderCashbook,reports:renderReports,
     vat:renderVAT,bi:renderBI,shipments:renderShipments,purchases:renderPurchases,shifts:renderShifts,competitors:renderCompetitors,waste:renderWaste,batches:renderBatches,hardware:renderHardware,warroom:renderWarRoom,kiosk:function(){renderKiosk('settings')},oracle:renderOracle,brain:renderBrain,
@@ -16400,7 +16437,12 @@ function _showPageInternal(p){
     'compliance-calendar':renderComplianceCalendar,
     breakeven:renderBreakeven,
     plugins:renderPluginMarket,
-    subscription:renderSubscription};
+    subscription:renderSubscription,
+    'hub-pos':function(){znRenderHubContent('pos');},
+    'hub-inventory':function(){znRenderHubContent('inventory');},
+    'hub-customers':function(){znRenderHubContent('customers');},
+    'hub-finance':function(){znRenderHubContent('finance');},
+    'hub-system':function(){znRenderHubContent('system');}};
   try {
     (renderers[p]||renderDashboard)();
   } catch(renderErr) {
@@ -25757,6 +25799,9 @@ var ZN_PAGE_TO_TAB = {
   'dosage-tracker':'system', 'remember-this':'system',
   'supplier-scorecard':'system', 'shop-changelog':'system',
   'age-log':'system', 'seasonal-intel':'system',
+  // Hub pages (desktop sidebar categories rendered as tile pages)
+  'hub-pos':'pos', 'hub-inventory':'inventory', 'hub-customers':'customers',
+  'hub-finance':'finance', 'hub-system':'system',
 };
 
 // Hub definitions — pages shown in hub panel per tab
@@ -25953,6 +25998,108 @@ function znHubNavigate(page){
   showPage(page);
   znHubClose(true); // instant close, no animation lag
 }
+
+// ── znRenderHubContent: render hub tiles as a full page in #content (desktop) ──
+function znRenderHubContent(hubId){
+  var hub = (typeof ZN_HUBS !== 'undefined') ? ZN_HUBS[hubId] : null;
+  var c = document.getElementById('content');
+  if(!hub || !c){ if(c) c.innerHTML = ''; return; }
+  var isDev = (typeof isDeveloperOwner === 'function' && isDeveloperOwner());
+  var isAdmin = isDev || (typeof CURRENT_USER !== 'undefined' && CURRENT_USER && (CURRENT_USER.perms||[]).includes('*'));
+  var plan = (typeof getCurrentPlan === 'function') ? getCurrentPlan() : 'pro';
+  var isOwner = (typeof _isOwnerBypass === 'function') ? _isOwnerBypass() : isAdmin;
+  var visiblePages = hub.pages.filter(function(p){
+    var need = (typeof PAGE_PERMS !== 'undefined') ? PAGE_PERMS[p.page] : null;
+    if(!isAdmin && need && typeof can === 'function' && !can(need)) return false;
+    if(p.page === 'inspector-competitors' && !isDev) return false;
+    if(p.plugin && typeof isPluginActive === 'function' && !isPluginActive(p.plugin)) return false;
+    return true;
+  });
+  var tilesHtml = visiblePages.map(function(p){
+    var isPlanLocked = !isOwner && plan === 'basic' && p.plan === 'pro';
+    var cardClass = 'zn-hub-card' + (p.hot ? ' hot' : '') + (isPlanLocked ? ' plan-locked' : '');
+    var oc = isPlanLocked ? '' : 'onclick="showPage(\'' + p.page + '\')"';
+    return '<div class="' + cardClass + '" ' + oc + ' title="' + p.label + '">'
+      + '<span class="zn-hub-card-icon">'
+      + (p.img === 'robot' && typeof ZN_ROBOT_IMG !== 'undefined'
+          ? '<img src="' + ZN_ROBOT_IMG + '" alt="" style="height:26px;width:auto;vertical-align:middle;filter:drop-shadow(0 0 5px rgba(0,212,168,0.45))">'
+          : p.icon)
+      + '</span><span class="zn-hub-card-label">' + p.label + '</span></div>';
+  }).join('');
+  c.innerHTML = '<div class="zn-hub-page-wrap">'
+    + '<div class="zn-hub-page-header">'
+    + '<span class="zn-hub-page-icon">' + hub.icon + '</span>'
+    + '<div><div class="zn-hub-page-title" style="color:' + hub.color + '">' + hub.label + '</div>'
+    + '<div class="zn-hub-page-sub">' + visiblePages.length + ' λειτουργίες</div></div>'
+    + '</div>'
+    + '<div class="zn-hub-grid">' + tilesHtml + '</div>'
+    + '</div>';
+  if(typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ── Desktop sidebar: build hub category nav (desktop ≥901px only) ──
+function _updateDesktopHubActive(page){
+  var nav = document.getElementById('znDesktopHubNav');
+  if(!nav) return;
+  var tabId = (typeof ZN_PAGE_TO_TAB !== 'undefined') ? (ZN_PAGE_TO_TAB[page] || null) : null;
+  // For hub pages like 'hub-pos', ZN_PAGE_TO_TAB returns 'pos'; button data-hub is 'pos'
+  // For regular pages like 'cashbook', ZN_PAGE_TO_TAB returns 'finance'
+  var hubId = tabId;
+  // If page itself IS a hub page (hub-pos → show 'pos' active)
+  if(page && page.indexOf('hub-') === 0) hubId = page.replace('hub-','');
+  nav.querySelectorAll('.zn-dsk-hub-btn').forEach(function(btn){
+    btn.classList.toggle('active', btn.dataset.hub === hubId);
+  });
+  // Dashboard nav-item active state
+  var dash = nav.querySelector('.nav-item[data-page="dashboard"]');
+  if(dash) dash.classList.toggle('active', page === 'dashboard');
+}
+
+(function(){
+  function _buildDesktopHubSidebar(){
+    if(document.getElementById('znDesktopHubNav')) return;
+    var sidebar = document.getElementById('sidebar') || document.querySelector('.sidebar');
+    if(!sidebar) return;
+
+    var nav = document.createElement('div');
+    nav.id = 'znDesktopHubNav';
+
+    // Dashboard shortcut (reuses existing nav-item CSS)
+    var dash = document.createElement('div');
+    dash.className = 'nav-item';
+    dash.dataset.page = 'dashboard';
+    dash.setAttribute('onclick', "showPage('dashboard')");
+    dash.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> Αρχική';
+    nav.appendChild(dash);
+
+    // Hub category buttons
+    var hubs = typeof ZN_HUBS !== 'undefined' ? ZN_HUBS : {};
+    var hubOrder = ['pos','inventory','customers','finance','system'];
+    hubOrder.forEach(function(hid){
+      var h = hubs[hid];
+      if(!h) return;
+      var btn = document.createElement('button');
+      btn.className = 'zn-dsk-hub-btn';
+      btn.dataset.hub = hid;
+      btn.setAttribute('onclick', "showPage('hub-" + hid + "')");
+      btn.innerHTML = '<span class="zn-dsk-hub-icon">' + h.icon + '</span>'
+        + '<span class="zn-dsk-hub-label">' + h.label + '</span>'
+        + '<svg class="zn-dsk-hub-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>';
+      nav.appendChild(btn);
+    });
+
+    // Insert before first nav-section (or append)
+    var firstSection = sidebar.querySelector('.nav-section');
+    if(firstSection) sidebar.insertBefore(nav, firstSection);
+    else sidebar.appendChild(nav);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', _buildDesktopHubSidebar);
+  } else {
+    _buildDesktopHubSidebar();
+  }
+})();
 
 // Called by showPage() to keep tab bar in sync.
 // SINGLE SOURCE OF TRUTH: the active tab is DERIVED from the current page,
