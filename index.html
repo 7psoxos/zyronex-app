@@ -12385,8 +12385,15 @@ async function _appOpenTicketThread(ticketId, shopId){
   }catch(e){}
   if(!ticket) return;
 
+  _znAgentsLoaded=false;
   await _znLoadAgents();
-  const _agent = _znResolveAgent(ticket);
+  let _agent = _znResolveAgent(ticket);
+  if(_agent && !_agent.photo_url && _agent.name){
+    try{
+      const _ap = await sb.from('support_agents').select('name,gender,photo_url').eq('name', _agent.name).limit(1);
+      if(_ap && _ap.data && _ap.data[0] && _ap.data[0].photo_url){ _agent = {name:_agent.name, gender:(_agent.gender||_ap.data[0].gender||'f'), photo_url:_ap.data[0].photo_url}; }
+    }catch(e){}
+  }
   const _agArt = _znAgentArticle(_agent);
   if(typeof toast==='function'){
     var _shown=false;
