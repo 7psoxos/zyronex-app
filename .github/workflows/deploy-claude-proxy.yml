@@ -1,0 +1,54 @@
+name: Deploy claude-proxy edge function
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # ── Step 1: Download existing live function source ──────────────────
+      - name: Download existing function source
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions download claude-proxy \
+            --project-ref wopyucsdaeamywscxfzs
+          echo "Downloaded:"
+          cat supabase/functions/claude-proxy/index.ts
+
+      # ── Step 2: Apply patches (caching + logging) ───────────────────────
+      - name: Apply caching + logging patches
+        run: node scripts/patch-claude-proxy.js
+
+      - name: Show patched source
+        run: cat supabase/functions/claude-proxy/index.ts
+
+      # ── Step 3: Create ai_usage_log table (idempotent) ──────────────────
+      - name: Create ai_usage_log table
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          curl -sf -X POST \
+            "https://api.supabase.com/v1/projects/wopyucsdaeamywscxfzs/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "query": "create table if not exists public.ai_usage_log (id bigint generated always as identity primary key, shop_id text, model text, tier text, input_tokens int default 0, output_tokens int default 0, cache_read_input_tokens int default 0, cache_creation_input_tokens int default 0, created_at timestamptz default now()); alter table public.ai_usage_log enable row level security; grant all on public.ai_usage_log to service_role;"
+            }' \
+            && echo "Table created/verified"
+
+      # ── Step 4: Deploy ───────────────────────────────────────────────────
+      - name: Deploy patched claude-proxy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy claude-proxy \
+            --project-ref wopyucsdaeamywscxfzs
+          echo "Deploy complete"
