@@ -12175,6 +12175,14 @@ async function _znLoadAgents(){
 }
 function _znHashStr(s){ s=String(s||''); var h=0; for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h); }
 function _znAgentFor(ticketId){ var a=(ZN_AGENTS&&ZN_AGENTS.length)?ZN_AGENTS:ZN_AGENTS_FALLBACK; return a[_znHashStr(ticketId)%a.length]; }
+function _znResolveAgent(ticket){
+  if(ticket && ticket.assigned_agent){
+    var nm=ticket.assigned_agent, found=null, a=(ZN_AGENTS&&ZN_AGENTS.length)?ZN_AGENTS:ZN_AGENTS_FALLBACK;
+    for(var i=0;i<a.length;i++){ if(a[i].name===nm){ found=a[i]; break; } }
+    return found || {name:nm, gender:(ticket.assigned_gender||'f'), photo_url:''};
+  }
+  return _znAgentFor(ticket.id);
+}
 function _znAgentArticle(a){ return (a&&a.gender==='f')?'η':'ο'; }
 function _znAgentColor(name){ var h=_znHashStr(name)%360; return 'hsl('+h+',42%,42%)'; }
 function _znAgentAvatar(a, size){
@@ -12234,12 +12242,12 @@ async function renderSupportTickets(){
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span>${categoryIcon[t.category]||'💬'}</span>
             <span class="fw-700 text-sm">${t.title}</span>
-            ${t.ai_handled?('<span class="chip" style="display:inline-flex;align-items:center;gap:5px;background:rgba(46,204,113,0.1);color:#2ecc71;font-size:10px;padding:2px 8px">'+_znAgentAvatar(_znAgentFor(t.id),16)+_znAgentFor(t.id).name+'</span>'):''}
+            ${t.ai_handled?('<span class="chip" style="display:inline-flex;align-items:center;gap:5px;background:rgba(46,204,113,0.1);color:#2ecc71;font-size:10px;padding:2px 8px">'+_znAgentAvatar(_znResolveAgent(t),16)+_znResolveAgent(t).name+'</span>'):''}
           </div>
           <div class="text-xs muted">${new Date(t.created_at).toLocaleDateString('el-GR')} • ${(t.ticket_messages||[]).length} μηνύματα</div>
         </div>
         <div style="font-size:12px;font-weight:700;color:${statusColor[t.status]};flex-shrink:0">
-          ${t.status==='open'?'🔴 Ανοιχτό':t.status==='in_progress'?'🟡 Σε εξέλιξη':t.status==='resolved'?'✅ Επιλύθηκε':'⚫ Κλειστό'}
+          ${t.status==='open'?'🔴 Ανοιχτό':t.status==='in_progress'?'🟡 Σε εξέλιξη':t.status==='awaiting_customer'?'🟣 Αναμονή':t.status==='resolved'?'✅ Επιλύθηκε':'⚫ Κλειστό'}
         </div>
       </div>
     </div>
@@ -12374,7 +12382,7 @@ async function _appOpenTicketThread(ticketId, shopId){
   if(!ticket) return;
 
   await _znLoadAgents();
-  const _agent = _znAgentFor(ticket.id);
+  const _agent = _znResolveAgent(ticket);
   const _agArt = _znAgentArticle(_agent);
   if(typeof toast==='function'){ toast('Το αίτημά σου το ανέλαβε '+(_agArt==='η'?'η ':'ο ')+_agent.name+' 👋','info'); }
 
@@ -12416,6 +12424,17 @@ async function _appOpenTicketThread(ticketId, shopId){
         ${(messages||[]).length===0?'<div class="text-sm muted text-center">Αναμένεται απάντηση...</div>':''}
       </div>
 
+      ${ticket.status==='awaiting_customer' ? `
+      <div style="background:rgba(46,204,113,0.07);border:1px solid rgba(46,204,113,0.25);border-radius:12px;padding:14px;margin-bottom:14px;text-align:center">
+        <div class="fw-700 text-sm" style="margin-bottom:4px">Λύθηκε το θέμα σου;</div>
+        <div class="text-xs muted" style="margin-bottom:10px">${_agArt==='η'?'Η':'Ο'} ${_agent.name} έδωσε λύση — πες μας αν είσαι εντάξει.</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="_appResolveTicket('${ticketId}')">✅ Ναι, λύθηκε</button>
+          <button class="btn btn-ghost" onclick="_appResolveNo('${ticketId}')">❌ Όχι, εκκρεμεί</button>
+        </div>
+      </div>
+      ` : ''}
+
       <!-- Reply -->
       ${ticket.status!=='resolved'&&ticket.status!=='closed' ? `
       <div>
@@ -12446,11 +12465,24 @@ async function _appOpenTicketThread(ticketId, shopId){
 }
 
 async function _appResolveTicket(ticketId){
+  const ticket=(APP_TICKETS||[]).find(t=>t.id===ticketId)||{};
+  await _znLoadAgents();
+  const ag=ticket.assigned_agent||_znResolveAgent(ticket).name;
+  const now=new Date().toISOString(); const del=new Date(Date.now()+7*86400000).toISOString();
+  try{
+    await sb.from('ticket_reports').insert({ticket_id:ticketId, shop_id:ticket.shop_id||null, title:ticket.title||'', description_snapshot:ticket.description||'', agent_name:ag, department:ticket.department||'Γενική Υποστήριξη', opened_at:ticket.created_at||null, closed_at:now, close_reason:'confirmed_by_customer', outcome:'Ο πελάτης επιβεβαίωσε ότι το θέμα λύθηκε.'});
+  }catch(e){}
   await sb.from('support_tickets').update({
-    status:'resolved',
-    resolved_at: new Date().toISOString()
+    status:'closed', resolved_at:now, closed_at:now, close_reason:'confirmed_by_customer', closed_by:ag, delete_after:del, needs_attention:false, updated_at:now
   }).eq('id', ticketId);
-  if(typeof toast==='function') toast('✅ Το αίτημα επιλύθηκε!','success');
+  if(typeof toast==='function') toast('✅ Τέλεια! Χαρά μας που λύθηκε.','success');
+  closeModal();
+  renderSupportTickets();
+}
+
+async function _appResolveNo(ticketId){
+  await sb.from('support_tickets').update({status:'in_progress', needs_attention:true, awaiting_since:null, updated_at:new Date().toISOString()}).eq('id', ticketId);
+  if(typeof toast==='function') toast('Ενημερώσαμε τον σύμβουλό σου — θα επανέλθει.','info');
   closeModal();
   renderSupportTickets();
 }
