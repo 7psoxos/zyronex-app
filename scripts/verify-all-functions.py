@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
 Verifies:
-  1. claude-proxy: normal call returns HTTP 200 with valid content array
-  2. admin-usage:  returns 200 for the super-admin shop_id
-  3. admin-usage:  returns 403 for an unknown shop_id
+  1. claude-proxy:    normal call returns HTTP 200 with valid content array
+  2. admin-usage:     returns 200 for the super-admin shop_id
+  3. admin-usage:     returns 403 for an unknown shop_id
+  4. admin-secrets:   returns 200 (keys all null) for super-admin shop_id
+  5. admin-secrets:   returns 403 for an unknown shop_id
 """
 import json, sys, urllib.request, urllib.error
 
@@ -57,6 +59,27 @@ print(f"  HTTP {status3}  body: {d3}")
 if status3 != 403:
     failures.append(f"admin-usage (rando): expected 403, got {status3}")
 
+# ── 4. admin-secrets with super-admin shop_id (keys should all be null) ──────
+print("\n=== admin-secrets (super-admin, action=get) ===")
+status4, d4 = post(BASE + "/admin-secrets", {"shop_id": SUPER_ADMIN, "action": "get"}, "admin-secrets 200")
+print(f"  HTTP {status4}")
+if status4 == 200:
+    keys = d4.get("keys", {})
+    print(f"  keys: {keys}")
+    print(f"  models: {d4.get('models')}")
+    print(f"  order: {d4.get('order')}")
+else:
+    print(f"  body: {d4}")
+if status4 != 200:
+    failures.append(f"admin-secrets (super-admin): expected 200, got {status4}")
+
+# ── 5. admin-secrets with unknown shop_id ────────────────────────────────────
+print("\n=== admin-secrets (unknown shop_id → 403) ===")
+status5, d5 = post(BASE + "/admin-secrets", {"shop_id": RANDO, "action": "get"}, "admin-secrets 403")
+print(f"  HTTP {status5}  body: {d5}")
+if status5 != 403:
+    failures.append(f"admin-secrets (rando): expected 403, got {status5}")
+
 # ── Report ────────────────────────────────────────────────────────────────────
 print()
 if failures:
@@ -68,3 +91,5 @@ else:
     print(f"  claude-proxy: 200 + content ✓")
     print(f"  admin-usage super-admin:   200 ✓")
     print(f"  admin-usage unknown:       403 ✓")
+    print(f"  admin-secrets super-admin: 200 ✓")
+    print(f"  admin-secrets unknown:     403 ✓")

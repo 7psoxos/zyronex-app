@@ -17,6 +17,34 @@ type AnthropicPayload = { model?: string; system?: any; messages?: AnthropicMsg[
 
 const env = (k: string) => Deno.env.get(k) || "";
 
+// Load provider keys/models/order from the provider_keys table (set via the admin UI,
+// no redeploy needed). Read with the service role; the table is RLS-locked from anon.
+// Returns a map keyed like the env vars; env is used as fallback when a field is empty.
+async function loadKeys(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  try {
+    const url = Deno.env.get("SUPABASE_URL");
+    const sk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (url && sk) {
+      const r = await fetch(url + "/rest/v1/provider_keys?id=eq.global&select=*", {
+        headers: { apikey: sk, Authorization: "Bearer " + sk },
+      });
+      const rows = await r.json();
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (row) {
+        if (row.gemini_api_key) out.GEMINI_API_KEY = row.gemini_api_key;
+        if (row.openai_api_key) out.OPENAI_API_KEY = row.openai_api_key;
+        if (row.deepseek_api_key) out.DEEPSEEK_API_KEY = row.deepseek_api_key;
+        if (row.gemini_model) out.FALLBACK_GEMINI_MODEL = row.gemini_model;
+        if (row.openai_model) out.FALLBACK_OPENAI_MODEL = row.openai_model;
+        if (row.deepseek_model) out.FALLBACK_DEEPSEEK_MODEL = row.deepseek_model;
+        if (row.fallback_order) out.FALLBACK_ORDER = row.fallback_order;
+      }
+    }
+  } catch (_e) { /* DB unavailable -> fall back to env only */ }
+  return out;
+}
+
 // Flatten an Anthropic `system` (string OR array of text blocks) to plain text.
 function flattenSystem(system: any): string {
   if (!system) return "";
@@ -78,17 +106,19 @@ async function callGemini(key: string, model: string, p: AnthropicPayload) {
 
 // Try each configured provider in order. Returns an Anthropic-shaped object or null if all fail.
 export async function callFallback(payload: AnthropicPayload): Promise<any | null> {
-  const order = (env("FALLBACK_ORDER") || "gemini,openai,deepseek").split(",").map((s) => s.trim()).filter(Boolean);
+  const db = await loadKeys();
+  const get = (k: string) => db[k] || env(k);
+  const order = (get("FALLBACK_ORDER") || "gemini,openai,deepseek").split(",").map((s) => s.trim()).filter(Boolean);
   for (const prov of order) {
     try {
-      if (prov === "gemini" && env("GEMINI_API_KEY")) {
-        return await callGemini(env("GEMINI_API_KEY"), env("FALLBACK_GEMINI_MODEL") || "gemini-3-pro", payload);
+      if (prov === "gemini" && get("GEMINI_API_KEY")) {
+        return await callGemini(get("GEMINI_API_KEY"), get("FALLBACK_GEMINI_MODEL") || "gemini-3-pro", payload);
       }
-      if (prov === "openai" && env("OPENAI_API_KEY")) {
-        return await callOpenAICompatible("https://api.openai.com/v1", env("OPENAI_API_KEY"), env("FALLBACK_OPENAI_MODEL") || "gpt-5.5", payload);
+      if (prov === "openai" && get("OPENAI_API_KEY")) {
+        return await callOpenAICompatible("https://api.openai.com/v1", get("OPENAI_API_KEY"), get("FALLBACK_OPENAI_MODEL") || "gpt-5.5", payload);
       }
-      if (prov === "deepseek" && env("DEEPSEEK_API_KEY")) {
-        return await callOpenAICompatible("https://api.deepseek.com/v1", env("DEEPSEEK_API_KEY"), env("FALLBACK_DEEPSEEK_MODEL") || "deepseek-chat", payload);
+      if (prov === "deepseek" && get("DEEPSEEK_API_KEY")) {
+        return await callOpenAICompatible("https://api.deepseek.com/v1", get("DEEPSEEK_API_KEY"), get("FALLBACK_DEEPSEEK_MODEL") || "deepseek-chat", payload);
       }
     } catch (_e) {
       // try the next provider

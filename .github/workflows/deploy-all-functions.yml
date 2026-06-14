@@ -13,7 +13,7 @@ jobs:
         with:
           version: latest
 
-      # ── Task B: Deploy admin-usage (new function, source in repo) ───────────
+      # ── Task B: Deploy admin-usage (source in repo) ──────────────────────────
       - name: Deploy admin-usage
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -67,7 +67,30 @@ jobs:
             -d '{"query":"create table if not exists public.ai_usage_log (id bigint generated always as identity primary key, shop_id text, model text, tier text, input_tokens int default 0, output_tokens int default 0, cache_read_input_tokens int default 0, cache_creation_input_tokens int default 0, created_at timestamptz default now()); alter table public.ai_usage_log enable row level security; grant all on public.ai_usage_log to service_role;"}' \
             && echo "Table OK"
 
-      # ── Task C Step 5: Deploy patched claude-proxy ──────────────────────────
+      # ── Task 1: Create provider_keys table (idempotent) ─────────────────────
+      - name: Create provider_keys table
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          SQL=$(cat scripts/provider_keys.sql)
+          curl -sf -X POST \
+            "https://api.supabase.com/v1/projects/wopyucsdaeamywscxfzs/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\": $(echo "$SQL" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" \
+            && echo "provider_keys table OK"
+
+      # ── Task 2: Deploy admin-secrets ─────────────────────────────────────────
+      - name: Deploy admin-secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy admin-secrets \
+            --project-ref wopyucsdaeamywscxfzs \
+            --no-verify-jwt
+          echo "admin-secrets deployed"
+
+      # ── Task C Step 5 / Task 3: Deploy patched claude-proxy ──────────────────
       - name: Deploy claude-proxy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
