@@ -12168,8 +12168,8 @@ var _znAgentsLoaded = false;
 async function _znLoadAgents(){
   if(_znAgentsLoaded) return;
   try{
-    var r = await sb.from('support_agents').select('name,gender,photo_url').eq('active',true).order('sort_order',{ascending:true});
-    if(r && r.data && r.data.length){ ZN_AGENTS = r.data; }
+    var r = await sb.from('support_agents').select('id,name,gender,photo_url,sort_order').eq('active',true);
+    if(r && r.data && r.data.length){ ZN_AGENTS = r.data.slice().sort(function(a,b){ return ((a.sort_order||0)-(b.sort_order||0)) || String(a.id).localeCompare(String(b.id)); }); }
   }catch(e){}
   _znAgentsLoaded = true;
 }
@@ -12376,6 +12376,7 @@ async function _appOpenTicketThread(ticketId, shopId){
   await _znLoadAgents();
   const _agent = _znAgentFor(ticket.id);
   const _agArt = _znAgentArticle(_agent);
+  if(typeof toast==='function'){ toast('Το αίτημά σου το ανέλαβε '+(_agArt==='η'?'η ':'ο ')+_agent.name+' 👋','info'); }
 
   const {data: messages} = await sb.from('ticket_messages')
     .select('*').eq('ticket_id',ticketId).order('created_at');
