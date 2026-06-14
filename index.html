@@ -38117,7 +38117,7 @@ function gcOpenIssueModal(){
   openModal('<div class="modal-head"><h3 class="fw-800 text-xl">🎁 Νέα Gift Card</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>'+
     '<div class="modal-body" style="display:flex;flex-direction:column;gap:14px">'+
     '<div class="form-row"><label class="form-label">Ποσό (€) *</label><input class="form-input" id="gcAmount" type="number" min="1" placeholder="π.χ. 20" inputmode="decimal"></div>'+
-    '<div class="form-row"><label class="form-label">Πελάτης (προαιρετικό)</label><input class="form-input" id="gcCustomer" list="gcCustList" placeholder="Αναζήτηση..."><datalist id="gcCustList">'+custOptions+'</datalist></div>'+
+    '<div class="form-row" style="position:relative"><label class="form-label">Πελάτης (προαιρετικό)</label><input class="form-input" id="gcCustomer" autocomplete="off" placeholder="Αναζήτηση πελάτη..." oninput="_gcCustFilter(this.value)" onfocus="_gcCustFilter(this.value)"><div id="gcCustResults" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:60;background:var(--card,#fff);border:1px solid var(--border);border-radius:10px;max-height:230px;overflow:auto;box-shadow:0 10px 28px rgba(0,0,0,0.2)"></div></div>'+
     '<div class="form-row"><label class="form-label">Λήξη σε μέρες (0=χωρίς λήξη)</label><input class="form-input" id="gcExpiry" type="number" min="0" value="365"></div>'+
     '<div style="display:flex;gap:8px"><button class="btn btn-primary btn-lg" style="flex:1" onclick="gcIssueSave()"><i data-lucide="gift" size="16"></i> Έκδοση</button><button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button></div></div>');
   if(typeof lucide!=='undefined')lucide.createIcons();
@@ -38134,6 +38134,28 @@ async function gcIssueSave(){
   closeModal();
   toast('✅ Gift Card: '+code+' — '+eur(amount),'success',5000);
   gcLoadList();
+}
+
+// iOS-safe customer autocomplete for the gift card modal (datalist is unreliable on iOS Safari)
+function _gcCustFilter(q){
+  var box=document.getElementById('gcCustResults'); if(!box) return;
+  var list=(typeof CUSTOMERS!=='undefined'&&CUSTOMERS)?CUSTOMERS:[];
+  var norm=function(s){return (s==null?'':String(s)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');};
+  var qq=norm(q);
+  var matches=(!qq?list.slice(0,8):list.filter(function(c){return norm(c.name).indexOf(qq)>-1||norm(c.phone).indexOf(qq)>-1;}).slice(0,8));
+  if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML=matches.map(function(c){
+    var nm=(c.name||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    return '<div class="gc-cust-opt" data-name="'+nm+'" style="padding:12px;cursor:pointer;border-bottom:1px solid var(--border);min-height:44px">'+
+      '<div style="font-weight:600;font-size:15px">'+(c.name||'—')+'</div>'+
+      (c.phone?'<div style="font-size:12px;color:var(--text-2)">'+c.phone+'</div>':'')+'</div>';
+  }).join('');
+  box.onclick=function(e){ var o=e.target.closest('.gc-cust-opt'); if(o) _gcCustPick(o.getAttribute('data-name')); };
+  box.style.display='block';
+}
+function _gcCustPick(name){
+  var inp=document.getElementById('gcCustomer'); if(inp) inp.value=name;
+  var box=document.getElementById('gcCustResults'); if(box){ box.style.display='none'; box.innerHTML=''; }
 }
 
 // ── AGE VERIFICATION ─────────────────────────────────────────────
