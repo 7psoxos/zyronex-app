@@ -16,25 +16,47 @@ if (!fs.existsSync(funcPath)) {
 let src = fs.readFileSync(funcPath, 'utf8');
 const original = src;
 
-// ── Guard: all three markers must be present for a clean skip ────────────
+// ── Guard: fully patched = all three markers present in the correct order ─
+// Correct form: caching block ends with `if (_sys) payload.system = _sys;`
+// (post-normalization, so _sys is declared before use)
 const fullyPatched = src.includes('cache_control')
   && src.includes('ai_usage_log')
-  && src.includes('payload.system = _sys');
+  && src.includes('if (_sys) payload.system = _sys');
 if (fullyPatched) {
   console.log('All patches already present – nothing to do.');
   process.exit(0);
 }
 
-// ── Targeted fix: partially-patched source (cache_control present but
-//    payload.system = _sys missing) — only fix what's absent ─────────────
-if (src.includes('cache_control') && !src.includes('payload.system = _sys')) {
-  if (/\bpayload\.system\s*=\s*\w+\s*;/.test(src)) {
-    src = src.replace(/\bpayload\.system\s*=\s*\w+\s*;/, 'payload.system = _sys;');
-    console.log('Applied targeted fix: payload.system = _sys');
-    fs.writeFileSync(funcPath, src, 'utf8');
-    console.log('Partial patch complete (payload.system fix only).');
-    process.exit(0);
+// ── Targeted fix: partially-patched source ──────────────────────────────
+// State A: cache_control present, _sys not yet wired into payload at all.
+// State B: cache_control present BUT _sys used BEFORE its let declaration
+//          (temporal dead zone bug from an earlier patch attempt).
+if (src.includes('cache_control') && !src.includes('if (_sys) payload.system = _sys')) {
+  // Fix state B: revert the wrong pre-caching assignment if present
+  if (/\bif\s*\(system\)\s*payload\.system\s*=\s*_sys\s*;/.test(src)) {
+    src = src.replace(
+      /\bif\s*\(system\)\s*payload\.system\s*=\s*_sys\s*;/,
+      'if (system) payload.system = system;'
+    );
+    console.log('Reverted pre-caching payload.system = _sys → back to system');
   }
+  // Add post-normalization assignment right after the caching block closes
+  // Match the closing brace of the else-if inside the caching block
+  const cachingCloseRe = /(  \} \/\/ end of else-if|(\}\s*\n\s*)(const aiRes = await fetch))/;
+  // Simpler: look for the last line of the _sys normalization block (the else-if closing brace)
+  // then the fetch line right after it
+  if (/let _sys = body\.system;/.test(src)) {
+    src = src.replace(
+      /(let _sys[\s\S]*?\}\s*\n)([ \t]*const \w+ = await fetch\s*\("https:\/\/api\.anthropic)/,
+      (match, cachingBlock, fetchLine) => {
+        return cachingBlock + '  if (_sys) payload.system = _sys;\n' + fetchLine;
+      }
+    );
+    console.log('Applied targeted fix: added if (_sys) payload.system = _sys after caching block');
+  }
+  fs.writeFileSync(funcPath, src, 'utf8');
+  console.log('Partial patch complete.');
+  process.exit(0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
