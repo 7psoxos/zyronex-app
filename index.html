@@ -12153,6 +12153,37 @@ async function _photoAIBulk(){
 
 var APP_TICKETS = [];
 
+/* -- ZyroNex Support Team (humanized agents) ----------------------------- */
+var ZN_AGENT_PHOTO_1 = '';  /* photos managed from Admin > Ομάδα Υποστήριξης */
+var ZN_AGENTS_FALLBACK = [
+  {name:'Μαρία',   gender:'f', photo_url:ZN_AGENT_PHOTO_1},
+  {name:'Γιώργος', gender:'m', photo_url:''},
+  {name:'Ελένη',   gender:'f', photo_url:''},
+  {name:'Νίκος',   gender:'m', photo_url:''},
+  {name:'Δήμητρα', gender:'f', photo_url:''},
+  {name:'Κώστας',  gender:'m', photo_url:''}
+];
+var ZN_AGENTS = ZN_AGENTS_FALLBACK.slice();
+var _znAgentsLoaded = false;
+async function _znLoadAgents(){
+  if(_znAgentsLoaded) return;
+  try{
+    var r = await sb.from('support_agents').select('name,gender,photo_url').eq('active',true).order('sort_order',{ascending:true});
+    if(r && r.data && r.data.length){ ZN_AGENTS = r.data; }
+  }catch(e){}
+  _znAgentsLoaded = true;
+}
+function _znHashStr(s){ s=String(s||''); var h=0; for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h); }
+function _znAgentFor(ticketId){ var a=(ZN_AGENTS&&ZN_AGENTS.length)?ZN_AGENTS:ZN_AGENTS_FALLBACK; return a[_znHashStr(ticketId)%a.length]; }
+function _znAgentArticle(a){ return (a&&a.gender==='f')?'η':'ο'; }
+function _znAgentColor(name){ var h=_znHashStr(name)%360; return 'hsl('+h+',42%,42%)'; }
+function _znAgentAvatar(a, size){
+  size=size||32;
+  if(a && a.photo_url){ return '<img src="'+a.photo_url+'" alt="" style="width:'+size+'px;height:'+size+'px;border-radius:50%;object-fit:cover;flex-shrink:0;vertical-align:middle">'; }
+  var nm=(a&&a.name)?a.name:'?'; var init=nm.trim().charAt(0).toUpperCase();
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+_znAgentColor(nm)+';color:#fff;font-weight:700;font-size:'+Math.round(size*0.44)+'px;flex-shrink:0;vertical-align:middle">'+init+'</span>';
+}
+
 async function renderSupportTickets(){
   const content = document.getElementById('content');
   if(!content) return;
@@ -12166,6 +12197,8 @@ async function renderSupportTickets(){
     .eq('shop_id', shopId||'00000000-0000-0000-0000-000000000000')
     .order('created_at',{ascending:false});
   APP_TICKETS = data || [];
+
+  await _znLoadAgents();
 
   // Auto-close tickets > 20 days
   const now = Date.now();
@@ -12201,7 +12234,7 @@ async function renderSupportTickets(){
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span>${categoryIcon[t.category]||'💬'}</span>
             <span class="fw-700 text-sm">${t.title}</span>
-            ${t.ai_handled?'<span class="chip" style="background:rgba(46,204,113,0.1);color:#2ecc71;font-size:10px">🤖 AI</span>':''}
+            ${t.ai_handled?('<span class="chip" style="display:inline-flex;align-items:center;gap:5px;background:rgba(46,204,113,0.1);color:#2ecc71;font-size:10px;padding:2px 8px">'+_znAgentAvatar(_znAgentFor(t.id),16)+_znAgentFor(t.id).name+'</span>'):''}
           </div>
           <div class="text-xs muted">${new Date(t.created_at).toLocaleDateString('el-GR')} • ${(t.ticket_messages||[]).length} μηνύματα</div>
         </div>
@@ -12340,6 +12373,10 @@ async function _appOpenTicketThread(ticketId, shopId){
   const ticket = APP_TICKETS.find(t=>t.id===ticketId);
   if(!ticket) return;
 
+  await _znLoadAgents();
+  const _agent = _znAgentFor(ticket.id);
+  const _agArt = _znAgentArticle(_agent);
+
   const {data: messages} = await sb.from('ticket_messages')
     .select('*').eq('ticket_id',ticketId).order('created_at');
 
@@ -12349,6 +12386,14 @@ async function _appOpenTicketThread(ticketId, shopId){
       <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
     </div>
     <div class="modal-body">
+      <!-- Assigned agent -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(46,204,113,0.07);border:1px solid rgba(46,204,113,0.18);border-radius:10px;margin-bottom:12px">
+        ${_znAgentAvatar(_agent,40)}
+        <div>
+          <div class="text-xs muted">Το αίτημά σου το ανέλαβε:</div>
+          <div class="fw-700 text-sm">${_agArt==='η'?'Η':'Ο'} ${_agent.name} • Υποστήριξη ZyroNex</div>
+        </div>
+      </div>
       <!-- Original -->
       <div style="padding:12px;background:var(--bg-2);border-radius:10px;margin-bottom:14px">
         <div class="text-xs muted mb-1">Το αίτημά σου:</div>
@@ -12362,7 +12407,7 @@ async function _appOpenTicketThread(ticketId, shopId){
             <div style="max-width:85%;padding:10px 14px;border-radius:12px;
               background:${m.sender==='user'?'var(--bg-2)':m.sender==='ai'?'rgba(46,204,113,0.08)':'rgba(74,163,255,0.08)'};
               border:1px solid ${m.sender==='user'?'var(--border)':m.sender==='ai'?'rgba(46,204,113,0.2)':'rgba(74,163,255,0.2)'}">
-              <div class="text-xs muted mb-1">${m.sender==='user'?'👤 Εσύ':m.sender==='ai'?'🤖 AI Agent':'👑 Support'} • ${new Date(m.created_at).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}</div>
+              <div class="text-xs muted mb-1">${m.sender==='user'?'👤 Εσύ':('<span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle">'+_znAgentAvatar(_agent,18)+_agent.name+'</span>')} • ${new Date(m.created_at).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})}</div>
               <div class="text-sm" style="white-space:pre-wrap">${m.message}</div>
             </div>
           </div>
