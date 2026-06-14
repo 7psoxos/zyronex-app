@@ -16,8 +16,23 @@ let src = fs.readFileSync(funcPath, 'utf8');
 const original = src;
 
 // ── Guard: fully patched ─────────────────────────────────────────────────────
-if (src.includes('_anthropicFetchError') && src.includes('callFallback') && src.includes('./fallback.ts')) {
+const alreadyPatched = src.includes('_anthropicFetchError') && src.includes('callFallback') && src.includes('./fallback.ts');
+// Detect the known bug where 'const aiRes' inside the try block shadows the outer 'let aiRes',
+// causing aiRes to always be null after the try, triggering spurious fallback and a TypeError.
+const hasBuggyConst = alreadyPatched && src.includes('let aiRes: any = null;') && src.includes('const aiRes = await fetch(');
+if (alreadyPatched && !hasBuggyConst) {
   console.log('Fallback patch already present – nothing to do.');
+  process.exit(0);
+}
+if (hasBuggyConst) {
+  // Strip 'const ' so the fetch result is assigned to the outer let, not a block-scoped shadow.
+  src = src.replace('const aiRes = await fetch(', 'aiRes = await fetch(');
+  if (src === original) {
+    console.error('ERROR: Could not fix const-in-try shadow bug.');
+    process.exit(1);
+  }
+  fs.writeFileSync(funcPath, src, 'utf8');
+  console.log('Fixed const-in-try shadow bug for aiRes – patch is now correct.');
   process.exit(0);
 }
 
@@ -41,12 +56,14 @@ if (!fetchRe.test(src)) {
   process.exit(1);
 }
 src = src.replace(fetchRe, (_match, indent, fetchCall) => {
+  // Strip 'const aiRes =' so the assignment writes to the outer let, not a block-scoped shadow.
+  const innerFetch = fetchCall.trim().replace(/^const\s+aiRes\s*=\s*/, 'aiRes = ');
   return (
     indent + '// deno-lint-ignore no-explicit-any\n' +
     indent + 'let aiRes: any = null;\n' +
     indent + 'let _anthropicFetchError: unknown = null;\n' +
     indent + 'try {\n' +
-    indent + '  ' + fetchCall.trim().replace(/\n/g, '\n  ' + indent) + '\n' +
+    indent + '  ' + innerFetch.replace(/\n/g, '\n  ' + indent) + '\n' +
     indent + '} catch (_err) { _anthropicFetchError = _err; }'
   );
 });
