@@ -12155,7 +12155,7 @@ var APP_TICKETS = [];
 
 /* -- ZyroNex Support Team (humanized agents) ----------------------------- */
 var ZN_AGENT_PHOTO_1 = '';  /* photos managed from Admin > Ομάδα Υποστήριξης */
-var ZN_AGENTS_FALLBACK = [
+var ZN_TEAM_FALLBACK = [
   {name:'Μαρία',   gender:'f', photo_url:ZN_AGENT_PHOTO_1},
   {name:'Γιώργος', gender:'m', photo_url:''},
   {name:'Ελένη',   gender:'f', photo_url:''},
@@ -12163,21 +12163,21 @@ var ZN_AGENTS_FALLBACK = [
   {name:'Δήμητρα', gender:'f', photo_url:''},
   {name:'Κώστας',  gender:'m', photo_url:''}
 ];
-var ZN_AGENTS = ZN_AGENTS_FALLBACK.slice();
+var ZN_TEAM = ZN_TEAM_FALLBACK.slice();
 var _znAgentsLoaded = false;
 async function _znLoadAgents(){
   if(_znAgentsLoaded) return;
   try{
     var r = await sb.from('support_agents').select('id,name,gender,photo_url,sort_order').eq('active',true);
-    if(r && r.data && r.data.length){ ZN_AGENTS = r.data.slice().sort(function(a,b){ return ((a.sort_order||0)-(b.sort_order||0)) || String(a.id).localeCompare(String(b.id)); }); }
+        if(r && r.data && r.data.length){ ZN_TEAM = r.data.slice().sort(function(a,b){ return ((a.sort_order||0)-(b.sort_order||0)) || String(a.id).localeCompare(String(b.id)); }); }
   }catch(e){}
   _znAgentsLoaded = true;
 }
 function _znHashStr(s){ s=String(s||''); var h=0; for(var i=0;i<s.length;i++){ h=((h<<5)-h+s.charCodeAt(i))|0; } return Math.abs(h); }
-function _znAgentFor(ticketId){ var a=(ZN_AGENTS&&ZN_AGENTS.length)?ZN_AGENTS:ZN_AGENTS_FALLBACK; return a[_znHashStr(ticketId)%a.length]; }
+function _znAgentFor(ticketId){ var a=(ZN_TEAM&&ZN_TEAM.length)?ZN_TEAM:ZN_TEAM_FALLBACK; return a[_znHashStr(ticketId)%a.length]; }
 function _znResolveAgent(ticket){
   if(ticket && ticket.assigned_agent){
-    var nm=ticket.assigned_agent, found=null, a=(ZN_AGENTS&&ZN_AGENTS.length)?ZN_AGENTS:ZN_AGENTS_FALLBACK;
+        var nm=ticket.assigned_agent, found=null, a=(ZN_TEAM&&ZN_TEAM.length)?ZN_TEAM:ZN_TEAM_FALLBACK;
     for(var i=0;i<a.length;i++){ if(a[i].name===nm){ found=a[i]; break; } }
     return found || {name:nm, gender:(ticket.assigned_gender||'f'), photo_url:''};
   }
