@@ -100,6 +100,29 @@ jobs:
             --no-verify-jwt
           echo "claude-proxy deployed"
 
+      # ── Create ticket_internal_notes table (idempotent) ─────────────────────
+      - name: Create ticket_internal_notes table
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          SQL=$(cat scripts/ticket_internal_notes.sql)
+          curl -sf -X POST \
+            "https://api.supabase.com/v1/projects/wopyucsdaeamywscxfzs/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"query\": $(echo "$SQL" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" \
+            && echo "ticket_internal_notes table OK"
+
+      # ── Deploy admin-ticket-notes ─────────────────────────────────────────────
+      - name: Deploy admin-ticket-notes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy admin-ticket-notes \
+            --project-ref wopyucsdaeamywscxfzs \
+            --no-verify-jwt
+          echo "admin-ticket-notes deployed"
+
       # ── Verify ───────────────────────────────────────────────────────────────
       - name: Verify all functions
         run: python3 scripts/verify-all-functions.py

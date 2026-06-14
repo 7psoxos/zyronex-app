@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
 Verifies:
-  1. claude-proxy:    normal call returns HTTP 200 with valid content array
-  2. admin-usage:     returns 200 for the super-admin shop_id
-  3. admin-usage:     returns 403 for an unknown shop_id
-  4. admin-secrets:   returns 200 (keys all null) for super-admin shop_id
-  5. admin-secrets:   returns 403 for an unknown shop_id
+  1. claude-proxy:         normal call returns HTTP 200 with valid content array
+  2. admin-usage:          returns 200 for the super-admin shop_id
+  3. admin-usage:          returns 403 for an unknown shop_id
+  4. admin-secrets:        returns 200 (keys all null) for super-admin shop_id
+  5. admin-secrets:        returns 403 for an unknown shop_id
+  6. admin-ticket-notes:   returns 200 {notes:[]} for super-admin + valid ticket_id
+  7. admin-ticket-notes:   returns 403 for an unknown shop_id
 """
 import json, sys, urllib.request, urllib.error
 
@@ -80,6 +82,28 @@ print(f"  HTTP {status5}  body: {d5}")
 if status5 != 403:
     failures.append(f"admin-secrets (rando): expected 403, got {status5}")
 
+# ── 6. admin-ticket-notes with super-admin (empty notes list) ────────────────
+print("\n=== admin-ticket-notes (super-admin, action=list) ===")
+NULL_TICKET = "00000000-0000-0000-0000-000000000000"
+status6, d6 = post(BASE + "/admin-ticket-notes", {"shop_id": SUPER_ADMIN, "action": "list", "ticket_id": NULL_TICKET}, "admin-ticket-notes 200")
+print(f"  HTTP {status6}")
+if status6 == 200:
+    notes = d6.get("notes", "MISSING")
+    print(f"  notes: {notes}")
+else:
+    print(f"  body: {d6}")
+if status6 != 200:
+    failures.append(f"admin-ticket-notes (super-admin): expected 200, got {status6}")
+elif not isinstance(d6.get("notes"), list):
+    failures.append(f"admin-ticket-notes: expected {{notes:[]}}, got {d6}")
+
+# ── 7. admin-ticket-notes with unknown shop_id ───────────────────────────────
+print("\n=== admin-ticket-notes (unknown shop_id → 403) ===")
+status7, d7 = post(BASE + "/admin-ticket-notes", {"shop_id": RANDO, "action": "list", "ticket_id": "x"}, "admin-ticket-notes 403")
+print(f"  HTTP {status7}  body: {d7}")
+if status7 != 403:
+    failures.append(f"admin-ticket-notes (rando): expected 403, got {status7}")
+
 # ── Report ────────────────────────────────────────────────────────────────────
 print()
 if failures:
@@ -89,7 +113,9 @@ if failures:
 else:
     print("ALL CHECKS PASSED")
     print(f"  claude-proxy: 200 + content ✓")
-    print(f"  admin-usage super-admin:   200 ✓")
-    print(f"  admin-usage unknown:       403 ✓")
-    print(f"  admin-secrets super-admin: 200 ✓")
-    print(f"  admin-secrets unknown:     403 ✓")
+    print(f"  admin-usage super-admin:        200 ✓")
+    print(f"  admin-usage unknown:            403 ✓")
+    print(f"  admin-secrets super-admin:      200 ✓")
+    print(f"  admin-secrets unknown:          403 ✓")
+    print(f"  admin-ticket-notes super-admin: 200 ✓")
+    print(f"  admin-ticket-notes unknown:     403 ✓")
