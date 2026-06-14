@@ -16,10 +16,25 @@ if (!fs.existsSync(funcPath)) {
 let src = fs.readFileSync(funcPath, 'utf8');
 const original = src;
 
-// ── Guard: skip if patches already applied ────────────────────────────────
-if (src.includes('cache_control') || src.includes('ai_usage_log')) {
-  console.log('Patches already present – nothing to do.');
+// ── Guard: all three markers must be present for a clean skip ────────────
+const fullyPatched = src.includes('cache_control')
+  && src.includes('ai_usage_log')
+  && src.includes('payload.system = _sys');
+if (fullyPatched) {
+  console.log('All patches already present – nothing to do.');
   process.exit(0);
+}
+
+// ── Targeted fix: partially-patched source (cache_control present but
+//    payload.system = _sys missing) — only fix what's absent ─────────────
+if (src.includes('cache_control') && !src.includes('payload.system = _sys')) {
+  if (/\bpayload\.system\s*=\s*\w+\s*;/.test(src)) {
+    src = src.replace(/\bpayload\.system\s*=\s*\w+\s*;/, 'payload.system = _sys;');
+    console.log('Applied targeted fix: payload.system = _sys');
+    fs.writeFileSync(funcPath, src, 'utf8');
+    console.log('Partial patch complete (payload.system fix only).');
+    process.exit(0);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
