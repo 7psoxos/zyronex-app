@@ -12,9 +12,8 @@ import json, sys, urllib.request
 
 FUNC_URL = "https://wopyucsdaeamywscxfzs.supabase.co/functions/v1/claude-proxy"
 
-# ~2700+ token system prompt. Haiku minimum is 2048 tokens for caching to activate.
-# Run #10 showed 1527 tokens — needed ~520 more. This version adds extensive new sections
-# to comfortably clear the 2048-token threshold with margin.
+# ~2400 token system prompt. Sonnet minimum is 1024 tokens for caching to activate.
+# Model switched to claude-sonnet-4-6 (Sonnet min=1024); 2400 tokens comfortably exceeds it.
 SYS = (
     "You are ZyroNex AI, the primary AI assistant embedded inside the ZyroNex e-commerce platform. "
     "Your purpose is to serve Greek and European shop owners by answering their questions, automating repetitive tasks, "
@@ -149,7 +148,7 @@ SYS = (
 )
 
 payload = json.dumps({
-    "model": "claude-haiku-4-5-20251001",
+    "model": "claude-sonnet-4-6",
     "max_tokens": 64,
     "system": SYS,
     "messages": [{"role": "user", "content": "hi"}]
