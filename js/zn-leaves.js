@@ -32927,6 +32927,11 @@ function applyPermissionsToSidebar(){
       el.style.display = isDev ? '' : 'none';
       return;
     }
+    // Super-admin-only: AI Cost dashboard — locked to the ZyroNex operator, no tenant admin sees it
+    if(page === 'aicost'){
+      el.style.display = (typeof _isSuperAdmin === 'function' && _isSuperAdmin()) ? '' : 'none';
+      return;
+    }
     el.style.display = (isAdmin || !need || can(need)) ? '' : 'none';
   });
   // Show/hide section headers based on whether group has visible items
@@ -32941,3 +32946,66 @@ function applyPermissionsToSidebar(){
   });
 }
 
+
+// ── AI COST DASHBOARD (super-admin ONLY — locked to ZyroNex operator) ──────────
+async function renderAICost(){
+  var c = document.getElementById('content');
+  if(!c) return;
+  if(!(typeof _isSuperAdmin==='function' && _isSuperAdmin())){
+    c.innerHTML = '<div class="card" style="padding:48px;text-align:center"><div style="font-size:44px">🔒</div><h2 style="margin:12px 0 6px">Μη διαθέσιμο</h2><p style="color:var(--text-2)">Διαθέσιμο μόνο στον διαχειριστή του ZyroNex.</p></div>';
+    return;
+  }
+  c.innerHTML = '<div class="card" style="padding:48px;text-align:center"><div style="font-size:32px">💰</div><h2 style="margin:10px 0">AI Κόστος</h2><p style="color:var(--text-2)">Φόρτωση χρήσης…</p></div>';
+  try{
+    var SB = 'https://wopyucsdaeamywscxfzs.supabase.co';
+    var sid = (typeof SHOP_ID!=='undefined')?SHOP_ID:'';
+    var key = (typeof SUPABASE_KEY!=='undefined'?SUPABASE_KEY:(window.SUPABASE_KEY||''));
+    var resp = await fetch(SB+'/functions/v1/admin-usage', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({ shop_id: sid, days: 30 })
+    });
+    if(!resp.ok){ var et=await resp.text(); throw new Error('HTTP '+resp.status+' '+et.slice(0,120)); }
+    var d = await resp.json();
+    if(d && d.error) throw new Error(d.error);
+    var usd = function(n){ return '$'+(Number(n)||0).toFixed(2); };
+    var num = function(n){ return (Number(n)||0).toLocaleString('el-GR'); };
+    var t = d.totals||{};
+    var rows = function(arr, cols){
+      return (arr||[]).map(function(r){
+        return '<tr>'+cols.map(function(col){
+          var v = r[col.k];
+          return '<td style="padding:8px 10px;border-bottom:1px solid var(--border);'+(col.r?'text-align:right;font-variant-numeric:tabular-nums':'')+'">'+(col.f?col.f(v):(v==null?'—':v))+'</td>';
+        }).join('')+'</tr>';
+      }).join('');
+    };
+    var card = function(label,val,sub){
+      return '<div class="card" style="padding:16px;flex:1;min-width:150px"><div style="font-size:12px;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px">'+label+'</div><div style="font-size:26px;font-weight:800;margin-top:4px">'+val+'</div>'+(sub?'<div style="font-size:12px;color:var(--text-2);margin-top:2px">'+sub+'</div>':'')+'</div>';
+    };
+    c.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+
+        '<h2 style="margin:0">💰 AI Κόστος <span style="font-size:13px;color:var(--text-2);font-weight:500">(τελευταίες '+(d.days||30)+' μέρες)</span></h2>'+
+        '<button class="btn btn-ghost" onclick="renderAICost()"><i data-lucide="refresh-cw" size="15"></i> Ανανέωση</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
+        card('Συνολικό κόστος', usd(t.cost), num(t.calls)+' κλήσεις')+
+        card('Cache hit', (Number(d.cache_hit_pct)||0).toFixed(1)+'%', 'στα input tokens')+
+        card('Εξοικονόμηση', usd(d.saved), 'από caching')+
+        card('Tokens (in/out)', num(t.input)+' / '+num(t.output), num(t.cache_read)+' cached')+
+      '</div>'+
+      '<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px"><div style="padding:12px 14px;font-weight:800;border-bottom:1px solid var(--border)">Ανά μοντέλο</div>'+
+        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--text-2);text-align:left">'+
+          '<th style="padding:8px 10px">Μοντέλο</th><th style="padding:8px 10px;text-align:right">Κλήσεις</th><th style="padding:8px 10px;text-align:right">Input</th><th style="padding:8px 10px;text-align:right">Output</th><th style="padding:8px 10px;text-align:right">Cache read</th><th style="padding:8px 10px;text-align:right">Κόστος</th>'+
+        '</tr></thead><tbody>'+rows(d.by_model,[{k:'model'},{k:'calls',r:1,f:num},{k:'input',r:1,f:num},{k:'output',r:1,f:num},{k:'cache_read',r:1,f:num},{k:'cost',r:1,f:usd}])+'</tbody></table></div></div>'+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap">'+
+        '<div class="card" style="padding:0;overflow:hidden;flex:1;min-width:280px"><div style="padding:12px 14px;font-weight:800;border-bottom:1px solid var(--border)">Ανά feature (tier)</div>'+
+          '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--text-2);text-align:left"><th style="padding:8px 10px">Tier</th><th style="padding:8px 10px;text-align:right">Κλήσεις</th><th style="padding:8px 10px;text-align:right">Κόστος</th></tr></thead><tbody>'+rows(d.by_feature,[{k:'tier'},{k:'calls',r:1,f:num},{k:'cost',r:1,f:usd}])+'</tbody></table></div></div>'+
+        '<div class="card" style="padding:0;overflow:hidden;flex:1;min-width:280px"><div style="padding:12px 14px;font-weight:800;border-bottom:1px solid var(--border)">Ανά κατάστημα</div>'+
+          '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--text-2);text-align:left"><th style="padding:8px 10px">Shop</th><th style="padding:8px 10px;text-align:right">Κλήσεις</th><th style="padding:8px 10px;text-align:right">Κόστος</th></tr></thead><tbody>'+rows(d.by_shop,[{k:'shop_id',f:function(v){return v?String(v).slice(0,8):'—';}},{k:'calls',r:1,f:num},{k:'cost',r:1,f:usd}])+'</tbody></table></div></div>'+
+      '</div>';
+    if(typeof lucide!=='undefined'&&lucide.createIcons) lucide.createIcons();
+  }catch(e){
+    c.innerHTML = '<div class="card" style="padding:30px"><h2>💰 AI Κόστος</h2><p style="color:var(--danger)">Σφάλμα: '+((e&&e.message)||e)+'</p><p style="color:var(--text-2);font-size:13px">Αν το edge function <b>admin-usage</b> δεν έχει γίνει deploy ακόμα, αυτό είναι αναμενόμενο μέχρι το deploy.</p></div>';
+  }
+}
+window.renderAICost = renderAICost;

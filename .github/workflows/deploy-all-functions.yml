@@ -1,0 +1,82 @@
+name: Deploy all edge functions
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # ── Task B: Deploy admin-usage (new function, source in repo) ───────────
+      - name: Deploy admin-usage
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy admin-usage \
+            --project-ref wopyucsdaeamywscxfzs \
+            --no-verify-jwt
+          echo "admin-usage deployed"
+
+      # ── Task C Step 1: Download live claude-proxy ────────────────────────────
+      - name: Download claude-proxy source
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions download claude-proxy \
+            --project-ref wopyucsdaeamywscxfzs
+          echo "Downloaded claude-proxy/index.ts"
+
+      # ── Task C Step 2: Apply caching + logging patches (idempotent) ─────────
+      - name: Apply caching + logging patches
+        run: node scripts/patch-claude-proxy.js
+
+      # ── Task C Step 3: Ensure fallback.ts is present ────────────────────────
+      # (fallback.ts is committed to repo at supabase/functions/claude-proxy/fallback.ts.
+      #  The download step only overwrites index.ts, but copy explicitly to be safe.)
+      - name: Ensure fallback.ts is in claude-proxy folder
+        run: |
+          ls supabase/functions/claude-proxy/
+          # fallback.ts should already be there from checkout; verify
+          test -f supabase/functions/claude-proxy/fallback.ts && echo "fallback.ts present" || { echo "ERROR: fallback.ts missing"; exit 1; }
+
+      # ── Task C Step 4: Apply fallback patch ─────────────────────────────────
+      - name: Apply fallback patch
+        run: node scripts/patch-fallback.js
+
+      - name: Show patched claude-proxy source (key region)
+        run: |
+          echo "--- _sys / fallback region ---"
+          grep -n "_sys\|_anthropicFetchError\|callFallback\|shouldFallback\|fallback\.ts\|payload\.system\|cache_control\|anthropic-beta" \
+            supabase/functions/claude-proxy/index.ts || true
+
+      # ── Create ai_usage_log table (idempotent) ──────────────────────────────
+      - name: Create ai_usage_log table
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          curl -sf -X POST \
+            "https://api.supabase.com/v1/projects/wopyucsdaeamywscxfzs/database/query" \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"create table if not exists public.ai_usage_log (id bigint generated always as identity primary key, shop_id text, model text, tier text, input_tokens int default 0, output_tokens int default 0, cache_read_input_tokens int default 0, cache_creation_input_tokens int default 0, created_at timestamptz default now()); alter table public.ai_usage_log enable row level security; grant all on public.ai_usage_log to service_role;"}' \
+            && echo "Table OK"
+
+      # ── Task C Step 5: Deploy patched claude-proxy ──────────────────────────
+      - name: Deploy claude-proxy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy claude-proxy \
+            --project-ref wopyucsdaeamywscxfzs \
+            --no-verify-jwt
+          echo "claude-proxy deployed"
+
+      # ── Verify ───────────────────────────────────────────────────────────────
+      - name: Verify all functions
+        run: python3 scripts/verify-all-functions.py

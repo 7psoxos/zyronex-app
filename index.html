@@ -2782,6 +2782,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-group" id="nav-smart">
   <div class="nav-item nav-item-oracle" data-page="oracle"><i data-lucide="orbit" size="18"></i> 🔮 The Oracle <span class="oracle-pulse-dot"></span></div>
   <div class="nav-item nav-item-brain" data-page="brain"><i data-lucide="brain" size="18"></i> 🧠 The Brain <span class="brain-live-dot"></span></div>
+  <div class="nav-item" data-page="aicost" style="display:none"><i data-lucide="dollar-sign" size="18"></i> 💰 AI Κόστος</div>
   <div class="nav-item" data-page="seasonal-intel"><i data-lucide="cloud-sun" size="18"></i> 🌦️ Εποχική Νοημοσύνη</div>
   <div class="nav-item" data-page="supplier-scorecard"><i data-lucide="award" size="18"></i> 🏆 Βαθμολογία Προμηθευτών</div>
   <div class="nav-item" data-page="remember-this"><i data-lucide="heart-handshake" size="18"></i> 💭 Θυμάσαι αυτό;</div>
@@ -16449,7 +16450,7 @@ function _showPageInternal(p){
     'supplier-scorecard':renderSupplierScorecard,
     'remember-this':renderRememberThis,
     'dosage-tracker':renderDosageTracker,
-    'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,taxagent:renderTaxAgent,
+    'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,aicost:renderAICost,taxagent:renderTaxAgent,
     balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,
     mixology:renderMixology,
     loyalty:renderLoyalty,
