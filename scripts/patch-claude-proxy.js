@@ -47,11 +47,23 @@ if (fetchRe.test(src)) {
   process.exit(1);
 }
 
-// Replace system: body.system → system: _sys
+// Case 1: inline object literal  { ..., system: body.system, ... }
 if (/system\s*:\s*body\.system/.test(src)) {
   src = src.replace(/system\s*:\s*body\.system/g, 'system: _sys');
-} else {
-  console.warn('WARN: "system: body.system" not found – the caching normalization code was added but the outgoing payload may already spread body differently.');
+}
+
+// Case 2: intermediate variable pattern  payload.system = <var>;
+// (e.g. const system = body.system; ... payload.system = system;)
+// Replace the assignment so it uses _sys instead.
+if (/\bpayload\.system\s*=\s*\w+\s*;/.test(src)) {
+  src = src.replace(/\bpayload\.system\s*=\s*\w+\s*;/, 'payload.system = _sys;');
+} else if (!/system\s*:\s*body\.system/.test(original)) {
+  // Neither pattern found — append a safety override right before the fetch
+  // so _sys is always propagated regardless of how the payload was built.
+  src = src.replace(
+    /(\n[ \t]*)((?:const|let|var)\s+\w+\s*=\s*await\s+fetch\s*\(\s*['"`]https:\/\/api\.anthropic\.com\/v1\/messages['"`])/,
+    (_m, indent, fetchLine) => '\n' + indent + '  if (_sys) payload.system = _sys;\n' + indent + fetchLine
+  );
 }
 
 // Add anthropic-beta header for prompt caching (idempotent)
