@@ -12378,13 +12378,24 @@ async function _appSubmitTicket(shopId){
 }
 
 async function _appOpenTicketThread(ticketId, shopId){
-  const ticket = APP_TICKETS.find(t=>t.id===ticketId);
+  let ticket = APP_TICKETS.find(t=>t.id===ticketId);
+  try{
+    const _fr = await sb.from('support_tickets').select('*').eq('id', ticketId).limit(1);
+    if(_fr && _fr.data && _fr.data[0]) ticket = _fr.data[0];
+  }catch(e){}
   if(!ticket) return;
 
   await _znLoadAgents();
   const _agent = _znResolveAgent(ticket);
   const _agArt = _znAgentArticle(_agent);
-  if(typeof toast==='function'){ toast('Το αίτημά σου το ανέλαβε '+(_agArt==='η'?'η ':'ο ')+_agent.name+' 👋','info'); }
+  if(typeof toast==='function'){
+    var _shown=false;
+    try{ _shown=!!localStorage.getItem('znAssignToast_'+ticketId); }catch(e){}
+    if(!_shown){
+      toast('Το αίτημά σου το ανέλαβε '+(_agArt==='η'?'η ':'ο ')+_agent.name+' 👋','info');
+      try{ localStorage.setItem('znAssignToast_'+ticketId,'1'); }catch(e){}
+    }
+  }
 
   const {data: messages} = await sb.from('ticket_messages')
     .select('*').eq('ticket_id',ticketId).order('created_at');
