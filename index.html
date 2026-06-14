@@ -44888,6 +44888,16 @@ function _kioskOpenProductDetail(productId){
 async function _kioskLoadProductStory(p, flavorTags){
   var box = document.getElementById('kioskStoryText');
   if(!box) return;
+  // Per-product story cache: the story depends only on product attributes (not the customer),
+  // so it is identical for every viewer. Generate once, reuse for all — huge saving at kiosk scale,
+  // identical output. Key auto-invalidates when relevant product fields change.
+  var _sig = [p.id, p.name||'', p.category||'', (flavorTags||[]).join(','), p.vgPct, p.pgPct, p.volumeMl].join('|');
+  var _h = 0; for(var _i=0;_i<_sig.length;_i++){ _h=((_h<<5)-_h+_sig.charCodeAt(_i))|0; }
+  var _storyKey = 'znKioskStory_'+((typeof SHOP_ID!=='undefined'&&SHOP_ID)?SHOP_ID:'')+'_'+(p.id||'')+'_'+(_h>>>0).toString(36);
+  try{
+    var _cachedStory = localStorage.getItem(_storyKey);
+    if(_cachedStory){ box.innerHTML = _escHtml(_cachedStory); return; }
+  }catch(_e){}
   try{
     var ctx = 'Προϊόν: '+(p.name||'')+'\n'+
       'Κατηγορία: '+(p.category||'άγνωστη')+'\n'+
@@ -44908,6 +44918,7 @@ async function _kioskLoadProductStory(p, flavorTags){
       else txt = data.content;
     } else if(data && data.text){ txt = data.text; }
     txt = (txt||'').trim().replace(/^["']|["']$/g,'');
+    if(txt){ try{ localStorage.setItem(_storyKey, txt); }catch(_e){} }
     box = document.getElementById('kioskStoryText'); // re-fetch (panel μπορεί να άλλαξε)
     if(box) box.innerHTML = txt ? _escHtml(txt) : _kioskFallbackStory(p, flavorTags);
   }catch(e){
