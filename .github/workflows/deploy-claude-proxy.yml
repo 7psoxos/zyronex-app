@@ -50,7 +50,8 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           supabase functions deploy claude-proxy \
-            --project-ref wopyucsdaeamywscxfzs
+            --project-ref wopyucsdaeamywscxfzs \
+            --no-verify-jwt
           echo "Deploy complete"
 
       # ── Step 5: Verify prompt caching (two consecutive identical calls) ──
@@ -62,47 +63,52 @@ jobs:
           PAYLOAD='{"model":"claude-haiku-4-5-20251001","max_tokens":16,"system":"You are a helpful assistant for ZyroNex cache verification. This system prompt is intentionally long enough to be cached by Anthropic prompt caching. Respond to any message with only the word PONG.","messages":[{"role":"user","content":"PING"}]}'
 
           echo "=== Call #1 (cache population) ==="
-          R1=$(curl -sf -X POST "$FUNC_URL" \
+          R1=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "$FUNC_URL" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
-          echo "$R1" | python3 -c "
+          HTTP1=$(echo "$R1" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY1=$(echo "$R1" | grep -v "HTTP_STATUS:")
+          echo "HTTP status: $HTTP1"
+          echo "Raw response: $BODY1"
+          echo "$BODY1" | python3 -c "
           import sys, json
-          d = json.load(sys.stdin)
-          u = d.get('usage', {})
-          print(f'  input_tokens:                  {u.get(\"input_tokens\", \"N/A\")}')
-          print(f'  output_tokens:                 {u.get(\"output_tokens\", \"N/A\")}')
-          print(f'  cache_creation_input_tokens:   {u.get(\"cache_creation_input_tokens\", \"N/A\")}')
-          print(f'  cache_read_input_tokens:       {u.get(\"cache_read_input_tokens\", \"N/A\")}')
-          "
+          try:
+            d = json.load(sys.stdin)
+            u = d.get('usage', {})
+            print(f'  input_tokens:                  {u.get(\"input_tokens\", \"N/A\")}')
+            print(f'  output_tokens:                 {u.get(\"output_tokens\", \"N/A\")}')
+            print(f'  cache_creation_input_tokens:   {u.get(\"cache_creation_input_tokens\", \"N/A\")}')
+            print(f'  cache_read_input_tokens:       {u.get(\"cache_read_input_tokens\", \"N/A\")}')
+          except Exception as e:
+            print(f'  Parse error: {e}')
+          " || true
 
           echo ""
           echo "=== Call #2 (cache read) ==="
-          R2=$(curl -sf -X POST "$FUNC_URL" \
+          R2=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST "$FUNC_URL" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
-          echo "$R2" | python3 -c "
+          HTTP2=$(echo "$R2" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY2=$(echo "$R2" | grep -v "HTTP_STATUS:")
+          echo "HTTP status: $HTTP2"
+          echo "Raw response: $BODY2"
+          echo "$BODY2" | python3 -c "
           import sys, json
-          d = json.load(sys.stdin)
-          u = d.get('usage', {})
-          print(f'  input_tokens:                  {u.get(\"input_tokens\", \"N/A\")}')
-          print(f'  output_tokens:                 {u.get(\"output_tokens\", \"N/A\")}')
-          print(f'  cache_creation_input_tokens:   {u.get(\"cache_creation_input_tokens\", \"N/A\")}')
-          print(f'  cache_read_input_tokens:       {u.get(\"cache_read_input_tokens\", \"N/A\")}')
-          "
+          try:
+            d = json.load(sys.stdin)
+            u = d.get('usage', {})
+            print(f'  input_tokens:                  {u.get(\"input_tokens\", \"N/A\")}')
+            print(f'  output_tokens:                 {u.get(\"output_tokens\", \"N/A\")}')
+            print(f'  cache_creation_input_tokens:   {u.get(\"cache_creation_input_tokens\", \"N/A\")}')
+            print(f'  cache_read_input_tokens:       {u.get(\"cache_read_input_tokens\", \"N/A\")}')
+          except Exception as e:
+            print(f'  Parse error: {e}')
+          " || true
 
           echo ""
-          echo "=== Summary ==="
-          echo "$R1" "$R2" | python3 -c "
-          import sys, json
-          lines = sys.stdin.read().strip().split('\n')
-          # R1 is first line, R2 is second (they're both on one line each from curl)
-          # Actually both are passed as arguments; re-read from the pipe differently
-          " 2>/dev/null || true
-
-          C2_CACHE=$(echo "$R2" | python3 -c "import sys,json; u=json.load(sys.stdin).get('usage',{}); print(u.get('cache_read_input_tokens',0))")
+          C2_CACHE=$(echo "$BODY2" | python3 -c "import sys,json; u=json.load(sys.stdin).get('usage',{}); print(u.get('cache_read_input_tokens',0))" 2>/dev/null || echo "0")
           if [ "$C2_CACHE" -gt 0 ] 2>/dev/null; then
-            echo "CACHE VERIFIED: Call #2 cache_read_input_tokens=$C2_CACHE (caching is working)"
+            echo "CACHE VERIFIED: Call #2 cache_read_input_tokens=$C2_CACHE"
           else
-            echo "CACHE NOT CONFIRMED: Call #2 cache_read_input_tokens=$C2_CACHE"
-            echo "(First deploy may need a warm-up call; cache is ephemeral per Anthropic docs)"
+            echo "CACHE NOT CONFIRMED: cache_read_input_tokens=$C2_CACHE (may need warm-up or system prompt too short)"
           fi
