@@ -12179,7 +12179,7 @@ function _znResolveAgent(ticket){
   if(ticket && ticket.assigned_agent){
         var nm=ticket.assigned_agent, found=null, a=(ZN_TEAM&&ZN_TEAM.length)?ZN_TEAM:ZN_TEAM_FALLBACK;
     for(var i=0;i<a.length;i++){ if(a[i].name===nm){ found=a[i]; break; } }
-    return found || {name:nm, gender:(ticket.assigned_gender||'f'), photo_url:''};
+        return {name:nm, gender:(ticket.assigned_gender||(found&&found.gender)||'f'), photo_url:(ticket.assigned_photo||(found&&found.photo_url)||'')};
   }
   return _znAgentFor(ticket.id);
 }
