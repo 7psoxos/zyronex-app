@@ -12525,7 +12525,7 @@ function renderInventory(preserveSelection){
     <div class="inv-tools-body" id="invToolsBody" style="${toolsOpen?'':'display:none'};padding:0 14px 14px;border-top:1px solid var(--border)">
       <div class="inv-tools-grid">
         <!-- AI Group -->
-        ${(typeof isPluginActive==='function' && isPluginActive('reorder_assistant')) ? `<button class="inv-tool-btn ai" onclick="openReorderAssistant()" title="Έξυπνη πρόταση παραγγελίας ανά προμηθευτή">
+        ${(typeof isPluginActive==='function' && isPluginActive('reorder_assistant')) ? `<button class="inv-tool-btn ai" onclick="ZN_REORDER.open()" title="Έξυπνη πρόταση παραγγελίας ανά προμηθευτή">
           <i data-lucide="shopping-cart" size="20"></i>
           <span>🛒 Παραγγελία ✨</span>
         </button>` : ''}
@@ -26543,7 +26543,7 @@ function _pluginOpen(id){
   try {
     var routes = {
       site_builder:      function(){ showPage('sitebuilder'); },
-      reorder_assistant: function(){ showPage('inventory'); setTimeout(function(){ if(typeof openReorderAssistant==='function') openReorderAssistant(); }, 350); },
+      reorder_assistant: function(){ showPage('inventory'); setTimeout(function(){ if(typeof ZN_REORDER!=='undefined') ZN_REORDER.open(); }, 350); },
       smart_bundle:      function(){ showPage('inventory'); setTimeout(function(){ if(typeof openSmartBundle==='function') openSmartBundle(); }, 350); },
       expiry_markdown:   function(){ showPage('inventory'); setTimeout(function(){ if(typeof openExpiryMarkdown==='function') openExpiryMarkdown(); }, 350); },
       invoice_check:     function(){ showPage('inventory'); if(typeof toast==='function') toast('Σκάναρε τιμολόγιο: Αποθήκη → Smart Invoice Scanner','info'); },
