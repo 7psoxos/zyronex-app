@@ -2790,6 +2790,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item" data-page="energy-tracker"><i data-lucide="zap" size="18"></i> ⚡ Ενέργεια & Λογαριασμοί</div>
   <div class="nav-item nav-item-compliance" data-page="compliance"><i data-lucide="shield-check" size="18"></i> 🛡️ TPD Vault <span class="compliance-status-dot" id="complianceDot"></span></div>
   <div class="nav-item nav-item-audit" data-page="audit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle;flex-shrink:0"><defs><linearGradient id="auG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#eab308"/></linearGradient></defs><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" fill="none" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="15" r="3" fill="none" stroke="url(#auG)" stroke-width="1.5"/><path d="m15 21-2.5-2.5" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round"/><path d="m8 15 1 1 2-2" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Audit Mode</div>
+  <div class="nav-item" data-page="blindaudit"><i data-lucide="scan-barcode" size="18"></i> 📦 Τυφλή Απογραφή</div>
   <div class="nav-item nav-item-online" data-page="online-orders"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle;flex-shrink:0"><defs><linearGradient id="olG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#eab308"/></linearGradient></defs><rect x="5" y="2" width="14" height="20" rx="2" ry="2" fill="none" stroke="url(#olG)" stroke-width="1.5"/><line x1="12" y1="18" x2="12.01" y2="18" stroke="url(#olG)" stroke-width="2" stroke-linecap="round"/><path d="M3 9h3l1.5 5h7l1.5-5H21" fill="none" stroke="url(#olG)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="15" r="0.8" fill="url(#olG)"/><circle cx="15" cy="15" r="0.8" fill="url(#olG)"/></svg> Online Orders</div>
   <div class="nav-item nav-item-pricewar" data-page="pricewar"><i data-lucide="trending-down" size="18"></i> 💰 Price War</div>
   <div class="nav-item nav-item-inspector-comp" data-page="inspector-competitors" style="display:none;background:linear-gradient(135deg,rgba(255,107,107,0.08),rgba(74,163,255,0.08));border-left:3px solid #ff6b6b"><i data-lucide="search" size="18"></i> 🥷 Inspector Ανταγωνισμού <span style="font-size:10px;background:#ff6b6b;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px">DEV</span></div>
@@ -2969,6 +2970,11 @@ window.onerror = function(msg, src, line, col, err) {
 
 <script src="/js/zn-leaves.js"></script>
 <script src="/js/zn_reorder.js"></script>
+<script src="/js/zn_atomic_checkout.js"></script>
+<script src="/js/zn_blind_audit.js"></script>
+<script src="/js/zn_promo_engine.js"></script>
+<script src="/js/zn_event_bus.js"></script>
+<script src="/js/zn_offline_sync.js"></script>
 <script>
 /* ============================================================
    ℹ️ HELP SYSTEM — Οδηγός χρήσης ανά σελίδα (EL + EN)
@@ -4036,6 +4042,36 @@ var HELP_CONTENT = {
       sections: [
         {icon:'⚡', title:'On-demand loading', body:'<p>Heavy tools (Customer Intelligence, Campaigns, Site Builder, Pulse) load only when you open them — so the POS starts faster. The first time you may briefly see "Loading…".</p>'},
         {icon:'🔄', title:'Retry', body:'<p>If a load fails (e.g. poor network), a "Retry" button appears. Navigation and back button are unaffected.</p>'}
+      ]
+    }
+  },
+
+  blind_audit: {
+    el: { title: '📦 Τυφλή Απογραφή',
+      sections: [
+        {icon:'📦', title:'Τι είναι', body:'<p>Σκανάρεις barcode και βάζεις πόσα μέτρησες — χωρίς να σου δείχνει πόσα «πρέπει» να βρεις, ώστε να μετράς πραγματικά. Δουλεύει και με κακό WiFi (αποθηκεύει τοπικά και συγχρονίζει μόλις βρει δίκτυο), και με πολλά tablets ταυτόχρονα (κλειδώνει το ράφι που μετράει ο άλλος). Στο τέλος το σύστημα βγάζει τις αποκλίσεις, λαμβάνοντας υπόψη όσα πουλήθηκαν στο μεταξύ.</p>'},
+        {icon:'🔒', title:'Admin only', body:'<p>Η Τυφλή Απογραφή είναι διαθέσιμη μόνο σε admin. Βρίσκεται στο μενού κάτω από το Audit Mode.</p>'}
+      ]
+    },
+    en: { title: '📦 Blind Inventory Audit',
+      sections: [
+        {icon:'📦', title:'What it is', body:'<p>Scan a barcode and enter how many you counted — without seeing the expected number, so you really count. Works on bad WiFi (stores locally and syncs when back online) and across multiple tablets (locks the shelf someone else is counting). At the end it shows variances, accounting for anything sold meanwhile.</p>'},
+        {icon:'🔒', title:'Admin only', body:'<p>Blind Audit is available to admins only. Find it in the sidebar below Audit Mode.</p>'}
+      ]
+    }
+  },
+
+  promo_engine: {
+    el: { title: '🎁 Σύνθετες Προσφορές',
+      sections: [
+        {icon:'🎁', title:'Τι είναι', body:'<p>Ορίζεις κανόνες (π.χ. «3 υγρά −20%», «το 3ο τεμάχιο −50%») και το ταμείο υπολογίζει μόνο του την καλύτερη τιμή στο καλάθι, χωρίς καθυστέρηση.</p>'},
+        {icon:'⚡', title:'Live', body:'<p>Κάθε αλλαγή στο καλάθι υπολογίζει αυτόματα την έκπτωση. Στο checkout γίνεται και επαλήθευση από τον server.</p>'}
+      ]
+    },
+    en: { title: '🎁 Advanced Promotions',
+      sections: [
+        {icon:'🎁', title:'What it is', body:'<p>Define rules (e.g. "3 liquids −20%", "3rd item −50%") and the POS computes the best cart price automatically, with no lag.</p>'},
+        {icon:'⚡', title:'Live', body:'<p>Every cart change re-evaluates discounts live. At checkout the server does an authoritative recheck.</p>'}
       ]
     }
   }
@@ -15824,6 +15860,8 @@ async function submitPin(){
       }
     }).catch(function(){ try{ hideBootLoader(); }catch(_){} });
     inspectorAutoScanOnLogin();
+    if(typeof ZN_PROMO !== 'undefined') ZN_PROMO.loadRules().catch(function(){});
+    if(typeof ZN_BUS !== 'undefined') ZN_BUS.connect();
     cleanupBadgeUpdate();
     if(typeof complianceUpdateBadge === 'function') complianceUpdateBadge();
     if(typeof autoBackupToVault === 'function') setTimeout(function(){autoBackupToVault();}, 5000);
@@ -16584,6 +16622,7 @@ function _showPageInternal(p){
     'remember-this':renderRememberThis,
     'dosage-tracker':renderDosageTracker,
     'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,aicost:renderAICost,taxagent:renderTaxAgent,
+    blindaudit:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_AUDIT==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_AUDIT.render(); ZN_AUDIT.start(); },
     balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,
     mixology:renderMixology,
     loyalty:renderLoyalty,
@@ -35369,6 +35408,27 @@ window.HELP_KB = {
 "changelog": "# 📋 ZyroNex — Ιστορικό Αλλαγών (Changelog)\n\n> Όλες οι σημαντικές αλλαγές της εφαρμογής, ταξινομημένες κατά χρονολογική σειρά.\n> Format: [Έκδοση] - YYYY-MM-DD\n\n---\n\n## [v43] - 2026-04-29\n\n### 🔧 Διορθώσεις (Bug Fixes)\n- **Mobile Modal Fix**: Διορθώθηκε η εμφάνιση των modals σε iPhone (rounded corners, σωστά paddings, safe-area-inset)\n- **Logout Loophole**: Οι υπάλληλοι δεν μπορούν πλέον να κάνουν logout χωρίς να κλείσουν τη βάρδια τους\n- **Race Condition στο refresh**: Διορθώθηκε bug όπου εμφανιζόταν force-clock-in modal ενώ ο χρήστης ήταν ήδη σε βάρδια\n- **Header Banner Overlap**: Το banner εκκρεμών tasks δεν επικαλύπτει πια το logo\n\n### ✨ Νέα Χαρακτηριστικά\n- **Auto-redirect μετά clock-in**: Ταμίας → POS, Αποθηκάριος → Αποθήκη\n- **Personal Stats Dashboard** για υπαλλήλους: Ώρες, βάρδιες, υπερωρίες\n- **Beforeunload warning**: Προειδοποίηση όταν προσπαθούν να κλείσουν tab ενώ είναι σε βάρδια\n\n### 🛡️ Δικαιώματα (Permissions)\n- Πολλές σελίδες έγιναν admin-only: Reports, VAT, Balance, Waste, Batches, Competitors, Support, Help Desk\n- Onboarding wizard εμφανίζεται μόνο σε admin\n- Dashboard widgets (Snapshot, Health Score, ZyroNex Briefing ✨, κλπ) μόνο σε admin\n\n---\n\n## [v36] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **Mandatory Clock-in**: Οι υπάλληλοι πρέπει να πατήσουν Προσέλευση πριν χρησιμοποιήσουν την εφαρμογή\n- **Start Phase Tasks Modal**: Υποχρεωτικό tick όλων των start tasks πριν προχωρήσει η βάρδια\n- **Persistent Banner**: Εμφάνιση εκκρεμών tasks στο top της σελίδας\n- **Toast Reminders**: Αυτόματες υπενθυμίσεις σε προγραμματισμένες ώρες\n\n---\n\n## [v34] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **Banking Module**: Νέα σελίδα Τράπεζες (admin-only) με 4 tabs:\n  - Λογαριασμοί (CRUD bank accounts)\n  - Κινήσεις (transactions με filters)\n  - Συμφωνίες (placeholder for reconciliation)\n  - Aggregator API (Tink/Snappi/Salt Edge UI)\n- **CSV Statement Import**: Auto-parsing από ελληνικές τράπεζες\n- **Shifts Phase 3**: Admin Overview Card με live status όλων των υπαλλήλων + auto-refresh κάθε 60''\n\n---\n\n## [v33] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **AADE myDATA Infrastructure**:\n  - Νέα κάρτα στις Ρυθμίσεις: \"📡 Σύνδεση ΑΑΔΕ myDATA\"\n  - Σκανάρισμα QR τιμολογίου στις Παραλαβές\n  - Smart Product Matching (exact/fuzzy/new)\n  - XML Parser έτοιμος για AADE response\n  - Demo invoice για test\n\n---\n\n## [v32] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **Λογιστής — Auto Reports**:\n  - Νέα κάρτα ρυθμίσεων με email λογιστή\n  - Manual export + send (PDF + CSV)\n  - Modal επιλογής περιόδου & περιεχομένου\n  - Auto-send placeholder (έρχεται σε επόμενη φάση)\n\n---\n\n## [v31] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **Shifts Phase 2**: Σελίδα Βάρδιες με 4 tabs (Ιστορικό / Υπερωρίες / Προγραμματισμός / Εργατική Νομοθεσία)\n- **Schedule Editor**: 7 cards (Δευτέρα-Κυριακή) με σπαστές βάρδιες\n- **Labor Law Settings**: Customizable όρια ωραρίων + νομικό disclaimer\n\n---\n\n## [v30] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **Shifts Phase 1**: Hero Card στο Dashboard + Topbar Badge\n- **Warnings**: Color-coded levels (normal/overtime/limit_warning/over_limit)\n\n---\n\n## [v29] - 2026-04-29\n\n### 🎨 UI Improvements\n- **Users Page Redesign**: Cards αντί για cramped table\n\n---\n\n## [v25-v28] - 2026-04-29\n\n### 🎨 UI Improvements\n- **Login Redesign**: Logo 84x84, lowercase \"ZyroNex\", role icons, mobile-friendly layout\n- **Hidden role labels**\n\n---\n\n## [v23-v25] - 2026-04-29\n\n### ✨ Νέα Χαρακτηριστικά\n- **Role Icons**: Admin (shield+vape), Cashier (cash register), Warehouse (pallet)\n- **Greek normalization**: ΤΑΜΙΑΣ, ΑΠΟΘΗΚΑΡΙΟΣ, etc. handled correctly\n\n---\n\n## [v17-v22] - 2026-04-28\n\n### ✨ Νέα Χαρακτηριστικά\n- **Courier Logos**: 12 couriers με base64 PNG logos (ELTA, ACS, Speedex, DHL, UPS, BoxNow, Skroutz, Easy Mail, Courier Center, ELTA Courier, Vape Shop pickup, Vape Mail)\n- **Custom Courier Picker**: Native dropdown αντικαταστάθηκε με custom (γιατί το `<option>` δεν υποστηρίζει images)\n\n---\n\n## Πιο Παλιές Εκδόσεις\n\nΓια το πλήρες ιστορικό, δες τα git logs ή επικοινώνησε με τον admin.\n\n---\n\n## 📌 Πώς ενημερώνεται αυτό το αρχείο\n\nΚάθε νέα έκδοση προσθέτει νέα entry με:\n- Έκδοση (πχ. v44)\n- Ημερομηνία\n- Κατηγορία αλλαγής (✨ Νέα / 🔧 Διόρθωση / 🛡️ Permissions / 🎨 UI / ⚡ Performance)\n- Σύντομη περιγραφή\n"
 };
 
+// HELP_KB_ADV merge — 4 advanced entries
+(function(){
+  var _adv = [
+    { id: 'kb_blind_audit', category: '02-inventory', title: 'Τυφλή Απογραφή (Blind Audit)',
+      body: '# Τυφλή Απογραφή (Blind Audit)\n\nΗ απογραφή ξεκινά με «πάγωμα» (snapshot) του αποθέματος. Κατά τη διάρκεια, οι χειροκίνητες αλλαγές stock κλειδώνονται — επιτρέπονται μόνο οι πωλήσεις POS. Η καταμέτρηση είναι τυφλή και αποθηκεύεται τοπικά (IndexedDB) πριν συγχρονιστεί.\n\nΣτη συμφιλίωση: Πραγματικό = Καταμετρημένο − Πωλήσεις κατά τη διάρκεια. Μεγάλες αποκλίσεις (>50€) μπαίνουν για δεύτερη μέτρηση από άλλον υπάλληλο. Με την έγκριση του manager, το νέο stock γράφεται και το ιστορικό σφραγίζεται (δεν σβήνεται από κανέναν).' },
+    { id: 'kb_promo_engine', category: '01-pos', title: 'Μηχανή Σύνθετων Προσφορών',
+      body: '# Μηχανή Σύνθετων Προσφορών\n\nΟι κανόνες προσφορών ζουν στη βάση και διαβάζονται από το ταμείο. Σε κάθε αλλαγή του καλαθιού υπολογίζεται live η βέλτιστη έκπτωση (ποσοστό σε ποσότητα, συνδυασμός κατηγορίας, ή έκπτωση στο n-οστό τεμάχιο). Ο υπολογισμός γίνεται τοπικά για μηδενική καθυστέρηση, με authoritative επανέλεγχο στον server.' },
+    { id: 'kb_anomaly', category: '11-security', title: 'Ανίχνευση Ανωμαλιών (Anti-fraud)',
+      body: '# Ανίχνευση Ανωμαλιών (Anti-fraud)\n\nΎποπτα μοτίβα (ακυρώσεις/επιστροφές μεγάλης αξίας, συχνό άνοιγμα συρταριού χωρίς πώληση) καταγράφονται αθόρυβα σε ένα immutable log που κανείς — ούτε ο διαχειριστής — δεν μπορεί να σβήσει. Ο manager βλέπει συγκεντρωτική αναφορά στο τέλος της ημέρας με «καμπανάκια» πάνω από συγκεκριμένα κατώφλια.' },
+    { id: 'kb_atomic_stock', category: '01-pos', title: 'Ασφαλής μείωση αποθέματος',
+      body: '# Ασφαλής μείωση αποθέματος\n\nΗ μείωση αποθέματος στην πώληση γίνεται ατομικά στον server: δύο ταμεία δεν μπορούν να πουλήσουν το ίδιο τελευταίο τεμάχιο και να πάει το απόθεμα σε αρνητικό. Αν δεν επαρκεί το stock, η πώληση σταματά με σαφές μήνυμα.' }
+  ];
+  _adv.forEach(function(e){
+    if(!window.HELP_KB) return;
+    if(window.HELP_KB.docs) window.HELP_KB.docs[e.id] = e.body;
+    if(window.HELP_KB.titles) window.HELP_KB.titles[e.id] = e.title;
+    var cat = (window.HELP_KB.categories||[]).find(function(c){ return c.id === e.category; });
+    if(cat && cat.docs && cat.docs.indexOf(e.id) === -1) cat.docs.push(e.id);
+  });
+})();
+
 </script>
 <!-- ═══════════════════════════════════════════════════════════════
      ZYRONEX HELP MODULE
@@ -45349,5 +45409,15 @@ window._kioskSliderChange = _kioskSliderChange;
 window._kioskRenderSliderTicks = _kioskRenderSliderTicks;
 </script>
 <script src="/js/zn_module_loader.js"></script>
+<script>
+if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'zn-do-flush' && typeof ZN_OFFLINE !== 'undefined'){
+      ZN_OFFLINE.flush();
+    }
+  });
+}
+</script>
 
 

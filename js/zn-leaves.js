@@ -26059,7 +26059,14 @@ function renderCart(){
   const rawTotal = CART.reduce((a,b)=>a+b.price*b.qty,0);
   const disc = window.CART_DISCOUNT||0;
   const discAmt = rawTotal * disc / 100;
-  const subtotal = rawTotal - discAmt;
+  // Promo engine live evaluation
+  var _promoResult = (typeof ZN_PROMO !== 'undefined') ? ZN_PROMO.evaluate(CART.map(function(it){
+    var _pp = PRODUCTS.find(function(x){return x.id===it.productId;});
+    return {productId:it.productId, qty:it.qty, price:it.price, category:_pp?(_pp.category||''):''};
+  })) : {discount:0,applied:[]};
+  var _promoAmt = _promoResult.discount || 0;
+  window._promoDiscount = _promoAmt;
+  const subtotal = rawTotal - discAmt - _promoAmt;
   const vat = subtotal*0.24/1.24;
 
   // Loyalty badge για επιλεγμένο πελάτη
@@ -26084,6 +26091,9 @@ function renderCart(){
   const silentCost = typeof calcSilentCost==='function' ? calcSilentCost() : 0;
   const silentRow = silentCost > 0 ? `<div class="summary-row" style="color:#e74c3c;font-size:12px">
     <span>🧻 Αναλώσιμα</span><span>-${eur(silentCost)}</span></div>` : '';
+  // Promo engine discount row
+  const promoRow = _promoAmt > 0 ? `<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">
+    <span>🎁 Προσφορά${_promoResult.applied&&_promoResult.applied.length?' ('+_promoResult.applied.join(', ')+')':''}</span><span>-${eur(_promoAmt)}</span></div>` : '';
 
   // Age verified badge update
   var _ageVerifiedCust = false;
@@ -26107,6 +26117,7 @@ function renderCart(){
   sum.innerHTML=`${loyaltyBadge}
     <div class="summary-row"><span>Υποσύνολο</span><span>${eur(rawTotal-rawTotal*0.24/1.24)}</span></div>
     ${discRow}
+    ${promoRow}
     <div class="summary-row"><span>ΦΠΑ 24%</span><span>${eur(vat)}</span></div>
     ${boosterRow}
     ${silentRow}
@@ -26403,10 +26414,21 @@ async function _doCheckout(){
     const rawTotal=CART.reduce((a,b)=>a+b.price*b.qty,0);
     const disc = window.CART_DISCOUNT||0;
     const discAmt = rawTotal * disc / 100;
-    const subtotal = rawTotal - discAmt;
+    // Authoritative promo recheck (server-side)
+    var _promoAmt = window._promoDiscount || 0;
+    try{
+      if(typeof ZN_PROMO !== 'undefined' && typeof sbAuth !== 'undefined'){
+        var _pr = await sbAuth.rpc('zn_evaluate_promos', { p_items: CART.map(function(it){
+          var p=PRODUCTS.find(function(x){return x.id===it.productId;});
+          return {product_id:it.productId, qty:it.qty, price:it.price, category:p?p.category:''};
+        })});
+        if(!_pr.error && _pr.data != null) _promoAmt = Number(_pr.data) || 0;
+      }
+    }catch(_){}
+    const subtotal = rawTotal - discAmt - _promoAmt;
     const vat=subtotal*0.24/1.24;
     const customerId = window.SELECTED_CUSTOMER_ID || null;
-    console.log('[checkout] Subtotal:', subtotal, 'Discount:', disc+'%');
+    console.log('[checkout] Subtotal:', subtotal, 'Discount:', disc+'%', 'Promo:', _promoAmt);
 
     // Split payment data from _spFinalize
     const splits     = window._pendingSplitPayments || null;
@@ -26446,25 +26468,30 @@ async function _doCheckout(){
     const {error:itemsErr} = await sb.from('sale_items').insert(items);
     if(itemsErr) throw itemsErr;
 
-    // 3. Ενημέρωση stock κάθε προϊόντος
-    for(const it of CART){
-      const p=PRODUCTS.find(x=>x.id===it.productId);
-      await sb.from('products').update({stock:p.stock-it.qty}).eq('id',it.productId);
+    // 3. Ενημέρωση stock — ατομική μείωση (αποτρέπει overselling σε πολλά ταμεία)
+    const _atomicResult = await ZN_ATOMIC.decrementCart(CART);
+    if(!_atomicResult.ok){
+      if(_atomicResult.reason === 'insufficient_stock'){
+        toast('⚠️ Ανεπαρκές απόθεμα — δεν ολοκληρώθηκε η πώληση.','danger');
+      } else {
+        toast('Σφάλμα μείωσης αποθέματος: '+(_atomicResult.message||''),'danger');
+      }
+      return;
+    }
 
-      // 3b. Auto-decrement ingredient stock αν το προϊόν έχει συνταγή (BOM)
+    // 3b. Auto-decrement ingredient stock αν το προϊόν έχει συνταγή (BOM)
+    for(const it of CART){
       if(typeof getRecipeFor === 'function'){
         const recipe = getRecipeFor(it.productId);
         if(recipe && recipe.ingredients){
           for(const ing of recipe.ingredients){
             const ingProduct = PRODUCTS.find(x=>x.id == ing.ingredientId);
             if(!ingProduct) continue;
-            // Πόσο consumed: συνταγή × quantity πώλησης
-            // Αν unit του ingredient είναι 'τμχ' το αφαιρούμε ως integer, αλλιώς float
             const consumed = (ing.qty || 0) * it.qty;
             const newStock = Math.max(0, (ingProduct.stock || 0) - consumed);
             try{
               await sb.from('products').update({stock: newStock}).eq('id', ing.ingredientId);
-              ingProduct.stock = newStock; // update τοπικά array
+              ingProduct.stock = newStock;
               console.log(`[BOM] Auto-decremented ${ingProduct.name}: -${consumed}${ing.unit||''} (now ${newStock})`);
             }catch(bomErr){
               console.warn('[BOM] Failed to decrement ingredient:', bomErr);
@@ -26759,6 +26786,7 @@ function saveToOfflineQueue(){
     };
     queue.push(entry);
     localStorage.setItem('offlineSaleQueue', JSON.stringify(queue));
+    if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.enqueue(entry).catch(function(){});
 
     // Clear cart και globals
     CART = [];
@@ -26956,6 +26984,56 @@ async function syncOfflineQueue(){
   }
   await reloadProducts();
 }
+
+// Χρησιμοποιείται από ZN_OFFLINE.flush() για να κάνει commit μία offline πώληση
+async function _commitOneSale(entry){
+  if(!entry || !entry.cart) return false;
+  try{
+    const rawTotal = entry.cart.reduce(function(a,b){return a+b.price*b.qty;},0);
+    const discAmt = rawTotal * (entry.discount||0) / 100;
+    const subtotal = rawTotal - discAmt;
+    const vat = subtotal * 0.24 / 1.24;
+    _dbInvalidate('sales_');
+    let saleId = null;
+    if(entry.offline_id){
+      const {data:existing} = await sb.from('sales').select('id').eq('offline_id', entry.offline_id).maybeSingle();
+      if(existing?.id) saleId = existing.id;
+    }
+    if(!saleId){
+      const {data:saleData, error:saleErr} = await sb.from('sales').insert({
+        customer_id: entry.customerId, user_id: entry.userId,
+        subtotal: subtotal-vat, vat, total: subtotal,
+        payment_method: entry.paymentMethod || 'cash',
+        payment_splits: entry.paymentSplits ? JSON.stringify(entry.paymentSplits) : null,
+        points_used: entry.pointsUsed || 0,
+        store_credit_used: entry.creditUsed || 0,
+        created_at: entry.timestamp,
+        offline_id: entry.offline_id || null
+      }).select().single();
+      if(saleErr) throw saleErr;
+      saleId = saleData.id;
+      const items = entry.cart.map(function(it){return {
+        sale_id: saleId, product_id: it.productId,
+        product_name: it.productName||'?', quantity: it.qty,
+        unit_price: it.price, nicotine_mg: it.nicotine||null,
+        total: it.price*it.qty
+      };});
+      const {error:itemErr} = await sb.from('sale_items').insert(items);
+      if(itemErr) throw itemErr;
+      for(const it of entry.cart){
+        const {data:prod} = await sb.from('products').select('stock').eq('id', it.productId).maybeSingle();
+        if(prod !== null){
+          await sb.from('products').update({stock: Math.max(0,(prod.stock||0)-it.qty)}).eq('id', it.productId);
+        }
+      }
+    }
+    return true;
+  }catch(e){
+    console.error('[_commitOneSale]', e);
+    return false;
+  }
+}
+
 
 function quickDiscount(){
   const c = window.SELECTED_CUSTOMER_ID ? CUSTOMERS.find(x=>x.id===window.SELECTED_CUSTOMER_ID) : null;
