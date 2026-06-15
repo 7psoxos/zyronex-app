@@ -4004,6 +4004,42 @@ var HELP_CONTENT = {
     }
   },
 
+  inventory_reorder: {
+    el: {
+      title: '🛒 Έξυπνη Παραγγελία',
+      sections: [
+        {icon:'🛒', title:'Τι κάνει', body:'<p>Υπολογίζει τον «ρυθμό κατανάλωσης» κάθε προϊόντος από τις πωλήσεις των τελευταίων 30 ημερών και προτείνει τι να παραγγείλεις πριν σου τελειώσει. Λαμβάνει υπόψη και την τάση (αν ένα προϊόν ανεβαίνει ή πέφτει).</p>'},
+        {icon:'📋', title:'Ομαδοποίηση', body:'<p>Οι προτάσεις ομαδοποιούνται ανά προμηθευτή. Με ένα κουμπί «Αντιγραφή παραγγελίας» αντιγράφεις όλη τη λίστα για αποστολή.</p>'},
+        {icon:'🔌', title:'Ενεργοποίηση', body:'<p>Απαιτεί ενεργό plugin <b>reorder_assistant</b> από το Plugin Market. Κουμπί 🛒 εμφανίζεται στα Εργαλεία της Αποθήκης.</p>'}
+      ]
+    },
+    en: {
+      title: '🛒 Smart Reorder',
+      sections: [
+        {icon:'🛒', title:'What it does', body:'<p>Calculates each product\'s burn rate from the last 30 days of sales and suggests what to order before you run out. It also accounts for the trend (whether a product is rising or falling).</p>'},
+        {icon:'📋', title:'Grouping', body:'<p>Suggestions are grouped per supplier. One tap on "Copy order" copies the entire list to send.</p>'},
+        {icon:'🔌', title:'Activation', body:'<p>Requires the <b>reorder_assistant</b> plugin active in Plugin Market. The 🛒 button appears in Inventory Tools.</p>'}
+      ]
+    }
+  },
+
+  lazy_modules: {
+    el: {
+      title: '⚡ Γρήγορο άνοιγμα',
+      sections: [
+        {icon:'⚡', title:'On-demand φόρτωση', body:'<p>Βαριά εργαλεία (Customer Intelligence, Καμπάνιες, Site Builder, Pulse) φορτώνουν μόνο όταν τα ανοίγεις — έτσι το Ταμείο ανοίγει πιο γρήγορα.</p>'},
+        {icon:'🔄', title:'Επανάληψη', body:'<p>Αν κάποια φόρτωση αποτύχει (π.χ. κακό δίκτυο), εμφανίζεται κουμπί «Επανάληψη». Η πλοήγηση και το «Πίσω» δεν επηρεάζονται.</p>'}
+      ]
+    },
+    en: {
+      title: '⚡ Fast open',
+      sections: [
+        {icon:'⚡', title:'On-demand loading', body:'<p>Heavy tools (Customer Intelligence, Campaigns, Site Builder, Pulse) load only when you open them — so the POS starts faster. The first time you may briefly see "Loading…".</p>'},
+        {icon:'🔄', title:'Retry', body:'<p>If a load fails (e.g. poor network), a "Retry" button appears. Navigation and back button are unaffected.</p>'}
+      ]
+    }
+  }
+
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25307,262 +25343,7 @@ function renderAI(){
   document.getElementById('content').innerHTML=html;lucide.createIcons();
 }
 
-/* ============================================================
-   CAMPAIGNS (Email Marketing)
-   ============================================================ */
-async function renderCampaigns(){
-  const withEmail = CUSTOMERS.filter(c=>c.email);
-  const vipCustomers = CUSTOMERS.filter(c=>c.totalSpent>=500);
-  const goldPlus = CUSTOMERS.filter(c=>['gold','platinum'].includes(c.loyaltyTier));
-  const inactive = CUSTOMERS.filter(c=>{
-    if(!c.lastVisit) return false;
-    const days = (Date.now() - new Date(c.lastVisit).getTime()) / 86400000;
-    return days >= 30;
-  });
-
-  // Φόρτωση recent campaigns
-  let recentCampaigns = [];
-  try{
-    const {data} = await sb.from('email_logs')
-      .select('campaign_name, sent_at, status')
-      .order('sent_at', {ascending:false})
-      .limit(50);
-    if(data){
-      // Group by campaign
-      const grouped = {};
-      data.forEach(row=>{
-        if(!row.campaign_name) return;
-        if(!grouped[row.campaign_name]){
-          grouped[row.campaign_name] = {
-            name: row.campaign_name,
-            sent_at: row.sent_at,
-            total: 0, success: 0
-          };
-        }
-        grouped[row.campaign_name].total++;
-        if(row.status === 'sent') grouped[row.campaign_name].success++;
-      });
-      recentCampaigns = Object.values(grouped).slice(0,10);
-    }
-  }catch(e){console.warn(e)}
-
-  const html=`<div class="page-head">
-    <div><div class="page-title">Προσφορές & Email Marketing</div>
-    <div class="page-sub">${withEmail.length} πελάτες με email • Powered by Resend</div></div>
-  </div>
-
-  <div class="two-col">
-    <div class="card">
-      <div class="section-title">📧 Νέα Καμπάνια</div>
-
-      <div class="form-row mt-3"><label class="form-label">Αποδέκτες</label>
-        <select class="form-select" id="camp_audience" onchange="updateCampTargetCount()">
-          <option value="all">Όλοι με email (${withEmail.length})</option>
-          <option value="vip">VIP πελάτες > 500€ (${vipCustomers.length})</option>
-          <option value="gold">Gold & Platinum tier (${goldPlus.length})</option>
-          <option value="inactive">Ανενεργοί > 30 ημέρες (${inactive.length})</option>
-        </select>
-      </div>
-
-      <div class="form-row"><label class="form-label">Όνομα καμπάνιας (internal)</label>
-        <input class="form-input" id="camp_name" placeholder="π.χ. Καλοκαιρινές Προσφορές" value="Καμπάνια ${new Date().toLocaleDateString('el-GR')}">
-      </div>
-
-      <div class="form-row"><label class="form-label">Θέμα Email</label>
-        <input class="form-input" id="camp_subject" placeholder="π.χ. 🔥 -20% σε όλα τα υγρά αυτή την εβδομάδα!">
-      </div>
-
-      <div class="form-row"><label class="form-label">Μήνυμα (HTML)</label>
-        <textarea class="form-input" id="camp_body" rows="10" placeholder="Γράψε το μήνυμα... {NAME} = όνομα πελάτη, {POINTS} = πόντοι">Αγαπητέ/ή {NAME},
-
-Σας ενημερώνουμε για τις νέες μας προσφορές!
-
-🎁 -20% σε όλα τα υγρά αναπλήρωσης
-⚡ Ελέγξτε τους ${CUSTOMERS[0]?.loyaltyPoints||0} πόντους σας
-🔥 Περιορισμένη διάρκεια έως ${dateGR(addDays(7))}
-
-Σας περιμένουμε στο κατάστημα!
-
-Με εκτίμηση,
-${getSettings().shopName||'Η ομάδα μας'}</textarea>
-      </div>
-
-      <div class="ai-box mb-3" style="padding:10px">
-        <div class="text-xs">💡 <b>Tips:</b> Χρησιμοποίησε <code>{NAME}</code> και <code>{POINTS}</code> για personalization</div>
-      </div>
-
-      <div class="flex gap-2" style="flex-wrap:wrap">
-        <button class="btn btn-primary btn-lg" onclick="launchCampaign()"><i data-lucide="send" size="16"></i> <span id="campSendBtnText">Αποστολή σε ${withEmail.length}</span></button>
-        <button class="btn btn-ghost" onclick="aiGenerateCampaignText()"><i data-lucide="sparkles" size="16"></i> ZyroNex Πρόταση</button>
-        <button class="btn btn-ghost" onclick="previewCampaign()"><i data-lucide="eye" size="16"></i> Προεπισκόπηση</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="section-title">📜 Πρόσφατες Καμπάνιες</div>
-      <div class="mt-3">
-      ${recentCampaigns.length === 0
-        ? '<div class="muted text-sm" style="padding:20px;text-align:center">Δεν έχεις στείλει καμπάνιες ακόμα</div>'
-        : recentCampaigns.map(c=>`<div style="padding:14px;border-radius:10px;background:var(--bg-2);margin-bottom:10px">
-          <div class="fw-700">${c.name}</div>
-          <div class="text-xs muted mt-2">Εστάλη σε ${c.total} πελάτες • ${new Date(c.sent_at).toLocaleDateString('el-GR')}</div>
-          <div class="mt-2 flex gap-2">
-            <span class="chip chip-ok">${c.success} επιτυχείς</span>
-            ${c.total-c.success>0?`<span class="chip chip-danger">${c.total-c.success} αποτυχίες</span>`:''}
-          </div>
-        </div>`).join('')}
-      </div>
-    </div>
-  </div>`;
-  document.getElementById('content').innerHTML=html;lucide.createIcons();
-}
-
-function updateCampTargetCount(){
-  const audience = document.getElementById('camp_audience')?.value;
-  const list = getCampaignTargets(audience);
-  const btn = document.getElementById('campSendBtnText');
-  if(btn) btn.textContent = `Αποστολή σε ${list.length}`;
-}
-
-function getCampaignTargets(audience){
-  const withEmail = CUSTOMERS.filter(c=>c.email);
-  if(audience === 'vip') return withEmail.filter(c=>c.totalSpent>=500);
-  if(audience === 'gold') return withEmail.filter(c=>['gold','platinum'].includes(c.loyaltyTier));
-  if(audience === 'inactive'){
-    return withEmail.filter(c=>{
-      if(!c.lastVisit) return false;
-      const days = (Date.now() - new Date(c.lastVisit).getTime()) / 86400000;
-      return days >= 30;
-    });
-  }
-  return withEmail;
-}
-
-function previewCampaign(){
-  const c = CUSTOMERS.filter(x=>x.email)[0] || {name:'Παράδειγμα Πελάτη', loyaltyPoints:0};
-  const subject = document.getElementById('camp_subject').value || '(κενό θέμα)';
-  let body = document.getElementById('camp_body').value || '';
-  body = body.replace(/\{NAME\}/g, c.name).replace(/\{POINTS\}/g, c.loyaltyPoints||0);
-
-  openModal(`<div class="modal-head">
-    <h3 class="fw-800 text-xl">Προεπισκόπηση Email</h3>
-    <button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>
-  </div>
-  <div class="modal-body">
-    <div style="border:1px solid var(--border);border-radius:10px;padding:16px;background:#fff;color:#000">
-      <div style="border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:16px">
-        <div style="font-size:11px;color:#666">Προς: ${c.name} &lt;${c.email||'—'}&gt;</div>
-        <div style="font-weight:700;margin-top:4px">${subject}</div>
-      </div>
-      <div style="border-top:4px solid #d4ff3a;padding-top:16px;white-space:pre-wrap;font-family:Arial,sans-serif">${body}</div>
-    </div>
-    <div class="flex gap-2 mt-4">
-      <button class="btn btn-primary" onclick="closeModal()">Κλείσιμο</button>
-    </div>
-  </div>`);
-}
-
-async function aiGenerateCampaignText(){
-  const subject = document.getElementById('camp_subject');
-  const body = document.getElementById('camp_body');
-
-  toast('Το ZyroNex γράφει το κείμενο...','warn');
-  try{
-    const s = getSettings();
-    const text = await askClaude(
-      [{role:'user', content:`Γράψε καμπάνια email marketing για ελληνικό vape κατάστημα "${s.shopName||'ZyroNex'}". ΤΙΜΕΣ ΣΕ €.
-
-Απαίτηση:
-- Subject line δυνατό (μέχρι 50 χαρακτήρες) σε 1η γραμμή με πρόθεμα "SUBJECT: "
-- Body 100-150 λέξεις από 2η γραμμή
-- Χρήση placeholder {NAME} για το όνομα
-- Χρήση placeholder {POINTS} για τους πόντους
-- Συγκεκριμένη προσφορά (π.χ. -20% για 7 ημέρες)
-- Emoji στην αρχή του subject
-- Call-to-action στο τέλος
-
-Παράδειγμα μορφής:
-SUBJECT: 🔥 {NAME}, σου ετοιμάσαμε κάτι ξεχωριστό!
-[body εδώ]`}],
-      'Είσαι expert copywriter email marketing. Τιμές ΠΑΝΤΑ σε €.'
-    );
-
-    const lines = text.split('\n');
-    const subjectLine = lines.find(l=>l.toUpperCase().startsWith('SUBJECT:'));
-    if(subjectLine){
-      subject.value = subjectLine.replace(/^SUBJECT:\s*/i,'').trim();
-      body.value = lines.filter(l=>!l.toUpperCase().startsWith('SUBJECT:')).join('\n').trim();
-    }else{
-      body.value = text;
-    }
-    toast('ZyroNex Πρόταση Έτοιμη','success');
-  }catch(err){
-    toast('AI σφάλμα: '+err.message,'danger');
-  }
-}
-
-async function launchCampaign(){
-  const audience = document.getElementById('camp_audience').value;
-  const campaignName = document.getElementById('camp_name').value.trim() || 'Campaign';
-  const subject = document.getElementById('camp_subject').value.trim();
-  const bodyTemplate = document.getElementById('camp_body').value.trim();
-
-  if(!subject){toast('Συμπλήρωσε θέμα','danger');return}
-  if(!bodyTemplate){toast('Συμπλήρωσε μήνυμα','danger');return}
-
-  const targets = getCampaignTargets(audience);
-  if(targets.length === 0){toast('Δεν υπάρχουν παραλήπτες','warn');return}
-
-  showConfirm(`Θα σταλεί email σε ${targets.length} πελάτες. Συνέχεια;`, ()=>_sendCampaignRun(targets, subject, bodyTemplate));
-}
-
-async function _sendCampaignRun(targets, subject, bodyTemplate){
-  // Progress modal
-  openModal(`<div class="modal-body" style="text-align:center;padding:40px">
-    <div style="width:50px;height:50px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto"></div>
-    <div class="fw-700 text-lg mt-4">Αποστολή Emails...</div>
-    <div class="muted mt-2" id="campProgress">0 / ${targets.length}</div>
-    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-  </div>`);
-
-  let ok = 0, failed = 0;
-  for(let i=0; i<targets.length; i++){
-    const c = targets[i];
-    const personalBody = bodyTemplate
-      .replace(/\{NAME\}/g, c.name)
-      .replace(/\{POINTS\}/g, c.loyaltyPoints||0)
-      .replace(/\{TIER\}/g, c.loyaltyTier||'bronze');
-
-    const html = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333">
-      <div style="border-top:4px solid #d4ff3a;padding-top:20px;white-space:pre-wrap">${personalBody}</div>
-      <div style="margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#888">Στάλθηκε από το ${getSettings().shopName||'ZyroNex'}</div>
-    </body></html>`;
-
-    try{
-      await sendEmail({
-        to: c.email, subject,
-        html, text: personalBody,
-        customerId: c.id
-      });
-      ok++;
-    }catch(e){
-      failed++;
-      console.error(`Failed to ${c.email}:`, e.message);
-    }
-
-    const prog = document.getElementById('campProgress');
-    if(prog) prog.textContent = `${i+1} / ${targets.length}`;
-
-    if(i < targets.length - 1) await new Promise(r=>setTimeout(r, 150));
-  }
-
-  closeModal();
-  toast(`✅ Εστάλησαν ${ok} emails${failed>0?` (${failed} αποτυχίες)`:''}`, ok>0?'success':'danger');
-  renderCampaigns();
-}
-/* ============================================================
-   CAMPAIGNS end
-   ============================================================ */
+// [Lazy module: renderCampaigns extracted to /js/modules/campaigns.js — loaded on demand]
 
 /* ============================================================
    ALERTS
@@ -35160,7 +34941,8 @@ window.HELP_KB = {
 "02-inventory/quick-mix.md",
 "02-inventory/stock-management.md",
 "02-inventory/tpd-compliance.md",
-"02-inventory/waste-deletions.md"
+"02-inventory/waste-deletions.md",
+"02-inventory/kb_burn_rate_reorder.md"
 ]
 },
 {
@@ -35241,7 +35023,8 @@ window.HELP_KB = {
 "08-administration/settings.md",
 "08-administration/subscription-lifecycle.md",
 "08-administration/users-roles.md",
-"08-administration/shop-changelog.md"
+"08-administration/shop-changelog.md",
+"08-administration/kb_lazy_loading.md"
 ]
 },
 {
@@ -35280,7 +35063,8 @@ window.HELP_KB = {
 "11-security/code-audit.md",
 "11-security/brute-force.md",
 "11-security/threat-analysis.md",
-"11-security/age-verification-log.md"
+"11-security/age-verification-log.md",
+"11-security/kb_rls_hardening.md"
 ]
 },
 {
@@ -35299,6 +35083,9 @@ window.HELP_KB = {
 }
 ],
 "docs": {
+"02-inventory/kb_burn_rate_reorder.md": "# 🛒 Έξυπνη Παραγγελία (Burn Rate)\n\nΤο εργαλείο τρέχει μια συνάρτηση στον server (zn_burn_rate_reorder) που μετρά πόσες μονάδες κάθε προϊόντος πουλήθηκαν τις τελευταίες 30 ημέρες, υπολογίζει τον μέσο ημερήσιο ρυθμό και το πόσες ημέρες απόθεμα απομένει. Ένα προϊόν σημειώνεται για παραγγελία όταν το απόθεμα πέσει κάτω από το ελάχιστο ή κάτω από την κάλυψη του χρόνου παράδοσης. Η προτεινόμενη ποσότητα καλύπτει 30+7 ημέρες, προσαρμοσμένη στην εποχική τάση. Τα δεδομένα μένουν στον server· ο browser δέχεται μόνο την τελική λίστα.\n\n## Ενεργοποίηση\n\nΑπαιτεί plugin **reorder_assistant** ενεργό από το Plugin Market. Το κουμπί 🛒 «Παραγγελία ✨» εμφανίζεται στα **Εργαλεία** της Αποθήκης.\n\n## Αποτέλεσμα\n\nΛίστα παραγγελίας ανά προμηθευτή, με κουμπί «Αντιγραφή παραγγελίας» για αποστολή.\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
+"11-security/kb_rls_hardening.md": "# 🛡️ Απομόνωση Δεδομένων (RLS) & Ρόλοι\n\nΚάθε κατάστημα βλέπει μόνο τα δικά του δεδομένα μέσω Row-Level Security. Οι πολιτικές κλείνουν τρία κενά: (1) διαρροή συνδρομών άλλου καταστήματος, (2) πρόσβαση σε αρχεία Vault εκτός καταστήματος/ρόλου, (3) πείραγμα βαρδιών άλλων υπαλλήλων.\n\n## Ρόλοι\n\nΟ ρόλος «Ταμίας» βλέπει και αλλάζει μόνο τις δικές του βάρδιες· δημιουργία/διαγραφή βαρδιών και διαγραφή αρχείων Vault γίνονται μόνο από managers. Οι έλεγχοι βασίζονται στα στοιχεία σύνδεσης (shop_id, user_id, role).\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
+"08-administration/kb_lazy_loading.md": "# ⚡ On-demand Φόρτωση Εργαλείων\n\nΓια να ανοίγει γρήγορα το Ταμείο, τα πιο βαριά εργαλεία δεν φορτώνουν στην αρχή. Φορτώνουν την πρώτη φορά που τα ανοίγεις και μετά μένουν έτοιμα. Αν κάποια φόρτωση αποτύχει (π.χ. κακό δίκτυο), εμφανίζεται κουμπί «Επανάληψη». Η πλοήγηση και το κουμπί «Πίσω» δεν επηρεάζονται.\n\n## Ποια εργαλεία φορτώνουν on-demand\n\n- 👥 Customer Intelligence\n- 📧 Καμπάνιες (Email Marketing)\n- 🎨 Site Builder\n- ✨ Pulse (Creative Studio)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
 "13-sitebuilder/eshop-builder.md": "# 🎨 Site Builder \u0026 Eshop\n\n> Φτιάξε επαγγελματικό website \u0026 eshop με drag \u0026 drop — χωρίς προγραμματιστή. Τα προϊόντα συνδέονται αυτόματα από την αποθήκη.\n\n## Πρόσβαση\n\n**Μενού → 🎨 Site Builder** (εμφανίζεται όταν το πρόσθετο είναι ενεργό από το Plugin Market· ο ιδιοκτήτης το έχει πάντα ενεργό).\n\n## Ξεκίνημα σε 4 βήματα\n\n1. **Διάλεξε πρότυπο** — Vape Shop (σκούρο), Eshop, ή Clean. Ή ξεκίνα από το μηδέν.\n2. **Πρόσθεσε στοιχεία** — hero, προϊόντα, τιμοκατάλογος, gallery, λογότυπα, AI Vape Advisor — με drag \u0026 drop.\n3. **Συγχρόνισε προϊόντα** — πάτα «Συγχρονισμός προϊόντων» για να περάσει η αποθήκη στο eshop.\n4. **Δημοσίευσε** — οι παραγγελίες έρχονται με ασφαλή πληρωμή, συνδεδεμένες με το ταμείο σου.\n\n## Συγχρονισμός προϊόντων\n\nΤο κουμπί «Συγχρονισμός προϊόντων» περνά τα προϊόντα της αποθήκης στο eshop με αυτόματες κατηγορίες, tags (brand, νικοτίνη mg, ml, γεύση, «Διαθέσιμο», «Προσφορά») και όλες τις εικόνες. Το απόθεμα ενημερώνεται σε πραγματικό χρόνο: όταν πουλάς από το ταμείο, μειώνεται και στο eshop.\n\n## Πληρωμές (ασφαλείς)\n\nΣτο καλάθι εμφανίζονται όλοι οι τρόποι πληρωμής — κάρτα, αντικαταβολή, Apple/Google Pay, IRIS, κατάθεση — και εσύ επιλέγεις ποιους δέχεσαι. Οι πληρωμές περνούν μέσω **Viva Wallet ή Stripe**. Τα στοιχεία κάρτας δεν αγγίζουν ποτέ τον server. Κάθε παραγγελία παίρνει μοναδικό αριθμό (#1001, #1002, …).\n\n> 🔐 Τα κλειδιά πληρωμών αποθηκεύονται server-side (Edge Secrets), ποτέ στον browser.\n\n## Τρόποι αποστολής\n\nΟρίζεις couriers με τα λογότυπά τους. Ο πελάτης διαλέγει στο checkout· το κόστος προστίθεται αυτόματα (ή δωρεάν πάνω από όριο).\n\n## AI Vape Advisor\n\nΟ πελάτης απαντά λίγες ερωτήσεις (καπνιστής/νέος/ατμιστής, τσιγάρα/μέρα — προαιρετικό, τύπος MTL/RDL/DL, γεύσεις) και προτείνεται νικοτίνη (freebase \u0026 nic salt), συσκευή και υγρά — όλα από τη δική σου αποθήκη.\n\n## Αξιολογήσεις \u0026 πλοήγηση\n\n- Αστέρια + σχόλια κάτω από κάθε προϊόν, με captcha κατά spam.\n- Δυναμική αναζήτηση και emoji φίλτρα (🍂 καπνός, 🍎 μήλο, 🍓 φράουλα).\n- Κλικ σε συστατικό → δείχνει όλα τα υγρά που το περιέχουν.\n\n## Παραγγελίες στην εφαρμογή\n\nΟι online παραγγελίες έρχονται live με ειδοποίηση: toast + καμπανάκι + ήχος. Όταν το μαγαζί είναι κλειστό, ο πρώτος υπάλληλος που συνδέεται βλέπει όλες τις αναπάντητες. Διαχείριση \u0026 αλλαγή κατάστασης από το «Online Orders».\n\n## Επιστροφές (RMA) \u0026 Επικοινωνία\n\nΤο eshop έχει φόρμα επιστροφής/βλάβης (RMA) και φόρμα επικοινωνίας — τα αιτήματα φτάνουν στην εφαρμογή σου.\n\n## Συχνά Λάθη\n\n❌ «Δεν εμφανίζονται προϊόντα στο eshop» → Πάτα «Συγχρονισμός προϊόντων».\n❌ «Δεν περνά η πληρωμή» → Έλεγξε ότι έχεις ρυθμίσει Viva ή Stripe και ενεργοποιημένες μεθόδους.\n❌ «Δεν βλέπω το μενού Site Builder» → Ενεργοποίησέ το από το Plugin Market.\n\n## Δες επίσης\n\n- [Plugin Market](../07-ai-smart/plugin-market.md)\n- [Online Orders](../10-online-orders/overview.md)\n- [Products](../02-inventory/products.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
 "07-ai-smart/plugin-market.md": "# 🧩 Plugin Market — Πρόσθετα\n\n> Η βιτρίνα προσθέτων που επεκτείνουν το ZyroNex. Κάθε πρόσθετο ξεκλειδώνει νέα λειτουργία, με εγκατάσταση ενός κλικ.\n\n## Πρόσβαση\n\n**Σύστημα → Plugin Market**\n\n> 💡 Ως ιδιοκτήτης, όλα τα πρόσθετα είναι ήδη ενεργά για σένα.\n\n## Διαθέσιμα πρόσθετα\n\n### 🎨 ZyroNex Site Builder\n**Αν ενεργό:** εμφανίζεται «🎨 Site Builder» στο μενού.\n**Αποτέλεσμα:** φτιάχνεις website & eshop με drag & drop, με προϊόντα από την αποθήκη, καλάθι, ασφαλείς πληρωμές (Viva/Stripe), AI Vape Advisor, αξιολογήσεις και live παραγγελίες.\n**Πού:** Μενού → 🎨 Site Builder. Δες [Site Builder & Eshop](../13-sitebuilder/eshop-builder.md).\n\n### 🔎 Έλεγχος Τιμολογίου\n**Αν ενεργό:** όταν σκανάρεις τιμολόγιο, κάθε προϊόν συγκρίνεται με το προηγούμενο κόστος του.\n**Αποτέλεσμα:** βλέπεις 🔴 αυξήσεις τιμών, ⚠️ λάθη χρέωσης (ποσότητα × τιμή ≠ σύνολο) και το συνολικό επιπλέον κόστος.\n**Πού:** Αποθήκη → Smart Invoice Scanner.\n\n### 🛒 Παραγγελία με ένα κουμπί\n**Αν ενεργό:** εμφανίζεται κουμπί «🛒 Παραγγελία» στα Εργαλεία της Αποθήκης.\n**Αποτέλεσμα:** έτοιμη λίστα παραγγελίας ανά προμηθευτή, με ποσότητες για κάλυψη ~30 ημερών (βάσει αποθέματος + ρυθμού + ελάχιστου).\n**Πού:** Αποθήκη → Εργαλεία.\n\n### 🔁 Win-back Πελατών\n**Αν ενεργό:** εμφανίζεται tab «Win-back» στο Customer Intelligence.\n**Αποτέλεσμα:** εντοπίζει πελάτες που αργούν πέρα από τον προσωπικό τους ρυθμό, με την αγαπημένη τους γεύση και έτοιμο μήνυμα επανάκτησης.\n**Πού:** Πελάτες → Customer Intelligence → Win-back.\n\n### 🔗 Τι Πάει Μαζί\n**Αν ενεργό:** εμφανίζεται tab «Τι Πάει Μαζί» στην Ανάλυση Πελατών.\n**Αποτέλεσμα:** βλέπεις ποια προϊόντα αγοράζονται μαζί με ποσοστό συσχέτισης — για cross-sell στον πάγκο.\n**Πού:** Πελάτες → Ανάλυση Πελατών → Τι Πάει Μαζί.\n\n### 🎁 Έξυπνα Πακέτα\n**Αν ενεργό:** εμφανίζεται «🎁 Έξυπνα Πακέτα» στα Εργαλεία της Αποθήκης.\n**Αποτέλεσμα:** προτάσεις πακέτων προσφοράς βάσει affinity, με έκπτωση που κρατά το περιθώριο κέρδους και προτεραιότητα σε ό,τι λήγει.\n**Πού:** Αποθήκη → Εργαλεία.\n\n### ⏳ Έκπτωση Λήξης\n**Αν ενεργό:** εμφανίζεται «⏳ Έκπτωση Λήξης» στα Εργαλεία της Αποθήκης.\n**Αποτέλεσμα:** κλιμακωτή έκπτωση (−15%/−25%/−35%) σε προϊόντα που λήγουν σε 60/30/15 ημέρες.\n**Πού:** Αποθήκη → Εργαλεία.\n\n## Πώς γίνεται η εγκατάσταση\n\n1. Σύστημα → Plugin Market\n2. Διάλεξε πρόσθετο → διάβασε περιγραφή & βήματα\n3. Πάτα «Εγκατάσταση»\n4. Ενεργοποιείται άμεσα — η αντίστοιχη λειτουργία εμφανίζεται στη σελίδα της\n\n---\n*Τελευταία ενημέρωση: Μάιος 2026*\n",
 "07-ai-smart/plugin-market.md__en": "# 🧩 Plugin Market — Add-ons\n\n> The storefront of add-ons that extend ZyroNex. Each plugin unlocks new functionality, installed with one click.\n\n## Access\n\n**System → Plugin Market**\n\n> 💡 As the owner, all plugins are already active for you.\n\n## Available plugins\n\n### 🔎 Invoice Check\n**If active:** when you scan an invoice, each product is compared to its previous cost.\n**Result:** see 🔴 price increases, ⚠️ billing errors (qty × price ≠ total) and total extra cost.\n**Where:** Inventory → Smart Invoice Scanner.\n\n### 🛒 One-click Reorder\n**If active:** an \"🛒 Order\" button appears in the Inventory Tools.\n**Result:** a ready order list per supplier, with quantities to cover ~30 days (based on stock + rate + minimum).\n**Where:** Inventory → Tools.\n\n### 🔁 Customer Win-back\n**If active:** a \"Win-back\" tab appears in Customer Intelligence.\n**Result:** spots customers overdue beyond their personal rhythm, with their favorite flavor and a ready re-engagement message.\n**Where:** Customers → Customer Intelligence → Win-back.\n\n### 🔗 Frequently Bought Together\n**If active:** a \"Together\" tab appears in Customer Intelligence.\n**Result:** see which products are bought together with a correlation score — for counter cross-sell.\n\n### 🎁 Smart Bundles\n**If active:** a \"🎁 Smart Bundles\" tool appears in Inventory Tools.\n**Result:** bundle suggestions based on affinity, with a margin-protecting discount and priority to expiring stock.\n\n### ⏳ Expiry Markdown\n**If active:** an \"⏳ Expiry Markdown\" tool appears in Inventory Tools.\n**Result:** tiered discounts (−15%/−25%/−35%) on products expiring in 60/30/15 days.\n\n---\n*Last updated: May 2026*\n",
@@ -45562,4 +45349,6 @@ function _kioskSliderChange(idx){
 window._kioskSliderChange = _kioskSliderChange;
 window._kioskRenderSliderTicks = _kioskRenderSliderTicks;
 </script>
+<script src="/js/zn_module_loader.js"></script>
+
 
