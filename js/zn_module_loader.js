@@ -22,7 +22,7 @@ var ZN_MODULE_LOADER = (function () {
   // συνάρτησης render που εκθέτει το module αφού φορτωθεί (π.χ. window.renderCustomerIntel).
   // Τα URLs δείχνουν σε ES modules που έχουν εξαχθεί από το zn-leaves.js.
   var REGISTRY = {
-    customerintel: { url: '/js/modules/customer-intel.js', global: 'renderCustomerIntel' },
+    'customer-intel': { url: '/js/modules/customer-intel.js', global: 'renderCustomerIntel' },
     campaigns:     { url: '/js/modules/campaigns.js',      global: 'renderCampaigns' },
     sitebuilder:   { url: '/js/modules/site-builder.js',   global: 'renderSiteBuilder' },
     pulse:         { url: '/js/modules/pulse.js',          global: 'renderPulse' }
