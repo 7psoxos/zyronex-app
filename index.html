@@ -2976,6 +2976,17 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="/js/zn_event_bus.js"></script>
 <script src="/js/zn_offline_sync.js"></script>
 <script>
+/* Stubs για lazy modules — ορίζονται πρώτα ώστε κανένα renderers object
+   να μην πετάει ReferenceError αν αξιολογηθεί πριν φορτωθεί το module.
+   Τα σώματα τρέχουν μόνο όταν πατηθεί η σελίδα, οπότε ZN_MODULE_LOADER
+   είναι ήδη διαθέσιμος. */
+var __ZN_LAZY = { renderCustomerIntel:'customer-intel', renderCampaigns:'campaigns', renderSiteBuilder:'sitebuilder', renderPulse:'pulse' };
+Object.keys(__ZN_LAZY).forEach(function(n){
+  if (typeof window[n] !== 'function') {
+    window[n] = function(){ return ZN_MODULE_LOADER.loadAndRender(__ZN_LAZY[n]); };
+  }
+});
+
 /* ============================================================
    ℹ️ HELP SYSTEM — Οδηγός χρήσης ανά σελίδα (EL + EN)
    ============================================================ */
