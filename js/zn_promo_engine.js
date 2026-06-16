@@ -17,6 +17,7 @@
  * Πολιτική συνδυασμού (promoCombination στο katastimaSettings):
  *   'stack' → όλοι οι κανόνες που πιάνουν, αθροιστικά.
  *   'best'  → μόνο ο κανόνας υψηλότερης προτεραιότητας (default).
+ *             Μεγαλύτερος αριθμός priority = υψηλότερη προτεραιότητα.
  *             Ισοπαλία προτεραιότητας → μεγαλύτερο ποσό έκπτωσης.
  *
  * Cap: discount ≤ cartTotal (τελικό σύνολο ≥ 0 πάντα).
@@ -38,7 +39,7 @@ var ZN_PROMO = (function () {
           var okFrom = !r.valid_from || new Date(r.valid_from).getTime() <= now;
           var okTo   = !r.valid_to   || new Date(r.valid_to).getTime()   >= now;
           return okFrom && okTo;
-        }).sort(function (a, b) { return (a.priority || 100) - (b.priority || 100); });
+        }).sort(function (a, b) { return (b.priority || 0) - (a.priority || 0); });
         return _rules;
       });
   }
@@ -228,15 +229,15 @@ var ZN_PROMO = (function () {
 
     var useFired = fired;
     if (policy === 'best' && fired.length > 1) {
-      /* Βρες την ελάχιστη τιμή προτεραιότητας (= ο πιο σημαντικός κανόνας). */
-      var minPrio = fired[0].priority;
+      /* Βρες τη μέγιστη τιμή προτεραιότητας (μεγαλύτερος αριθμός = νικητής). */
+      var maxPrio = fired[0].priority;
       for (var fi = 1; fi < fired.length; fi++) {
-        if (fired[fi].priority < minPrio) { minPrio = fired[fi].priority; }
+        if (fired[fi].priority > maxPrio) { maxPrio = fired[fi].priority; }
       }
       /* Μεταξύ ισόβαθμων → μεγαλύτερο ποσό. */
       var best = null;
       for (var fj = 0; fj < fired.length; fj++) {
-        if (fired[fj].priority === minPrio) {
+        if (fired[fj].priority === maxPrio) {
           if (!best || fired[fj].amount > best.amount) { best = fired[fj]; }
         }
       }

@@ -64,7 +64,8 @@ var ZN_PROMOS = (function () {
     + 'border:1px solid var(--border);border-radius:10px;'
     + 'background:var(--bg-1);color:var(--text-0);'
     + '-webkit-appearance:none;box-sizing:border-box';
-  function _lbl(t) { return '<label class="fw-700 text-sm" style="display:block;margin-bottom:6px">' + t + '</label>'; }
+  function _lbl(t) { return '<label class="fw-700 text-sm" style="display:block;margin-bottom:3px">' + t + '</label>'; }
+  function _hint(t) { return '<div style="font-size:12px;color:var(--text-2);margin-bottom:5px;line-height:1.4">' + t + '</div>'; }
   function _row(h) { return '<div style="margin-bottom:14px">' + h + '</div>'; }
 
   /* Trigger button για product picker — αντικαθιστά <select> προϊόντος */
@@ -173,7 +174,7 @@ var ZN_PROMOS = (function () {
     var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
     return sbAuth.from('promo_rules').select('*')
       .eq('shop_id', shopId)
-      .order('priority', { ascending: true })
+      .order('priority', { ascending: false })
       .then(function (res) {
         if (res.error) { console.error('[ZN_PROMOS._fetchRules] error:', res.error); }
         _rules = res.error ? [] : (res.data || []);
@@ -270,7 +271,7 @@ var ZN_PROMOS = (function () {
         + '<option value="amount"' + (bEffType === 'amount' ? ' selected' : '') + '>Σταθερό ποσό €</option>';
       var bEffLbl = bEffType === 'amount' ? 'Ποσό € (σταθερό, μία φορά)' : 'Ποσοστό %';
       var bEffPh  = bEffType === 'amount' ? 'π.χ. 5.00' : 'π.χ. 20';
-      return _row(_lbl('Είδη πακέτου (ελάχ. 2)'))
+      return _row(_lbl('Είδη πακέτου (ελάχ. 2)') + _hint('Πρέπει να υπάρχουν ΟΛΑ στο καλάθι για να ισχύσει το πακέτο.'))
         + '<div id="znpf-bundle-items" style="margin-bottom:10px">' + bRows + '</div>'
         + '<button type="button" onclick="ZN_PROMOS._addBundleRow()"'
         + ' style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;'
@@ -279,7 +280,7 @@ var ZN_PROMOS = (function () {
         + '➕ Προσθήκη είδους</button>'
         + _row(_lbl('Τύπος έκπτωσης') + '<select id="znpf-beff-type" onchange="ZN_PROMOS._onBundleEffChange()" style="' + _INP + '">' + bEffOpts + '</select>')
         + '<div id="znpf-beff-val-wrap">'
-        + _row(_lbl(bEffLbl) + '<input id="znpf-beff-val" type="number" min="0" step="0.5" value="' + _esc(String(bEffVal)) + '" placeholder="' + bEffPh + '" style="' + _INP + '">')
+        + _row(_lbl(bEffLbl) + _hint('Το ποσοστό ή ποσό που αφαιρείται από τα είδη του πακέτου.') + '<input id="znpf-beff-val" type="number" min="0" step="0.5" value="' + _esc(String(bEffVal)) + '" placeholder="' + bEffPh + '" style="' + _INP + '">')
         + '</div>';
     }
     var curScope = cond.scope || 'all';
@@ -288,14 +289,14 @@ var ZN_PROMOS = (function () {
       return '<option value="' + s + '"' + (curScope === s ? ' selected' : '') + '>' + lbl + '</option>';
     }).join('');
     if (type === 'expiry') {
-      return _row(_lbl('Εύρος') + '<select id="znpf-scope" onchange="ZN_PROMOS._onScopeChange()" style="' + _INP + '">' + scopeOpts + '</select>')
+      return _row(_lbl('Εύρος') + _hint('Σε ποια προϊόντα ισχύει: όλα, συγκεκριμένο, ή κατηγορία.') + '<select id="znpf-scope" onchange="ZN_PROMOS._onScopeChange()" style="' + _INP + '">' + scopeOpts + '</select>')
            + '<div id="znpf-ids-wrap">' + _idsFieldHtml(curScope, cond.ids||[]) + '</div>'
            + _row(_lbl('Ημέρες πριν τη λήξη') + '<input id="znpf-daysbefore" type="number" min="1" value="' + (cond.days_before||'') + '" placeholder="π.χ. 7" style="' + _INP + '">');
     }
     if (type === 'dead_stock') {
-      return _row(_lbl('Εύρος') + '<select id="znpf-scope" onchange="ZN_PROMOS._onScopeChange()" style="' + _INP + '">' + scopeOpts + '</select>')
+      return _row(_lbl('Εύρος') + _hint('Σε ποια προϊόντα ισχύει: όλα, συγκεκριμένο, ή κατηγορία.') + '<select id="znpf-scope" onchange="ZN_PROMOS._onScopeChange()" style="' + _INP + '">' + scopeOpts + '</select>')
            + '<div id="znpf-ids-wrap">' + _idsFieldHtml(curScope, cond.ids||[]) + '</div>'
-           + _row(_lbl('Ημέρες χωρίς πώληση') + '<input id="znpf-daysnonsale" type="number" min="1" value="' + (cond.days_no_sale||'') + '" placeholder="π.χ. 30" style="' + _INP + '">');
+           + _row(_lbl('Ημέρες χωρίς πώληση') + _hint('Σκάει αν το προϊόν δεν πουλήθηκε τόσες μέρες (ή ποτέ).') + '<input id="znpf-daysnonsale" type="number" min="1" value="' + (cond.days_no_sale||'') + '" placeholder="π.χ. 30" style="' + _INP + '">');
     }
     return '';
   }
@@ -320,20 +321,27 @@ var ZN_PROMOS = (function () {
       + '<button onclick="ZN_PROMOS.closeModal()" aria-label="Κλείσιμο"'
       + ' style="background:none;border:none;cursor:pointer;font-size:24px;min-height:44px;min-width:44px;color:var(--text-2);line-height:1">×</button>'
       + '</div>'
-      + _row(_lbl('Όνομα Κανόνα') + '<input id="znpf-name" type="text" value="' + _esc(r.name||'') + '" placeholder="π.χ. 3 υγρά −20%" style="' + _INP + '">')
-      + _row(_lbl('Τύπος') + '<select id="znpf-type" onchange="ZN_PROMOS._onTypeChange()" style="' + _INP + '">' + typeOpts + '</select>')
+      + _row(_lbl('Όνομα Κανόνα') + _hint('Όπως εμφανίζεται στον πελάτη (απόδειξη/καλάθι).') + '<input id="znpf-name" type="text" value="' + _esc(r.name||'') + '" placeholder="π.χ. 3 υγρά −20%" style="' + _INP + '">')
+      + _row(_lbl('Τύπος') + _hint('Τι λογική ακολουθεί: ποσότητα, λήξη, αδρανές απόθεμα, πακέτο, n-οστό.') + '<select id="znpf-type" onchange="ZN_PROMOS._onTypeChange()" style="' + _INP + '">' + typeOpts + '</select>')
       + '<div id="znpf-fields" style="margin-bottom:2px">' + _typeFields(curType, cond, eff) + '</div>'
       + '<div id="znpf-pct-wrap"' + (isPctHidden ? ' style="display:none"' : '') + '>'
-      + _row(_lbl('Έκπτωση %') + '<input id="znpf-percent" type="number" min="0" max="100" step="0.5" value="' + (eff.percent||'') + '" placeholder="π.χ. 20" style="' + _INP + '">')
+      + _row(_lbl('Έκπτωση %') + _hint('Το ποσοστό που αφαιρείται.') + '<input id="znpf-percent" type="number" min="0" max="100" step="0.5" value="' + (eff.percent||'') + '" placeholder="π.χ. 20" style="' + _INP + '">')
       + '</div>'
       + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
-      + '<div style="flex:1;min-width:130px">' + _lbl('Προτεραιότητα') + '<input id="znpf-priority" type="number" min="1" value="' + (r.priority||100) + '" style="' + _INP + '"></div>'
-      + '<div style="flex:1;min-width:130px;display:flex;align-items:center;gap:10px;padding-top:22px">'
+      + '<div style="flex:1;min-width:130px">'
+      + _lbl('Προτεραιότητα')
+      + _hint('Μεγαλύτερος αριθμός = υψηλότερη. Μετράει μόνο στο «Μόνο η καλύτερη».')
+      + '<input id="znpf-priority" type="number" min="1" value="' + (r.priority||100) + '" style="' + _INP + '"></div>'
+      + '<div style="flex:1;min-width:130px;padding-top:22px">'
+      + '<label style="display:flex;align-items:center;gap:10px;cursor:pointer">'
       + '<input id="znpf-active" type="checkbox"' + (r.active !== false ? ' checked' : '') + ' style="width:22px;height:22px;cursor:pointer">'
-      + '<label for="znpf-active" class="fw-700 text-sm" style="cursor:pointer">Ενεργό</label>'
+      + '<span class="fw-700 text-sm">Ενεργό</span></label>'
+      + _hint('Αν κλειστό, η προσφορά δεν εφαρμόζεται.')
       + '</div></div>'
       + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
-      + '<div style="flex:1;min-width:130px">' + _lbl('Ισχύει από (προαιρ.)') + '<input id="znpf-from" type="date" value="' + (r.valid_from ? r.valid_from.slice(0,10) : '') + '" style="' + _INP + '"></div>'
+      + '<div style="flex:1;min-width:130px">'
+      + _lbl('Ισχύει από (προαιρ.)') + _hint('Προαιρετικές ημερομηνίες — εκτός αυτών η προσφορά κοιμάται.')
+      + '<input id="znpf-from" type="date" value="' + (r.valid_from ? r.valid_from.slice(0,10) : '') + '" style="' + _INP + '"></div>'
       + '<div style="flex:1;min-width:130px">' + _lbl('Ισχύει έως (προαιρ.)') + '<input id="znpf-to" type="date" value="' + (r.valid_to ? r.valid_to.slice(0,10) : '') + '" style="' + _INP + '"></div>'
       + '</div>'
       + '<button class="btn btn-primary" style="width:100%;min-height:44px;font-size:15px" onclick="ZN_PROMOS.save()">💾 Αποθήκευση</button>'
