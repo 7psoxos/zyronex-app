@@ -1225,7 +1225,7 @@ if(window.navigator && window.navigator.share){
   ::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:4px}
   ::-webkit-scrollbar-thumb:hover{background:var(--border-strong)}
   /* Notification toast — always above every modal/overlay/blur */
-  #toastHost{position:fixed;inset:0;pointer-events:none;z-index:2147483647}
+  #toastHost{position:fixed;inset:0;pointer-events:none;z-index:2147483647;transform:translateZ(0);-webkit-transform:translateZ(0)}
   .toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px));right:16px;background:var(--bg-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:14px 18px;z-index:2147483647;pointer-events:auto;min-width:280px;max-width:calc(100vw - 32px);animation:slideIn 0.3s ease}
   @media(min-width:900px){.toast{bottom:80px;right:20px;}}
   .toast.success{border-left-color:var(--ok)}
@@ -14134,6 +14134,8 @@ function _processToastQueue(){
   const {msg,type,duration}=_toastQueue.shift();
   const host=document.getElementById('toastHost');
   if(!host){_toastActive=false;setTimeout(_processToastQueue,100);return;}
+  // Keep #toastHost as last child of body — always above any modal/overlay appended at runtime
+  if(document.body&&document.body.lastElementChild!==host) document.body.appendChild(host);
   const t=document.createElement('div');
   t.className='toast '+type;
   t.innerHTML='<div style="font-weight:600">'+msg+'</div>';
