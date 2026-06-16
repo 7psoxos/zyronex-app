@@ -6200,129 +6200,71 @@ async function startCameraNow(){
   var _diagErr = '';
 
   try{
-    // Cleanup παλιός scanner
+    // 1. Cleanup: σταμάτα παλιό instance + MediaStream tracks
     if(SCANNER){
-      try{
-        if(SCANNER.isScanning) await SCANNER.stop();
-        SCANNER.clear();
-      }catch(e){}
+      try{ if(SCANNER.isScanning) await SCANNER.stop(); }catch(e){}
+      try{ SCANNER.clear(); }catch(e){}
       SCANNER = null;
     }
-
-    // iOS: σταμάτα παλιό MediaStream ώστε να μην μείνει locked η κάμερα
     if(ACTIVE_STREAM){
       try{ ACTIVE_STREAM.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
       ACTIVE_STREAM = null;
     }
 
-    SCANNER = new Html5Qrcode('qr-reader');
+    // 2. Επαλήθευση: #qr-reader πρέπει να είναι στο DOM ΜΕ ύψος πριν το new
+    var el = document.getElementById('qr-reader');
+    if(!el) throw new Error('#qr-reader λείπει από το DOM');
+    if(el.offsetHeight === 0) throw new Error('#qr-reader: offsetHeight=0, δεν έχει ύψος');
 
-    // Όλα τα formats που υποστηρίζουμε (barcodes + QR)
-    const formats = [
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.CODE_93,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.CODABAR,
-      Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.DATA_MATRIX,
-      Html5QrcodeSupportedFormats.PDF_417,
-    ];
+    // 3. Φρέσκο instance — false = χωρίς verbose logging
+    SCANNER = new Html5Qrcode('qr-reader', false);
 
-    // Responsive scan box
-    const vw = window.innerWidth;
-    const boxW = Math.min(300, vw - 80);
-    const boxH = Math.round(boxW * 0.65);
+    // 4. Start: μόνο facingMode:"environment" — ΟΧΙ {exact:...}, ΟΧΙ camera-id λίστα
+    await SCANNER.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: undefined, aspectRatio: 1.0 },
+      onScanSuccess,
+      function(err){ console.warn('[scan-frame-err]', err); }
+    );
 
-    const config = {
-      fps: 10,
-      qrbox: {width: boxW, height: boxH},
-      aspectRatio: 1.333,
-      formatsToSupport: formats,
-      disableFlip: false,
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true
-      },
-      // iOS Safari: omit focusMode (unsupported, causes silent stream failure)
-      videoConstraints: {
-        facingMode: window.__useBackCamera ? 'environment' : 'user',
-        width: {ideal: 1280},
-        height: {ideal: 720}
-      }
-    };
-
-    const cameraConfig = window.__useBackCamera
-      ? {facingMode: {exact: 'environment'}}
-      : {facingMode: 'user'};
-
-    try{
-      await SCANNER.start(cameraConfig, config, onScanSuccess, ()=>{});
-    }catch(err1){
-      console.warn('Exact mode failed, trying fallback:', err1);
-      const fallbackConfig = window.__useBackCamera
-        ? {facingMode: 'environment'}
-        : {facingMode: 'user'};
-      try{
-        await SCANNER.start(fallbackConfig, config, onScanSuccess, ()=>{});
-      }catch(err2){
-        console.warn('facingMode failed, trying device list:', err2);
-        const devices = await Html5Qrcode.getCameras();
-        if(devices.length === 0){
-          throw new Error('Δεν βρέθηκε κάμερα στη συσκευή');
-        }
-        let cameraId = devices[devices.length - 1].id;
-        const backCamera = devices.find(d=>/back|rear|environment|πίσω/i.test(d.label||''));
-        if(backCamera && window.__useBackCamera) cameraId = backCamera.id;
-        const frontCamera = devices.find(d=>/front|user|selfie|μπροστ/i.test(d.label||''));
-        if(frontCamera && !window.__useBackCamera) cameraId = frontCamera.id;
-
-        await SCANNER.start(cameraId, config, onScanSuccess, ()=>{});
-      }
+    // 5. iOS Safari: inject playsinline + muted αμέσως μετά το start()
+    var v = document.querySelector('#qr-reader video');
+    if(v){
+      if(v.srcObject) ACTIVE_STREAM = v.srcObject;
+      v.setAttribute('playsinline', '');
+      v.setAttribute('webkit-playsinline', '');
+      v.muted = true;
+      v.play().catch(function(){});
     }
 
-    // iOS Safari: ensure video attributes after Html5Qrcode creates <video>
-    setTimeout(function() {
-      const v = document.querySelector('#qr-reader video');
-      if (v) {
-        if (v.srcObject) ACTIVE_STREAM = v.srcObject; // capture για track cleanup
-        v.setAttribute('playsinline', '');
-        v.setAttribute('webkit-playsinline', '');
-        v.muted = true;
-        v.play().catch(function() {});
-      }
-    }, 300);
+    // 6. Επαλήθευση εικόνας: video ΚΑΙ videoWidth>0 (έως 2×700ms)
+    for(var _i = 0; _i < 2; _i++){
+      await new Promise(function(r){ setTimeout(r, 700); });
+      v = document.querySelector('#qr-reader video');
+      if(v && v.videoWidth > 0) break;
+    }
+    if(!v){
+      throw new Error('Html5Qrcode δεν έκανε inject <video> στο #qr-reader (children:' + el.children.length + ')');
+    }
+    if(v.videoWidth === 0){
+      throw new Error('<video> υπάρχει αλλά videoWidth=0 — stream χωρίς εικόνα (readyState:' + v.readyState + ' srcObject:' + (v.srcObject ? 'yes' : 'null') + ')');
+    }
+    if(v.srcObject) ACTIVE_STREAM = v.srcObject;
 
     _diagOk = true;
 
-    const st = document.getElementById('scannerStatus');
-    if(st){
-      st.innerHTML = `<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>`;
-    }
+    var st = document.getElementById('scannerStatus');
+    if(st) st.innerHTML = '<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>';
+
   }catch(err){
-    console.error('Scanner error:', err);
-    _diagErr = (err.name||'Error') + ': ' + (err.message||String(err));
-    toast('[DBG] scanner error: ' + _diagErr, 'danger');
-    const st = document.getElementById('scannerStatus');
-    if(st){
-      st.innerHTML = `
-        <div style="color:var(--danger)">
-          ⚠️ Αποτυχία ενεργοποίησης κάμερας
-          <div class="text-xs muted mt-2">${err.message||err}</div>
-          <div class="text-xs muted mt-2">
-            Βεβαιώσου ότι:
-            • Έδωσες άδεια πρόσβασης στην κάμερα
-            • Δεν την χρησιμοποιεί άλλη εφαρμογή
-            • Η σελίδα φορτώνει μέσω HTTPS
-          </div>
-        </div>`;
-    }
+    console.error('[startCameraNow]', err);
+    _diagErr = (err.name || 'Error') + ': ' + (err.message || String(err));
+    toast('Scanner: ' + _diagErr, 'danger');
+    var st = document.getElementById('scannerStatus');
+    if(st) st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _diagErr + '</div>';
   }
 
-  // [DBG] Persistent diagnostic overlay πάνω από τη μαύρη περιοχή
+  // [DBG] Persistent diagnostic overlay
   _scannerDiag(_diagOk, _diagErr);
 }
 
