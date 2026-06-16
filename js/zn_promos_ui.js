@@ -67,9 +67,19 @@ var ZN_PROMOS = (function () {
   function _lbl(t) { return '<label class="fw-700 text-sm" style="display:block;margin-bottom:6px">' + t + '</label>'; }
   function _row(h) { return '<div style="margin-bottom:14px">' + h + '</div>'; }
 
+  /* Trigger button για product picker — αντικαθιστά <select> προϊόντος */
+  function _prodPickerBtnHtml(id, attrs) {
+    var prods = typeof PRODUCTS !== 'undefined' ? PRODUCTS : [];
+    var found = id ? prods.find(function (p) { return String(p.id) === String(id); }) : null;
+    var lbl = found ? _esc(found.name) : '🔍 Επέλεξε προϊόν…';
+    return '<button type="button" ' + (attrs || '') + ' data-pid="' + _esc(String(id || '')) + '"'
+      + ' onclick="ZN_PROMOS._openPicker(this)"'
+      + ' style="' + _INP + ';text-align:left;cursor:pointer;word-break:break-word">'
+      + lbl + '</button>';
+  }
+
   /* ─── Bundle helpers ─── */
   function _bundleSelHtml(ref, id) {
-    var prods = typeof PRODUCTS !== 'undefined' ? PRODUCTS : [];
     var cats = _cats();
     if (ref === 'category') {
       return '<select class="znpf-bsel" style="' + _INP + '">'
@@ -79,12 +89,8 @@ var ZN_PROMOS = (function () {
           }).join('')
         + '</select>';
     }
-    return '<select class="znpf-bsel" style="' + _INP + '">'
-      + '<option value="">— Προϊόν —</option>'
-      + prods.map(function (p) {
-          return '<option value="' + p.id + '"' + (String(id) === String(p.id) ? ' selected' : '') + '>' + _esc(p.name) + '</option>';
-        }).join('')
-      + '</select>';
+    // product → picker trigger button (αντί dropdown)
+    return _prodPickerBtnHtml(id, 'class="znpf-bpick"');
   }
   function _bundleRowHtml(ref, id, qty) {
     var refSel = '<select class="znpf-bref" onchange="ZN_PROMOS._onBundleRefChange(this)" style="' + _INP + '">'
@@ -107,10 +113,16 @@ var ZN_PROMOS = (function () {
     var out = [];
     for (var i = 0; i < rows.length; i++) {
       var refEl = rows[i].querySelector('.znpf-bref');
-      var selEl = rows[i].querySelector('.znpf-bsel');
       var qtyEl = rows[i].querySelector('.znpf-bqty');
       var ref = refEl ? refEl.value : 'product';
-      var id  = selEl ? selEl.value : '';
+      var id;
+      if (ref === 'product') {
+        var pickBtn = rows[i].querySelector('.znpf-bpick');
+        id = pickBtn ? (pickBtn.dataset.pid || '') : '';
+      } else {
+        var selEl = rows[i].querySelector('.znpf-bsel');
+        id = selEl ? selEl.value : '';
+      }
       var qty = qtyEl ? (parseInt(qtyEl.value) || 1) : 1;
       if (id) { out.push({ ref: ref, id: id, qty: qty }); }
     }
@@ -228,16 +240,12 @@ var ZN_PROMOS = (function () {
     eff  = eff  || {};
     var prods = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []);
     var cats  = _cats();
-    var prodOpts = '<option value="">— Επιλογή προϊόντος —</option>'
-      + prods.map(function (p) {
-          return '<option value="' + p.id + '"' + (String(cond.product_id) === String(p.id) ? ' selected' : '') + '>' + _esc(p.name) + '</option>';
-        }).join('');
     var catOpts = '<option value="">— Επιλογή κατηγορίας —</option>'
       + cats.map(function (c) {
           return '<option value="' + _esc(c) + '"' + (cond.category === c ? ' selected' : '') + '>' + _esc(c) + '</option>';
         }).join('');
     if (type === 'percent_over_qty') {
-      return _row(_lbl('Προϊόν') + '<select id="znpf-product" style="' + _INP + '">' + prodOpts + '</select>')
+      return _row(_lbl('Προϊόν') + _prodPickerBtnHtml(cond.product_id, 'id="znpf-product"'))
            + _row(_lbl('Ελάχιστη ποσότητα') + '<input id="znpf-minqty" type="number" min="1" value="' + (cond.min_qty||'') + '" placeholder="π.χ. 3" style="' + _INP + '">');
     }
     if (type === 'category_combo') {
@@ -245,7 +253,7 @@ var ZN_PROMOS = (function () {
            + _row(_lbl('Ελάχιστη ποσότητα') + '<input id="znpf-minqty" type="number" min="1" value="' + (cond.min_qty||'') + '" placeholder="π.χ. 3" style="' + _INP + '">');
     }
     if (type === 'nth_discount') {
-      return _row(_lbl('Προϊόν (ή κενό για κατηγορία)') + '<select id="znpf-product" style="' + _INP + '">' + prodOpts + '</select>')
+      return _row(_lbl('Προϊόν (ή κενό για κατηγορία)') + _prodPickerBtnHtml(cond.product_id, 'id="znpf-product"'))
            + _row(_lbl('Κατηγορία (αν δεν επιλέξεις προϊόν)') + '<select id="znpf-category" style="' + _INP + '">' + catOpts + '</select>')
            + _row(_lbl('N — έκπτωση κάθε N-οστού τεμαχίου') + '<input id="znpf-n" type="number" min="2" value="' + (cond.n||'') + '" placeholder="π.χ. 3" style="' + _INP + '">');
     }
@@ -382,6 +390,17 @@ var ZN_PROMOS = (function () {
     container.appendChild(div.firstChild);
   }
 
+  /* Ανοίγει ZN_PICKER για επιλογή προϊόντος — χρησιμοποιείται σε bundle rows + fields */
+  function _openPicker(btn) {
+    if (typeof ZN_PICKER === 'undefined') { return; }
+    ZN_PICKER.open(btn, {
+      onSelect: function (p) {
+        btn.dataset.pid  = String(p.id);
+        btn.textContent  = p.name;
+      }
+    });
+  }
+
   function _onBundleEffChange() {
     var t = (document.getElementById('znpf-beff-type') || {}).value || 'percent';
     var wrap = document.getElementById('znpf-beff-val-wrap');
@@ -416,7 +435,7 @@ var ZN_PROMOS = (function () {
 
     var conditions = null;
     if (type === 'percent_over_qty') {
-      var pid  = (document.getElementById('znpf-product') || {}).value || '';
+      var pid  = ((document.getElementById('znpf-product') || {}).dataset || {}).pid || '';
       var minq = parseInt((document.getElementById('znpf-minqty') || {}).value) || 0;
       if (!pid)  { toast('✋ BLOCK: επίλεξε προϊόν', 'danger'); return; }
       if (!minq) { toast('✋ BLOCK: βάλε ποσότητα', 'danger'); return; }
@@ -428,7 +447,7 @@ var ZN_PROMOS = (function () {
       if (!minq2) { toast('✋ BLOCK: βάλε ποσότητα', 'danger'); return; }
       conditions = { category: cat, min_qty: minq2 };
     } else if (type === 'nth_discount') {
-      var pid2 = (document.getElementById('znpf-product')  || {}).value || '';
+      var pid2 = ((document.getElementById('znpf-product')  || {}).dataset || {}).pid || '';
       var cat2 = (document.getElementById('znpf-category') || {}).value || '';
       var n    = parseInt((document.getElementById('znpf-n') || {}).value) || 0;
       if (!pid2 && !cat2) { toast('✋ BLOCK: επίλεξε προϊόν ή κατηγορία', 'danger'); return; }
@@ -555,6 +574,7 @@ var ZN_PROMOS = (function () {
     _onBundleRefChange: _onBundleRefChange,
     _removeBundleRow: _removeBundleRow,
     _addBundleRow: _addBundleRow,
-    _onBundleEffChange: _onBundleEffChange
+    _onBundleEffChange: _onBundleEffChange,
+    _openPicker: _openPicker
   };
 })();
