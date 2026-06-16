@@ -106,8 +106,15 @@ var ZN_PROMOS = (function () {
       .map(function (s) { return s.trim(); }).filter(Boolean);
   }
   function _fetchRules() {
-    return sbAuth.from('promo_rules').select('*').order('priority', { ascending: true })
-      .then(function (res) { _rules = res.error ? [] : (res.data || []); return _rules; });
+    var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
+    return sbAuth.from('promo_rules').select('*')
+      .eq('shop_id', shopId)
+      .order('priority', { ascending: true })
+      .then(function (res) {
+        if (res.error) { console.error('[ZN_PROMOS._fetchRules] error:', res.error); }
+        _rules = res.error ? [] : (res.data || []);
+        return _rules;
+      });
   }
 
   /* ─── Main page render ─── */
@@ -274,14 +281,16 @@ var ZN_PROMOS = (function () {
     var type   = (document.getElementById('znpf-type')      || {}).value || '';
     var pct    = parseFloat((document.getElementById('znpf-percent')  || {}).value) || 0;
     var prio   = parseInt((document.getElementById('znpf-priority')   || {}).value) || 100;
-    var active = !!(document.getElementById('znpf-active')  || {}).checked;
+    var activeEl = document.getElementById('znpf-active');
+    var active = activeEl ? !!activeEl.checked : true;
     var vFrom  = (document.getElementById('znpf-from') || {}).value || null;
     var vTo    = (document.getElementById('znpf-to')   || {}).value || null;
 
     if (!name) { if (typeof toast === 'function') toast('Συμπλήρωσε όνομα κανόνα', 'danger'); return; }
-    if (!pct)  { if (typeof toast === 'function') toast('Συμπλήρωσε έκπτωση %', 'danger'); return; }
+    if (!type) { if (typeof toast === 'function') toast('Επίλεξε τύπο κανόνα', 'danger'); return; }
+    if (!pct)  { if (typeof toast === 'function') toast('Συμπλήρωσε έκπτωση % (πρέπει να είναι > 0)', 'danger'); return; }
 
-    var conditions = {};
+    var conditions = null;  // null = δεν μπήκαμε σε κανέναν branch → λάθος type
     if (type === 'percent_over_qty') {
       var pid  = (document.getElementById('znpf-product') || {}).value || '';
       var minq = parseInt((document.getElementById('znpf-minqty') || {}).value) || 0;
@@ -317,31 +326,64 @@ var ZN_PROMOS = (function () {
       conditions = { scope: dScope, ids: dIds, days_no_sale: dDNS };
     }
 
+    if (conditions === null) {
+      if (typeof toast === 'function') toast('Άγνωστος τύπος κανόνα: ' + type, 'danger');
+      return;
+    }
+
     var payload = {
       name: name, type: type, conditions: conditions,
       effect: { percent: pct }, priority: prio, active: active,
       valid_from: vFrom || null, valid_to: vTo || null
     };
-    var op = _editingId
-      ? sbAuth.from('promo_rules').update(payload).eq('id', _editingId)
-      : sbAuth.from('promo_rules').insert(payload);
+
+    var op;
+    var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
+    if (_editingId) {
+      op = sbAuth.from('promo_rules').update(payload)
+        .eq('id', _editingId).eq('shop_id', shopId);
+    } else {
+      /* sbAuth δεν έχει το auto-inject wrapper του sb — βάζουμε shop_id χειροκίνητα */
+      payload.shop_id = shopId;
+      op = sbAuth.from('promo_rules').insert(payload);
+    }
 
     op.then(function (res) {
-      if (res.error) { if (typeof toast === 'function') toast('Σφάλμα: ' + res.error.message, 'danger'); return; }
+      if (res.error) {
+        console.error('[ZN_PROMOS.save] Supabase error:', res.error);
+        if (typeof toast === 'function') {
+          toast('Σφάλμα αποθήκευσης: ' + (res.error.message || res.error.code || JSON.stringify(res.error)), 'danger');
+        }
+        return;
+      }
       if (typeof toast === 'function') toast(_editingId ? 'Αποθηκεύτηκε ✓' : 'Δημιουργήθηκε ✓', 'success');
       closeModal();
       if (typeof ZN_PROMO !== 'undefined') { ZN_PROMO.loadRules().catch(function () {}); }
       _fetchRules().then(function () { _renderList(); });
+    }).catch(function (err) {
+      console.error('[ZN_PROMOS.save] exception:', err);
+      if (typeof toast === 'function') {
+        toast('Εξαίρεση: ' + (err && err.message ? err.message : String(err)), 'danger');
+      }
     });
   }
 
   /* ─── Toggle active ─── */
   function toggleActive(id, active) {
-    sbAuth.from('promo_rules').update({ active: active }).eq('id', id)
+    var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
+    sbAuth.from('promo_rules').update({ active: active })
+      .eq('id', id).eq('shop_id', shopId)
       .then(function (res) {
-        if (res.error) { if (typeof toast === 'function') toast('Σφάλμα: ' + res.error.message, 'danger'); return; }
+        if (res.error) {
+          console.error('[ZN_PROMOS.toggleActive] error:', res.error);
+          if (typeof toast === 'function') toast('Σφάλμα: ' + (res.error.message || res.error.code), 'danger');
+          return;
+        }
         if (typeof ZN_PROMO !== 'undefined') { ZN_PROMO.loadRules().catch(function () {}); }
         _fetchRules().then(function () { _renderList(); });
+      }).catch(function (err) {
+        console.error('[ZN_PROMOS.toggleActive] exception:', err);
+        if (typeof toast === 'function') toast('Εξαίρεση toggle: ' + (err && err.message ? err.message : String(err)), 'danger');
       });
   }
 
@@ -349,12 +391,21 @@ var ZN_PROMOS = (function () {
   function deleteRule(id) {
     var r = _rules.find(function (x) { return String(x.id) === String(id); });
     if (!confirm('Διαγραφή κανόνα «' + (r ? r.name : id) + '»;\nΔεν μπορεί να αναιρεθεί.')) { return; }
-    sbAuth.from('promo_rules').delete().eq('id', id)
+    var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
+    sbAuth.from('promo_rules').delete()
+      .eq('id', id).eq('shop_id', shopId)
       .then(function (res) {
-        if (res.error) { if (typeof toast === 'function') toast('Σφάλμα: ' + res.error.message, 'danger'); return; }
+        if (res.error) {
+          console.error('[ZN_PROMOS.deleteRule] error:', res.error);
+          if (typeof toast === 'function') toast('Σφάλμα διαγραφής: ' + (res.error.message || res.error.code), 'danger');
+          return;
+        }
         if (typeof toast === 'function') toast('Διαγράφηκε', 'success');
         if (typeof ZN_PROMO !== 'undefined') { ZN_PROMO.loadRules().catch(function () {}); }
         _fetchRules().then(function () { _renderList(); });
+      }).catch(function (err) {
+        console.error('[ZN_PROMOS.deleteRule] exception:', err);
+        if (typeof toast === 'function') toast('Εξαίρεση διαγραφής: ' + (err && err.message ? err.message : String(err)), 'danger');
       });
   }
 
