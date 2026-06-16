@@ -4141,13 +4141,15 @@ var HELP_CONTENT = {
   promo_engine: {
     el: { title: '🎁 Σύνθετες Προσφορές',
       sections: [
-        {icon:'🎁', title:'Τι είναι', body:'<p>Ορίζεις κανόνες (π.χ. «3 υγρά −20%», «το 3ο τεμάχιο −50%») και το ταμείο υπολογίζει μόνο του την καλύτερη τιμή στο καλάθι, χωρίς καθυστέρηση.</p>'},
+        {icon:'🎁', title:'Τι είναι', body:'<p>Ορίζεις κανόνες (π.χ. «3 υγρά −20%», «το 3ο τεμάχιο −50%», «πακέτο 2 ειδών −10%») και το ταμείο υπολογίζει μόνο του την καλύτερη τιμή στο καλάθι, χωρίς καθυστέρηση.</p>'},
+        {icon:'📦', title:'Πακέτα (Bundle)', body:'<p>Ορίζεις συνδυασμό ειδών (προϊόντα ή κατηγορίες) με ελάχιστη ποσότητα. Αν όλα υπάρχουν στο καλάθι, εφαρμόζεται έκπτωση % ή σταθερό ποσό €.</p>'},
         {icon:'⚡', title:'Live', body:'<p>Κάθε αλλαγή στο καλάθι υπολογίζει αυτόματα την έκπτωση. Στο checkout γίνεται και επαλήθευση από τον server.</p>'}
       ]
     },
     en: { title: '🎁 Advanced Promotions',
       sections: [
-        {icon:'🎁', title:'What it is', body:'<p>Define rules (e.g. "3 liquids −20%", "3rd item −50%") and the POS computes the best cart price automatically, with no lag.</p>'},
+        {icon:'🎁', title:'What it is', body:'<p>Define rules (e.g. "3 liquids −20%", "3rd item −50%", "bundle of 2 items −10%") and the POS computes the best cart price automatically, with no lag.</p>'},
+        {icon:'📦', title:'Bundles', body:'<p>Define a combination of items (products or categories) with minimum quantities. If all are present in the cart, a % or fixed € discount is applied.</p>'},
         {icon:'⚡', title:'Live', body:'<p>Every cart change re-evaluates discounts live. At checkout the server does an authoritative recheck.</p>'}
       ]
     }
@@ -4156,14 +4158,16 @@ var HELP_CONTENT = {
   promos: {
     el: { title: '🎁 Διαχείριση Σύνθετων Προσφορών',
       sections: [
-        {icon:'🎁', title:'Δημιουργία κανόνα', body:'<p>Πάτα «Νέα Προσφορά», επίλεξε τύπο (% επί ποσότητας / combo κατηγορίας / n-οστό τεμάχιο), βάλε τιμές και αποθήκευσε. Ο κανόνας ενεργοποιείται αμέσως στο POS.</p>'},
+        {icon:'🎁', title:'Δημιουργία κανόνα', body:'<p>Πάτα «Νέα Προσφορά», επίλεξε τύπο (% επί ποσότητας / combo κατηγορίας / n-οστό τεμάχιο / πακέτο bundle), βάλε τιμές και αποθήκευσε. Ο κανόνας ενεργοποιείται αμέσως στο POS.</p>'},
+        {icon:'📦', title:'Πακέτο (Bundle)', body:'<p>Επίλεξε τύπο «Πακέτο (Bundle)». Πρόσθεσε τουλάχιστον 2 είδη (προϊόν ή κατηγορία) με ελάχιστη ποσότητα. Όρισε έκπτωση % ή σταθερό ποσό €. Αν το καλάθι περιέχει όλα τα είδη, η έκπτωση εφαρμόζεται αυτόματα.</p>'},
         {icon:'✅', title:'Ενεργοποίηση / Απενεργοποίηση', body:'<p>Με το checkbox «Ενεργό» σε κάθε κανόνα ελέγχεις αν εφαρμόζεται χωρίς να τον διαγράψεις. Κάνε toggle και η αλλαγή είναι άμεση.</p>'},
         {icon:'📅', title:'Ημερομηνίες ισχύος', body:'<p>Ορίζεις «Ισχύει από / έως» για sezonάλ προσφορές. Αν δεν βάλεις ημερομηνίες, ο κανόνας ισχύει για πάντα (όσο είναι ενεργός).</p>'}
       ]
     },
     en: { title: '🎁 Manage Advanced Promotions',
       sections: [
-        {icon:'🎁', title:'Create a rule', body:'<p>Tap "New Promo", choose a type (% over qty / category combo / nth item discount), fill in values and save. The rule activates immediately in POS.</p>'},
+        {icon:'🎁', title:'Create a rule', body:'<p>Tap "New Promo", choose a type (% over qty / category combo / nth item discount / bundle), fill in values and save. The rule activates immediately in POS.</p>'},
+        {icon:'📦', title:'Bundle', body:'<p>Choose type "Bundle". Add at least 2 items (product or category) with minimum quantities. Set a % discount or fixed € amount. If all items are in the cart, the discount applies automatically.</p>'},
         {icon:'✅', title:'Enable / Disable', body:'<p>Toggle the "Active" checkbox on each rule to enable or disable it without deleting it. Changes take effect immediately.</p>'},
         {icon:'📅', title:'Valid dates', body:'<p>Set "Valid from / to" for seasonal promos. Leave blank for rules that are always active (while enabled).</p>'}
       ]
@@ -35524,7 +35528,9 @@ window.HELP_KB = {
 (function(){
   var _adv = [
     { id: 'kb_promos_ui', category: '01-pos', title: 'Διαχείριση Σύνθετων Προσφορών',
-      body: '# Διαχείριση Σύνθετων Προσφορών\n\nΗ σελίδα «Σύνθετες Προσφορές» (admin) επιτρέπει τη δημιουργία, επεξεργασία, ενεργοποίηση/απενεργοποίηση και διαγραφή κανόνων εκπτώσεων. Κάθε κανόνας έχει τύπο (% επί ποσότητας, combo κατηγορίας, έκπτωση στο n-οστό τεμάχιο), έκπτωση %, προτεραιότητα και προαιρετικές ημερομηνίες ισχύος. Οι αλλαγές εφαρμόζονται αμέσως στο POS μέσω ZN_PROMO.loadRules().' },
+      body: '# Διαχείριση Σύνθετων Προσφορών\n\nΗ σελίδα «Σύνθετες Προσφορές» (admin) επιτρέπει τη δημιουργία, επεξεργασία, ενεργοποίηση/απενεργοποίηση και διαγραφή κανόνων εκπτώσεων. Κάθε κανόνας έχει τύπο (% επί ποσότητας, combo κατηγορίας, έκπτωση στο n-οστό τεμάχιο, πακέτο bundle), έκπτωση % ή σταθερό ποσό, προτεραιότητα και προαιρετικές ημερομηνίες ισχύος. Οι αλλαγές εφαρμόζονται αμέσως στο POS μέσω ZN_PROMO.loadRules().\n\n## Πακέτο (Bundle)\n\nΕπίλεξε τύπο «Πακέτο (Bundle)» για να δημιουργήσεις προσφορά που ενεργοποιείται όταν το καλάθι περιέχει συγκεκριμένο συνδυασμό ειδών. Ορίζεις κάθε είδος ως προϊόν ή κατηγορία, με ελάχιστη ποσότητα. Η έκπτωση μπορεί να είναι ποσοστό (%) ή σταθερό ποσό (€). Απαιτούνται τουλάχιστον 2 είδη.' },
+    { id: 'kb_bundle', category: '01-pos', title: 'Πακέτα / Bundles',
+      body: '# Πακέτα / Bundles\n\nΟι προσφορές τύπου «Πακέτο (Bundle)» επιτρέπουν έκπτωση όταν ο πελάτης αγοράζει έναν προκαθορισμένο συνδυασμό ειδών.\n\n## Πώς λειτουργεί\n\n1. Ορίζεις τουλάχιστον 2 είδη (rows) στο πακέτο.\n2. Κάθε row έχει: **Είδος** (Προϊόν ή Κατηγορία), **Επιλογή** (ποιο προϊόν/κατηγορία) και **Ποσότητα** (ελάχιστη στο καλάθι).\n3. Αν ΟΛΑ τα είδη υπάρχουν στο καλάθι με την ελάχιστη ποσότητα, η έκπτωση εφαρμόζεται.\n4. Η έκπτωση υπολογίζεται μόνο στα προϊόντα που ανήκουν στο πακέτο.\n\n## Τύπος έκπτωσης\n\n- **Ποσοστό (%)**: Έκπτωση % επί του συνόλου των ειδών του πακέτου στο καλάθι.\n- **Σταθερό ποσό (€)**: Αφαιρείται σταθερό ποσό ανεξάρτητα από τις τιμές.\n\n## Παράδειγμα\n\nΠακέτο: «1× Συσκευή + 1× Υγρό → −10%». Αν ο πελάτης έχει και τα δύο στο καλάθι, παίρνει 10% έκπτωση στη συνολική αξία τους.\n\n## Σημειώσεις\n\n- Τα bundles είναι προσθετικά: μπορούν να συνδυαστούν με άλλους κανόνες.\n- Η προτεραιότητα καθορίζει τη σειρά εφαρμογής.\n- Μπορείς να χρησιμοποιήσεις κατηγορία αντί για συγκεκριμένο προϊόν για πιο ευέλικτα πακέτα.' },
     { id: 'kb_blind_audit', category: '02-inventory', title: 'Τυφλή Απογραφή (Blind Audit)',
       body: '# Τυφλή Απογραφή (Blind Audit)\n\nΗ απογραφή ξεκινά με «πάγωμα» (snapshot) του αποθέματος. Κατά τη διάρκεια, οι χειροκίνητες αλλαγές stock κλειδώνονται — επιτρέπονται μόνο οι πωλήσεις POS. Η καταμέτρηση είναι τυφλή και αποθηκεύεται τοπικά (IndexedDB) πριν συγχρονιστεί.\n\nΣτη συμφιλίωση: Πραγματικό = Καταμετρημένο − Πωλήσεις κατά τη διάρκεια. Μεγάλες αποκλίσεις (>50€) μπαίνουν για δεύτερη μέτρηση από άλλον υπάλληλο. Με την έγκριση του manager, το νέο stock γράφεται και το ιστορικό σφραγίζεται (δεν σβήνεται από κανέναν).' },
     { id: 'kb_promo_engine', category: '01-pos', title: 'Μηχανή Σύνθετων Προσφορών',

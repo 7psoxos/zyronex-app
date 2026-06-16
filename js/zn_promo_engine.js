@@ -181,6 +181,44 @@ var ZN_PROMO = (function () {
           applied.push(r.name);
           breakdown.push({ name: r.name, amount: dTotalAmt });
         }
+
+      } else if (r.type === 'bundle') {
+        // Πακέτο: όλα τα items πρέπει να ικανοποιούνται (qty) στο καλάθι
+        var bItems = cond.items || [];
+        var bOk = bItems.length > 0;
+        var bi, bItem, bQty, bj;
+        for (bi = 0; bi < bItems.length; bi++) {
+          bItem = bItems[bi];
+          bQty = 0;
+          for (bj = 0; bj < cart.length; bj++) {
+            if (bItem.ref === 'product' && String(cart[bj].productId) === String(bItem.id)) {
+              bQty += Number(cart[bj].qty) || 0;
+            } else if (bItem.ref === 'category' && String(cart[bj].category) === String(bItem.id)) {
+              bQty += Number(cart[bj].qty) || 0;
+            }
+          }
+          if (bQty < Number(bItem.qty || 1)) { bOk = false; break; }
+        }
+        if (bOk) {
+          var bLines = cart.filter(function (l) {
+            for (var bk = 0; bk < bItems.length; bk++) {
+              if (bItems[bk].ref === 'product' && String(l.productId) === String(bItems[bk].id)) { return true; }
+              if (bItems[bk].ref === 'category' && String(l.category) === String(bItems[bk].id)) { return true; }
+            }
+            return false;
+          });
+          var bAmt = 0;
+          if (eff.percent) {
+            bAmt = Math.round(_sumProduct(bLines) * Number(eff.percent) / 100 * 100) / 100;
+          } else if (eff.amount) {
+            bAmt = Math.round(Number(eff.amount) * 100) / 100;
+          }
+          if (bAmt > 0) {
+            discount += bAmt;
+            applied.push(r.name);
+            breakdown.push({ name: r.name, amount: bAmt });
+          }
+        }
       }
     }
     return { discount: Math.round(discount * 100) / 100, applied: applied, breakdown: breakdown };

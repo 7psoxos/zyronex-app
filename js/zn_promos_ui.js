@@ -19,6 +19,7 @@ var ZN_PROMOS = (function () {
     if (t === 'nth_discount')     return 'Έκπτωση n-οστού';
     if (t === 'expiry')           return 'Λήξη (expiry)';
     if (t === 'dead_stock')       return 'Αδρανές απόθεμα';
+    if (t === 'bundle')           return '📦 Πακέτο (Bundle)';
     return t || '—';
   }
   function _productName(pid) {
@@ -45,6 +46,11 @@ var ZN_PROMOS = (function () {
       var scopeLabel2 = c.scope === 'all' ? 'Όλα' : (c.scope === 'product' ? 'Προϊόντα' : 'Κατηγορίες');
       return scopeLabel2 + ' · ≥' + (c.days_no_sale||'?') + ' ημ. χωρίς πώληση → ' + pct;
     }
+    if (r.type === 'bundle') {
+      var bItems = c.items || [];
+      var effStr = e.percent ? (e.percent + '% έκπτ.') : (e.amount ? ('-' + e.amount + '€') : '');
+      return bItems.length + ' είδη πακέτου → ' + effStr;
+    }
     return '';
   }
   function _cats() {
@@ -61,10 +67,57 @@ var ZN_PROMOS = (function () {
   function _lbl(t) { return '<label class="fw-700 text-sm" style="display:block;margin-bottom:6px">' + t + '</label>'; }
   function _row(h) { return '<div style="margin-bottom:14px">' + h + '</div>'; }
 
-  /* Generates the ids-field HTML based on current scope.
-     scope='all'      → nothing (no ids needed)
-     scope='product'  → free text (product IDs)
-     scope='category' → checkbox list from PRODUCTS cache */
+  /* ─── Bundle helpers ─── */
+  function _bundleSelHtml(ref, id) {
+    var prods = typeof PRODUCTS !== 'undefined' ? PRODUCTS : [];
+    var cats = _cats();
+    if (ref === 'category') {
+      return '<select class="znpf-bsel" style="' + _INP + '">'
+        + '<option value="">— Κατηγορία —</option>'
+        + cats.map(function (c) {
+            return '<option value="' + _esc(c) + '"' + (id === c ? ' selected' : '') + '>' + _esc(c) + '</option>';
+          }).join('')
+        + '</select>';
+    }
+    return '<select class="znpf-bsel" style="' + _INP + '">'
+      + '<option value="">— Προϊόν —</option>'
+      + prods.map(function (p) {
+          return '<option value="' + p.id + '"' + (String(id) === String(p.id) ? ' selected' : '') + '>' + _esc(p.name) + '</option>';
+        }).join('')
+      + '</select>';
+  }
+  function _bundleRowHtml(ref, id, qty) {
+    var refSel = '<select class="znpf-bref" onchange="ZN_PROMOS._onBundleRefChange(this)" style="' + _INP + '">'
+      + '<option value="product"' + (ref === 'product' ? ' selected' : '') + '>Προϊόν</option>'
+      + '<option value="category"' + (ref === 'category' ? ' selected' : '') + '>Κατηγορία</option>'
+      + '</select>';
+    return '<div class="znpf-brow" style="background:var(--bg-2);border-radius:10px;padding:12px;margin-bottom:8px">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end">'
+      + '<div style="flex:1;min-width:110px">' + _lbl('Τύπος') + refSel + '</div>'
+      + '<div class="znpf-bsel-wrap" style="flex:2;min-width:160px">' + _lbl('Επιλογή') + _bundleSelHtml(ref, id) + '</div>'
+      + '<div style="flex:0 0 90px">' + _lbl('Ποσ.') + '<input class="znpf-bqty" type="number" min="1" value="' + (qty||1) + '" style="' + _INP + '"></div>'
+      + '<button type="button" onclick="ZN_PROMOS._removeBundleRow(this)"'
+      + ' style="min-height:44px;min-width:44px;flex-shrink:0;background:rgba(231,76,60,0.1);'
+      + 'border:1px solid rgba(231,76,60,0.35);color:#e74c3c;border-radius:8px;cursor:pointer;'
+      + 'font-size:18px;padding:0;align-self:flex-end">✕</button>'
+      + '</div></div>';
+  }
+  function _readBundleItems() {
+    var rows = document.querySelectorAll('#znpf-bundle-items .znpf-brow');
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var refEl = rows[i].querySelector('.znpf-bref');
+      var selEl = rows[i].querySelector('.znpf-bsel');
+      var qtyEl = rows[i].querySelector('.znpf-bqty');
+      var ref = refEl ? refEl.value : 'product';
+      var id  = selEl ? selEl.value : '';
+      var qty = qtyEl ? (parseInt(qtyEl.value) || 1) : 1;
+      if (id) { out.push({ ref: ref, id: id, qty: qty }); }
+    }
+    return out;
+  }
+
+  /* ─── Scope/ids field ─── */
   function _idsFieldHtml(scope, selectedIds) {
     selectedIds = selectedIds || [];
     if (scope === 'all') { return ''; }
@@ -73,7 +126,6 @@ var ZN_PROMOS = (function () {
         + '<input id="znpf-ids" type="text" value="' + _esc(selectedIds.join(', ')) + '" '
         + 'placeholder="π.χ. 42,55" style="' + _INP + '">');
     }
-    // scope === 'category' — checkbox list από PRODUCTS cache
     var cats = _cats();
     if (!cats.length) {
       return _row('<p style="color:var(--text-2);font-size:13px;margin:0">'
@@ -92,8 +144,6 @@ var ZN_PROMOS = (function () {
       + 'max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg-1)">'
       + items + '</div>');
   }
-
-  /* Reads the selected ids based on current scope value. */
   function _readIds(scope) {
     var out = [];
     if (scope === 'all') { return out; }
@@ -106,6 +156,7 @@ var ZN_PROMOS = (function () {
     out = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
     return out;
   }
+
   function _fetchRules() {
     var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
     return sbAuth.from('promo_rules').select('*')
@@ -171,8 +222,10 @@ var ZN_PROMOS = (function () {
   }
 
   /* ─── Type-specific form fields ─── */
-  function _typeFields(type, cond) {
+  /* eff: r.effect — χρησιμοποιείται μόνο για bundle (για να φορτώσει τιμή edit) */
+  function _typeFields(type, cond, eff) {
     cond = cond || {};
+    eff  = eff  || {};
     var prods = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : []);
     var cats  = _cats();
     var prodOpts = '<option value="">— Επιλογή προϊόντος —</option>'
@@ -195,6 +248,31 @@ var ZN_PROMOS = (function () {
       return _row(_lbl('Προϊόν (ή κενό για κατηγορία)') + '<select id="znpf-product" style="' + _INP + '">' + prodOpts + '</select>')
            + _row(_lbl('Κατηγορία (αν δεν επιλέξεις προϊόν)') + '<select id="znpf-category" style="' + _INP + '">' + catOpts + '</select>')
            + _row(_lbl('N — έκπτωση κάθε N-οστού τεμαχίου') + '<input id="znpf-n" type="number" min="2" value="' + (cond.n||'') + '" placeholder="π.χ. 3" style="' + _INP + '">');
+    }
+    if (type === 'bundle') {
+      var bItems = (cond.items && cond.items.length) ? cond.items
+        : [{ref:'product',id:'',qty:1},{ref:'product',id:'',qty:1}];
+      var bRows = '';
+      for (var bi = 0; bi < bItems.length; bi++) {
+        bRows += _bundleRowHtml(bItems[bi].ref || 'product', String(bItems[bi].id || ''), Number(bItems[bi].qty) || 1);
+      }
+      var bEffType = eff.amount ? 'amount' : 'percent';
+      var bEffVal  = eff.amount ? eff.amount : (eff.percent || '');
+      var bEffOpts = '<option value="percent"' + (bEffType === 'percent' ? ' selected' : '') + '>Ποσοστό %</option>'
+        + '<option value="amount"' + (bEffType === 'amount' ? ' selected' : '') + '>Σταθερό ποσό €</option>';
+      var bEffLbl = bEffType === 'amount' ? 'Ποσό € (σταθερό, μία φορά)' : 'Ποσοστό %';
+      var bEffPh  = bEffType === 'amount' ? 'π.χ. 5.00' : 'π.χ. 20';
+      return _row(_lbl('Είδη πακέτου (ελάχ. 2)'))
+        + '<div id="znpf-bundle-items" style="margin-bottom:10px">' + bRows + '</div>'
+        + '<button type="button" onclick="ZN_PROMOS._addBundleRow()"'
+        + ' style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;'
+        + 'min-height:44px;padding:0 16px;background:var(--bg-2);border:1px solid var(--border);'
+        + 'border-radius:10px;color:var(--accent);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px">'
+        + '➕ Προσθήκη είδους</button>'
+        + _row(_lbl('Τύπος έκπτωσης') + '<select id="znpf-beff-type" onchange="ZN_PROMOS._onBundleEffChange()" style="' + _INP + '">' + bEffOpts + '</select>')
+        + '<div id="znpf-beff-val-wrap">'
+        + _row(_lbl(bEffLbl) + '<input id="znpf-beff-val" type="number" min="0" step="0.5" value="' + _esc(String(bEffVal)) + '" placeholder="' + bEffPh + '" style="' + _INP + '">')
+        + '</div>';
     }
     var curScope = cond.scope || 'all';
     var scopeOpts = ['all','product','category'].map(function (s) {
@@ -221,9 +299,11 @@ var ZN_PROMOS = (function () {
     if (id) { r = _rules.find(function (x) { return String(x.id) === String(id); }) || {}; }
     var cond = r.conditions || {}, eff = r.effect || {};
     var curType = r.type || 'percent_over_qty';
-    var typeOpts = ['percent_over_qty','category_combo','nth_discount','expiry','dead_stock'].map(function (t) {
+    var typeOpts = ['percent_over_qty','category_combo','nth_discount','expiry','dead_stock','bundle'].map(function (t) {
       return '<option value="' + t + '"' + (curType === t ? ' selected' : '') + '>' + _typeLabel(t) + '</option>';
     }).join('');
+
+    var isPctHidden = curType === 'bundle';
 
     var html = '<div style="background:var(--bg-0);border-radius:18px 18px 0 0;padding:20px;width:100%;'
       + 'max-width:640px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box">'
@@ -232,10 +312,12 @@ var ZN_PROMOS = (function () {
       + '<button onclick="ZN_PROMOS.closeModal()" aria-label="Κλείσιμο"'
       + ' style="background:none;border:none;cursor:pointer;font-size:24px;min-height:44px;min-width:44px;color:var(--text-2);line-height:1">×</button>'
       + '</div>'
-      + _row(_lbl('Όνομα Κανόνα') + '<input id="znpf-name" type="text" value="' + _esc(r.name||'') + '" placeholder="π.χ. 3 τεμάχια −20%" style="' + _INP + '">')
+      + _row(_lbl('Όνομα Κανόνα') + '<input id="znpf-name" type="text" value="' + _esc(r.name||'') + '" placeholder="π.χ. 3 υγρά −20%" style="' + _INP + '">')
       + _row(_lbl('Τύπος') + '<select id="znpf-type" onchange="ZN_PROMOS._onTypeChange()" style="' + _INP + '">' + typeOpts + '</select>')
-      + '<div id="znpf-fields" style="margin-bottom:2px">' + _typeFields(curType, cond) + '</div>'
+      + '<div id="znpf-fields" style="margin-bottom:2px">' + _typeFields(curType, cond, eff) + '</div>'
+      + '<div id="znpf-pct-wrap"' + (isPctHidden ? ' style="display:none"' : '') + '>'
       + _row(_lbl('Έκπτωση %') + '<input id="znpf-percent" type="number" min="0" max="100" step="0.5" value="' + (eff.percent||'') + '" placeholder="π.χ. 20" style="' + _INP + '">')
+      + '</div>'
       + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
       + '<div style="flex:1;min-width:130px">' + _lbl('Προτεραιότητα') + '<input id="znpf-priority" type="number" min="1" value="' + (r.priority||100) + '" style="' + _INP + '"></div>'
       + '<div style="flex:1;min-width:130px;display:flex;align-items:center;gap:10px;padding-top:22px">'
@@ -262,6 +344,8 @@ var ZN_PROMOS = (function () {
     var t = (document.getElementById('znpf-type') || {}).value;
     var el = document.getElementById('znpf-fields');
     if (el && t) { el.innerHTML = _typeFields(t, {}); }
+    var pctWrap = document.getElementById('znpf-pct-wrap');
+    if (pctWrap) { pctWrap.style.display = t === 'bundle' ? 'none' : ''; }
   }
 
   function _onScopeChange() {
@@ -270,17 +354,53 @@ var ZN_PROMOS = (function () {
     if (el) { el.innerHTML = _idsFieldHtml(scope, []); }
   }
 
+  /* ─── Bundle interactive handlers ─── */
+  function _onBundleRefChange(sel) {
+    var row = sel;
+    while (row && (row.className || '').indexOf('znpf-brow') === -1) { row = row.parentNode; }
+    if (!row) { return; }
+    var wrap = row.querySelector('.znpf-bsel-wrap');
+    if (wrap) { wrap.innerHTML = _lbl('Επιλογή') + _bundleSelHtml(sel.value, ''); }
+  }
+
+  function _removeBundleRow(btn) {
+    var rows = document.querySelectorAll('#znpf-bundle-items .znpf-brow');
+    if (rows.length <= 2) {
+      if (typeof toast === 'function') { toast('Ελάχιστο 2 είδη απαιτούνται', 'warn'); }
+      return;
+    }
+    var el = btn;
+    while (el && (el.className || '').indexOf('znpf-brow') === -1) { el = el.parentNode; }
+    if (el && el.parentNode) { el.parentNode.removeChild(el); }
+  }
+
+  function _addBundleRow() {
+    var container = document.getElementById('znpf-bundle-items');
+    if (!container) { return; }
+    var div = document.createElement('div');
+    div.innerHTML = _bundleRowHtml('product', '', 1);
+    container.appendChild(div.firstChild);
+  }
+
+  function _onBundleEffChange() {
+    var t = (document.getElementById('znpf-beff-type') || {}).value || 'percent';
+    var wrap = document.getElementById('znpf-beff-val-wrap');
+    if (!wrap) { return; }
+    var inp = document.getElementById('znpf-beff-val');
+    var curVal = inp ? inp.value : '';
+    var lbl = t === 'amount' ? 'Ποσό € (σταθερό, μία φορά)' : 'Ποσοστό %';
+    var ph  = t === 'amount' ? 'π.χ. 5.00' : 'π.χ. 20';
+    wrap.innerHTML = _row(_lbl(lbl) + '<input id="znpf-beff-val" type="number" min="0" step="0.5" value="' + _esc(curVal) + '" placeholder="' + ph + '" style="' + _INP + '">');
+  }
+
   function closeModal() {
     var el = document.getElementById('znpr-modal');
     if (el) { el.remove(); }
     _editingId = null;
   }
 
-  /* ─── Save (insert or update) — με πλήρη instrumentation ─── */
+  /* ─── Save (insert or update) ─── */
   function save() {
-    /* ΒΗΜΑ 0: επιβεβαίωση ότι η save καλείται */
-    toast('▶ save ξεκίνησε', 'info');
-
     var name   = ((document.getElementById('znpf-name')     || {}).value || '').trim();
     var type   = (document.getElementById('znpf-type')      || {}).value || '';
     var pct    = parseFloat((document.getElementById('znpf-percent')  || {}).value) || 0;
@@ -292,7 +412,7 @@ var ZN_PROMOS = (function () {
 
     if (!name) { toast('✋ BLOCK: κενό όνομα', 'danger'); return; }
     if (!type) { toast('✋ BLOCK: κενός τύπος', 'danger'); return; }
-    if (!pct)  { toast('✋ BLOCK: pct=0 (βάλε έκπτωση %)', 'danger'); return; }
+    if (type !== 'bundle' && !pct) { toast('✋ BLOCK: pct=0 (βάλε έκπτωση %)', 'danger'); return; }
 
     var conditions = null;
     if (type === 'percent_over_qty') {
@@ -328,6 +448,10 @@ var ZN_PROMOS = (function () {
       if (!dDNS) { toast('✋ BLOCK: βάλε ημέρες αδράνειας', 'danger'); return; }
       if (dScope !== 'all' && !dIds.length) { toast('✋ BLOCK: επίλεξε στοιχεία', 'danger'); return; }
       conditions = { scope: dScope, ids: dIds, days_no_sale: dDNS };
+    } else if (type === 'bundle') {
+      var bItems = _readBundleItems();
+      if (bItems.length < 2) { toast('✋ BLOCK: ελάχιστο 2 είδη στο πακέτο', 'danger'); return; }
+      conditions = { items: bItems };
     }
 
     if (conditions === null) {
@@ -336,9 +460,20 @@ var ZN_PROMOS = (function () {
     }
 
     var shopId = typeof SHOP_ID !== 'undefined' ? SHOP_ID : null;
+
+    var effect;
+    if (type === 'bundle') {
+      var bEffTypeVal = (document.getElementById('znpf-beff-type') || {}).value || 'percent';
+      var bEffValNum  = parseFloat((document.getElementById('znpf-beff-val') || {}).value) || 0;
+      if (!bEffValNum) { toast('✋ BLOCK: βάλε τιμή έκπτωσης', 'danger'); return; }
+      effect = bEffTypeVal === 'amount' ? { amount: bEffValNum } : { percent: bEffValNum };
+    } else {
+      effect = { percent: pct };
+    }
+
     var payload = {
       name: name, type: type, conditions: conditions,
-      effect: { percent: pct }, priority: prio, active: active,
+      effect: effect, priority: prio, active: active,
       valid_from: vFrom || null, valid_to: vTo || null
     };
 
@@ -416,6 +551,10 @@ var ZN_PROMOS = (function () {
     toggleActive: toggleActive,
     deleteRule: deleteRule,
     _onTypeChange: _onTypeChange,
-    _onScopeChange: _onScopeChange
+    _onScopeChange: _onScopeChange,
+    _onBundleRefChange: _onBundleRefChange,
+    _removeBundleRow: _removeBundleRow,
+    _addBundleRow: _addBundleRow,
+    _onBundleEffChange: _onBundleEffChange
   };
 })();
