@@ -6121,6 +6121,7 @@ var SCAN_HISTORY = [];
 var LAST_SCAN = '';
 var LAST_SCAN_TIME = 0;
 var ACTIVE_STREAM = null; // MediaStream reference για cleanup tracks σε iOS
+var ZXING_READER = null;  // ZXing BrowserMultiFormatReader instance
 
 function playBeep(){
   try{
@@ -6149,7 +6150,7 @@ async function startScanner(mode){
   window.__useBackCamera = true; // ξεκινάμε με πίσω κάμερα
 
   // [DBG] έλεγχος φόρτωσης βιβλιοθήκης
-  toast('[DBG] Html5Qrcode = ' + typeof Html5Qrcode, 'info');
+  toast('[DBG] ZXing = ' + typeof ZXing, 'info');
 
   // Δημιουργία overlay
   const overlay = document.createElement('div');
@@ -6196,15 +6197,13 @@ async function startScanner(mode){
 }
 
 async function startCameraNow(){
-  var _diagOk = false;
   var _diagErr = '';
   var _st, v, el;
 
-  // Cleanup ΧΩΡΙΣ await — stop() fire-and-forget (gesture chain iOS)
-  if(SCANNER){
-    try{ SCANNER.clear(); }catch(e){}
-    SCANNER.stop().catch(function(){});
-    SCANNER = null;
+  // Cleanup παλιού ZXing reader + tracks (ΧΩΡΙΣ await — gesture chain iOS)
+  if(ZXING_READER){
+    try{ ZXING_READER.reset(); }catch(e){}
+    ZXING_READER = null;
   }
   if(ACTIVE_STREAM){
     try{ ACTIVE_STREAM.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
@@ -6225,94 +6224,60 @@ async function startCameraNow(){
     return;
   }
 
-  // Φρέσκο instance ΑΜΕΣΩΣ πριν το start() — ΟΧΙ cached/global
-  SCANNER = new Html5Qrcode('qr-reader', false);
-  var _cfg = { fps: 10, qrbox: undefined, aspectRatio: 1.0 };
+  if(typeof ZXing === 'undefined' || !ZXing.BrowserMultiFormatReader){
+    _diagErr = 'LIB FAIL: ZXing δεν φορτώθηκε';
+    _scannerDiag(false, _diagErr);
+    toast('Scanner: ' + _diagErr, 'danger');
+    return;
+  }
 
-  // ── start() σε δικό του try/catch — αν πέσει, δείξε START FAIL αμέσως ──
+  // Δικό μας <video> μέσα στο #qr-reader (ZXing βάζει εδώ το stream)
+  el.innerHTML = '';
+  v = document.createElement('video');
+  v.setAttribute('playsinline', '');
+  v.setAttribute('webkit-playsinline', '');
+  v.muted = true;
+  v.autoplay = true;
+  v.style.cssText = 'width:100%;height:100%;object-fit:cover';
+  el.appendChild(v);
+
+  // -- ZXing decode σε δικό του try/catch --
   try{
-    await SCANNER.start(
-      { facingMode: 'environment' },
-      _cfg,
-      onScanSuccess,
-      function(e){ console.warn('[scan-frame]', e); }
+    ZXING_READER = new ZXing.BrowserMultiFormatReader();
+    await ZXING_READER.decodeFromConstraints(
+      { video: { facingMode: 'environment' } },
+      v,
+      function(result, err){
+        if(result) onScanSuccess(result.getText(), result);
+        // err ειναι συνηθως NotFoundException ανα frame — αγνοουμε
+      }
     );
   }catch(se){
     var _sn = se.name || 'Error';
     var _sm = se.message || String(se);
-
-    // OverconstrainedError/NotFoundError: retry με front κάμερα
-    if(_sn === 'OverconstrainedError' || _sn === 'NotFoundError'){
-      try{ SCANNER.clear(); }catch(e){} SCANNER = null;
-      SCANNER = new Html5Qrcode('qr-reader', false);
-      try{
-        await SCANNER.start(
-          { facingMode: 'user' },
-          _cfg,
-          onScanSuccess,
-          function(e){ console.warn('[scan-frame]', e); }
-        );
-        // retry πέτυχε — συνέχισε κανονικά
-        se = null;
-      }catch(re){
-        _sn = re.name || 'Error';
-        _sm = re.message || String(re);
-        se = re;
-      }
+    _diagErr = 'START FAIL: ' + _sn + ': ' + _sm;
+    var _userMsg;
+    if(_sn === 'NotAllowedError' || _sn === 'PermissionDeniedError'){
+      _userMsg = 'Η αδεια καμερας ειναι κλειστη. Ρυθμισεις -> Safari -> Καμερα -> Να επιτρεπεται για το site, η επιτρεψε στο popup.';
+    } else if(_sn === 'NotReadableError' || _sn === 'TrackStartError'){
+      _userMsg = 'Η καμερα χρησιμοποιειται απο αλλη εφαρμογη/καρτελα. Κλεισε τες και ξαναπροσπαθησε.';
+    } else {
+      _userMsg = _sn + ': ' + _sm;
     }
-
-    if(se){
-      _diagErr = 'START FAIL: ' + _sn + ': ' + _sm;
-      var _userMsg;
-      if(_sn === 'NotAllowedError' || _sn === 'PermissionDeniedError'){
-        _userMsg = 'Η άδεια κάμερας είναι κλειστή. Ρυθμίσεις → Safari → Κάμερα → Να επιτρέπεται για το site, ή επίτρεψε στο popup.';
-      } else if(_sn === 'NotReadableError' || _sn === 'TrackStartError'){
-        _userMsg = 'Η κάμερα χρησιμοποιείται από άλλη εφαρμογή/καρτέλα. Κλείσ\u2019τες και ξαναπροσπάθησε.';
-      } else {
-        _userMsg = _sn + ': ' + _sm;
-      }
-      _st = document.getElementById('scannerStatus');
-      if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _userMsg + '</div>';
-      toast('Scanner: ' + _diagErr, 'danger');
-      _scannerDiag(false, _diagErr);
-      return;
-    }
-  }
-
-  // ── start() έκανε resolve — τώρα ξεχωριστός έλεγχος children ──
-  var _ch = el.children.length;
-  if(_ch === 0){
-    _diagErr = 'CHILDREN FAIL: start() resolved αλλά 0 children — Html5Qrcode δεν έκανε inject DOM';
     _st = document.getElementById('scannerStatus');
-    if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _diagErr + '</div>';
+    if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _userMsg + '</div>';
     toast('Scanner: ' + _diagErr, 'danger');
     _scannerDiag(false, _diagErr);
     return;
   }
 
-  // iOS Safari: playsinline + muted αμέσως μετά το start()
-  v = document.querySelector('#qr-reader video');
-  if(v){
-    if(v.srcObject) ACTIVE_STREAM = v.srcObject;
-    v.setAttribute('playsinline', '');
-    v.setAttribute('webkit-playsinline', '');
-    v.muted = true;
-    v.play().catch(function(){});
-  }
+  // Κρατησε το stream για cleanup
+  if(v.srcObject) ACTIVE_STREAM = v.srcObject;
 
-  // Επαλήθευση: video ΚΑΙ videoWidth>0 (έως 2×700ms)
-  for(var _i = 0; _i < 2; _i++){
+  // Επαληθευση εικονας: videoWidth>0 (εως 3x700ms)
+  for(var _i = 0; _i < 3; _i++){
     await new Promise(function(r){ setTimeout(r, 700); });
-    v = document.querySelector('#qr-reader video');
-    if(v && v.videoWidth > 0) break;
-  }
-  if(!v){
-    _diagErr = 'VIDEO FAIL: <video> δεν δημιουργήθηκε (children:' + el.children.length + ')';
-    _st = document.getElementById('scannerStatus');
-    if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _diagErr + '</div>';
-    toast('Scanner: ' + _diagErr, 'danger');
-    _scannerDiag(false, _diagErr);
-    return;
+    if(v.videoWidth > 0) break;
   }
   if(v.videoWidth === 0){
     _diagErr = 'VIDEO FAIL: videoWidth=0 (readyState:' + v.readyState + ' srcObject:' + (v.srcObject ? 'yes' : 'null') + ')';
@@ -6324,9 +6289,8 @@ async function startCameraNow(){
   }
   if(v.srcObject) ACTIVE_STREAM = v.srcObject;
 
-  _diagOk = true;
   _st = document.getElementById('scannerStatus');
-  if(_st) _st.innerHTML = '<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>';
+  if(_st) _st.innerHTML = '<div style="color:var(--accent)">📷 Καμερα ενεργη — σκαναρε barcode η QR</div>';
   _scannerDiag(true, '');
 }
 
@@ -6350,7 +6314,7 @@ function _scannerDiag(ok, errMsg) {
     var inner = c ? c.innerHTML.trim().replace(/\s+/g,' ').substring(0, 120) : '';
     box.innerHTML =
       '<b style="color:#ff0">[DBG] Scanner</b><br>'
-      + 'id→Html5Qrcode: <span style="color:#0ff">"qr-reader"</span> DOM:' + (c ? '<span style="color:#0f0">✓</span>' : '<span style="color:#f00">✗ missing!</span>') + '<br>'
+      + 'engine: <span style="color:#0ff">ZXing</span> #qr-reader DOM:' + (c ? '<span style="color:#0f0">✓</span>' : '<span style="color:#f00">✗ missing!</span>') + '<br>'
       + 'children(' + (c ? c.children.length : '?') + '): ' + _esc(inner) + '<br>'
       + 'start() → ' + (ok
           ? '<span style="color:#0f0">resolve ✓</span>'
@@ -6458,20 +6422,18 @@ async function onScanSuccess(decodedText, decodedResult){
   }
 }
 
-async function stopScanner(){
-  // iOS: σταμάτα tracks ώστε η κάμερα να αφεθεί ελεύθερη
+function stopScanner(){
+  // ZXing reset + σταμάτα tracks ώστε η κάμερα να αφεθεί ελεύθερη (iOS)
+  if(ZXING_READER){
+    try{ ZXING_READER.reset(); }catch(e){}
+    ZXING_READER = null;
+  }
   if(ACTIVE_STREAM){
     try{ ACTIVE_STREAM.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
     ACTIVE_STREAM = null;
   }
-  try{
-    if(SCANNER && SCANNER.isScanning){
-      await SCANNER.stop();
-      SCANNER.clear();
-    }
-  }catch(e){console.warn(e)}
   SCANNER = null;
-  const overlay = document.getElementById('scannerOverlay');
+  var overlay = document.getElementById('scannerOverlay');
   if(overlay) overlay.remove();
   LAST_SCAN = '';
   LAST_SCAN_TIME = 0;

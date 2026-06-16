@@ -268,6 +268,7 @@ if(typeof supabase === 'undefined'){
 if(typeof lucide === 'undefined') window.lucide = { createIcons: () => {} };
 if(typeof Chart === 'undefined') window.Chart = function(){ return { destroy: () => {} }; };
 if(typeof Html5Qrcode === 'undefined') window.Html5Qrcode = function(){ return { start: () => {}, stop: () => Promise.resolve(), clear: () => {} }; };
+if(typeof ZXing === 'undefined') window.ZXing = { BrowserMultiFormatReader: function(){ return { decodeFromConstraints: () => Promise.reject(new Error('ZXing δεν φορτώθηκε')), reset: () => {} }; } };
 if(typeof QRCode === 'undefined') window.QRCode = function(){ return { makeCode: () => {} }; };
 if(typeof XLSX === 'undefined') window.XLSX = { read: () => {}, utils: { sheet_to_json: () => [] } };
 if(typeof jsPDF === 'undefined') window.jsPDF = function(){ return { internal: { pageSize: { getWidth: () => 200, getHeight: () => 200 } }, text: () => {}, save: () => {} }; };
@@ -2662,6 +2663,7 @@ if(window.navigator && window.navigator.share){
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script crossorigin="anonymous" async defer src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script crossorigin="anonymous" async defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 // NO JS FIXES NEEDED - CSS ONLY
