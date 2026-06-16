@@ -25729,7 +25729,7 @@ var ZN_PAGE_TO_TAB = {
   inventory:'inventory', suppliers:'inventory', purchases:'inventory',
   shipments:'pos', waste:'inventory', batches:'inventory',
   hardware:'inventory', 'dead-stock':'inventory', 'data-cleanup':'inventory',
-  compliance:'inventory',
+  compliance:'inventory', blindaudit:'inventory',
   // Customers tab
   customers:'customers', 'customer-intel':'customers', mixology:'customers',
   pulse:'customers', dypa:'customers', campaigns:'customers', loyalty:'customers',
@@ -25782,6 +25782,7 @@ var ZN_HUBS = {
       {icon:'💀', label:'Dead Stock', page:'dead-stock'},
       {icon:'🛡️', label:'Συμμόρφωση TPD', page:'compliance', plan:'pro'},
       {icon:'🧹', label:'Data Cleanup', page:'data-cleanup'},
+      {icon:'📦', label:'Τυφλή Απογραφή', page:'blindaudit'},
     ]
   },
   customers: {
@@ -25849,7 +25850,7 @@ var ZN_HUBS = {
 var ZN_TILE_NEW = {vat:1, dypa:1, shifts:1, 'gift-cards':1};
 var ZN_TILE_DESC = {
   dashboard:'Κεντρικός πίνακας', pos:'POS & εκδόσεις', shifts:'Έλεγχος βαρδιών', 'gift-cards':'Έκδοση & εξαργύρωση', 'online-orders':'Online παραγγελίες', exchange:'Ανταλλαγές προϊόντων', shipments:'Διαχείριση αποστολών', documents:'Παραστατικά & αρχεία',
-  inventory:'Προϊόντα & στοκ', suppliers:'Διαχείριση προμηθευτών', purchases:'Παραγγελίες & παραλαβές', waste:'Καταστροφές & waste', batches:'Lot & λήξεις', hardware:'Συσκευές & εξοπλισμός', 'dead-stock':'Ακίνητο απόθεμα', compliance:'Κανονιστική TPD', 'data-cleanup':'Καθαρισμός δεδομένων',
+  inventory:'Προϊόντα & στοκ', suppliers:'Διαχείριση προμηθευτών', purchases:'Παραγγελίες & παραλαβές', waste:'Καταστροφές & waste', batches:'Lot & λήξεις', hardware:'Συσκευές & εξοπλισμός', 'dead-stock':'Ακίνητο απόθεμα', compliance:'Κανονιστική TPD', 'data-cleanup':'Καθαρισμός δεδομένων', blindaudit:'Τυφλή απογραφή (admin)',
   customers:'Καρτέλες πελατών', loyalty:'Πόντοι & ανταμοιβές', 'customer-intel':'Segmentation & insights', campaigns:'Marketing automation', pulse:'Έξυπνες προσφορές', mixology:'Συνταγές αναμείξεων',
   reports:'Πωλήσεις & απόδοση', cashbook:'Άνοιγμα/κλείσιμο', banking:'Συμφωνία λογαριασμών', 'expense-calendar':'Πάγια & έξοδα', 'compliance-calendar':'Προθεσμίες', breakeven:'Break-even ανάλυση', taxagent:'Αυτόματη λογιστική', vat:'Δηλώσεις & ΑΑΔΕ', dypa:'Μισθοδοσία & δηλώσεις', balance:'Λογιστικά ισοζύγια', bi:'BI & insights', warroom:'War Room', 'energy-tracker':'ΔΕΗ & πάγια',
   kiosk:'Οθόνη πελάτη', plugins:'Πρόσθετα', sitebuilder:'Κατασκευή site', vault:'Διαχείριση αρχείων', users:'Προσωπικό & βάρδιες', alerts:'Ειδοποιήσεις', oracle:'AI σύμβουλος', brain:'AI μνήμη', 'seasonal-intel':'Σεζόν & καιρός', 'supplier-scorecard':'Scorecards', 'remember-this':'Υπενθυμίσεις', 'dosage-tracker':'Δοσολογία νικοτίνης', pricewar:'Ανταγωνισμός τιμών', ai:'AI εργαλεία', agents:'AI agents', competitors:'Παρακολούθηση', helpdesk:'Γνωσιακή βάση', 'shop-changelog':'Ιστορικό αλλαγών', 'age-log':'Μητρώο ηλικίας', settings:'Ρυθμίσεις', subscription:'Συνδρομή & billing', help:'Βοήθεια', support:'Υποστήριξη', legal:'Όροι & GDPR'
