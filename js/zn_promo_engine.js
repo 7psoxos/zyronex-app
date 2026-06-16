@@ -14,6 +14,13 @@
  *   dead_stock        : conditions {scope, ids, days_no_sale} effect {percent}
  *                       Εφαρμόζεται αν days_since_sale >= days_no_sale ή == null.
  *
+ * Πολιτική συνδυασμού (promoCombination στο katastimaSettings):
+ *   'stack' → όλοι οι κανόνες που πιάνουν, αθροιστικά.
+ *   'best'  → μόνο ο κανόνας υψηλότερης προτεραιότητας (default).
+ *             Ισοπαλία προτεραιότητας → μεγαλύτερο ποσό έκπτωσης.
+ *
+ * Cap: discount ≤ cartTotal (τελικό σύνολο ≥ 0 πάντα).
+ *
  * Κανόνες: var, sbAuth, String-safe IDs.
  * ===================================================================== */
 var ZN_PROMO = (function () {
@@ -72,9 +79,10 @@ var ZN_PROMO = (function () {
   /* cart: array {productId, qty, price, category}. Επιστρέφει {discount, applied[], breakdown[]}. */
   function evaluate(cart) {
     cart = cart || [];
-    var discount = 0;
-    var applied = [];
-    var breakdown = [];  // [{name, amount}] — ένα entry ανά κανόνα που έπιασε
+    var cartTotal = _sumProduct(cart);
+
+    /* Συλλέγουμε όλους τους κανόνες που πιάνουν. */
+    var fired = [];  /* [{name, amount, priority}] */
     var i, r;
 
     for (i = 0; i < _rules.length; i++) {
@@ -90,9 +98,7 @@ var ZN_PROMO = (function () {
         if (q >= Number(cond.min_qty || 0)) {
           var base = _sumProduct(lines);
           var amt = Math.round(base * Number(eff.percent || 0) / 100 * 100) / 100;
-          discount += amt;
-          applied.push(r.name);
-          breakdown.push({ name: r.name, amount: amt });
+          fired.push({ name: r.name, amount: amt, priority: r.priority || 100 });
         }
 
       } else if (r.type === 'category_combo') {
@@ -103,13 +109,11 @@ var ZN_PROMO = (function () {
         if (cq >= Number(cond.min_qty || 0)) {
           var cbase = _sumProduct(clines);
           var camt = Math.round(cbase * Number(eff.percent || 0) / 100 * 100) / 100;
-          discount += camt;
-          applied.push(r.name);
-          breakdown.push({ name: r.name, amount: camt });
+          fired.push({ name: r.name, amount: camt, priority: r.priority || 100 });
         }
 
       } else if (r.type === 'nth_discount') {
-        // έκπτωση στο n-οστό τεμάχιο (π.χ. αγοράζεις 3, το 3ο −50%)
+        /* Έκπτωση στο n-οστό τεμάχιο (π.χ. αγοράζεις 3, το 3ο −50%). */
         var sel = cart.filter(function (l) {
           return cond.product_id ? String(l.productId) === String(cond.product_id)
                : String(l.category) === String(cond.category);
@@ -117,19 +121,17 @@ var ZN_PROMO = (function () {
         var totalQty = _sum(sel, 'qty');
         var n = Number(cond.n || 0);
         if (n > 0 && totalQty >= n && sel.length) {
-          // το φθηνότερο τεμάχιο παίρνει την έκπτωση (υπέρ πελάτη)
+          /* Το φθηνότερο τεμάχιο παίρνει την έκπτωση (υπέρ πελάτη). */
           var cheapest = sel.reduce(function (a, b) {
             return (Number(a.price) <= Number(b.price)) ? a : b;
           });
-          var hits = Math.floor(totalQty / n); // πόσες φορές «πιάνει»
+          var hits = Math.floor(totalQty / n); /* πόσες φορές «πιάνει» */
           var namt = Math.round(Number(cheapest.price) * hits * Number(eff.percent || 0) / 100 * 100) / 100;
-          discount += namt;
-          applied.push(r.name);
-          breakdown.push({ name: r.name, amount: namt });
+          fired.push({ name: r.name, amount: namt, priority: r.priority || 100 });
         }
 
       } else if (r.type === 'expiry') {
-        // Έκπτωση σε προϊόντα που λήγουν σύντομα
+        /* Έκπτωση σε προϊόντα που λήγουν σύντομα. */
         var eLines = _scopeLines(cart, cond.scope, cond.ids);
         var daysBefore = Number(cond.days_before || 0);
         var eTotalAmt = 0;
@@ -149,13 +151,11 @@ var ZN_PROMO = (function () {
           }
         }
         if (eFired) {
-          discount += eTotalAmt;
-          applied.push(r.name);
-          breakdown.push({ name: r.name, amount: eTotalAmt });
+          fired.push({ name: r.name, amount: eTotalAmt, priority: r.priority || 100 });
         }
 
       } else if (r.type === 'dead_stock') {
-        // Έκπτωση σε αδρανή προϊόντα (δεν πουλήθηκαν αρκετό καιρό)
+        /* Έκπτωση σε αδρανή προϊόντα (δεν πουλήθηκαν αρκετό καιρό). */
         var dLines = _scopeLines(cart, cond.scope, cond.ids);
         var daysNoSale = Number(cond.days_no_sale || 0);
         var dTotalAmt = 0;
@@ -164,7 +164,7 @@ var ZN_PROMO = (function () {
           var dPid = String(dLines[di].productId);
           var dCtx = _ctx[dPid];
           if (dCtx) {
-            // null days_since_sale = ποτέ δεν πουλήθηκε → μέτρα ως αδρανές
+            /* null days_since_sale = ποτέ δεν πουλήθηκε → μέτρα ως αδρανές. */
             var dSince = dCtx.days_since_sale;
             if (dSince === null || dSince >= daysNoSale) {
               var dAmt = Math.round(
@@ -177,13 +177,11 @@ var ZN_PROMO = (function () {
           }
         }
         if (dFired) {
-          discount += dTotalAmt;
-          applied.push(r.name);
-          breakdown.push({ name: r.name, amount: dTotalAmt });
+          fired.push({ name: r.name, amount: dTotalAmt, priority: r.priority || 100 });
         }
 
       } else if (r.type === 'bundle') {
-        // Πακέτο: όλα τα items πρέπει να ικανοποιούνται (qty) στο καλάθι
+        /* Πακέτο: όλα τα items πρέπει να ικανοποιούνται (qty) στο καλάθι. */
         var bItems = cond.items || [];
         var bOk = bItems.length > 0;
         var bi, bItem, bQty, bj;
@@ -214,14 +212,62 @@ var ZN_PROMO = (function () {
             bAmt = Math.round(Number(eff.amount) * 100) / 100;
           }
           if (bAmt > 0) {
-            discount += bAmt;
-            applied.push(r.name);
-            breakdown.push({ name: r.name, amount: bAmt });
+            fired.push({ name: r.name, amount: bAmt, priority: r.priority || 100 });
           }
         }
       }
     }
-    return { discount: Math.round(discount * 100) / 100, applied: applied, breakdown: breakdown };
+
+    /* ── Πολιτική συνδυασμού ───────────────────────────────────────────── */
+    var policy = 'best';
+    try {
+      if (typeof getAppSettings === 'function') {
+        policy = getAppSettings().promoCombination || 'best';
+      }
+    } catch (_e) { /* fallback 'best' */ }
+
+    var useFired = fired;
+    if (policy === 'best' && fired.length > 1) {
+      /* Βρες την ελάχιστη τιμή προτεραιότητας (= ο πιο σημαντικός κανόνας). */
+      var minPrio = fired[0].priority;
+      for (var fi = 1; fi < fired.length; fi++) {
+        if (fired[fi].priority < minPrio) { minPrio = fired[fi].priority; }
+      }
+      /* Μεταξύ ισόβαθμων → μεγαλύτερο ποσό. */
+      var best = null;
+      for (var fj = 0; fj < fired.length; fj++) {
+        if (fired[fj].priority === minPrio) {
+          if (!best || fired[fj].amount > best.amount) { best = fired[fj]; }
+        }
+      }
+      useFired = best ? [best] : [fired[0]];
+    }
+
+    /* ── Συγκέντρωση αποτελεσμάτων ────────────────────────────────────── */
+    var discount = 0;
+    var applied = [];
+    var breakdown = [];
+    for (var fk = 0; fk < useFired.length; fk++) {
+      discount += useFired[fk].amount;
+      applied.push(useFired[fk].name);
+      breakdown.push({ name: useFired[fk].name, amount: useFired[fk].amount });
+    }
+    discount = Math.round(discount * 100) / 100;
+
+    /* ── Cap: discount ≤ cartTotal ─────────────────────────────────────── */
+    if (discount > cartTotal) {
+      if (cartTotal > 0 && discount > 0) {
+        var scale = cartTotal / discount;
+        for (var sc = 0; sc < breakdown.length; sc++) {
+          breakdown[sc].amount = Math.round(breakdown[sc].amount * scale * 100) / 100;
+        }
+      } else {
+        for (var sz = 0; sz < breakdown.length; sz++) { breakdown[sz].amount = 0; }
+      }
+      discount = Math.max(0, cartTotal);
+    }
+
+    return { discount: discount, applied: applied, breakdown: breakdown };
   }
 
   function _sum(arr, key) {

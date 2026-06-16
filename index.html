@@ -4144,6 +4144,7 @@ var HELP_CONTENT = {
       sections: [
         {icon:'🎁', title:'Τι είναι', body:'<p>Ορίζεις κανόνες (π.χ. «3 υγρά −20%», «το 3ο τεμάχιο −50%», «πακέτο 2 ειδών −10%») και το ταμείο υπολογίζει μόνο του την καλύτερη τιμή στο καλάθι, χωρίς καθυστέρηση.</p>'},
         {icon:'📦', title:'Πακέτα (Bundle)', body:'<p>Ορίζεις συνδυασμό ειδών (προϊόντα ή κατηγορίες) με ελάχιστη ποσότητα. Αν όλα υπάρχουν στο καλάθι, εφαρμόζεται έκπτωση % ή σταθερό ποσό €.</p>'},
+        {icon:'🔀', title:'Πολιτική συνδυασμού', body:'<p><b>Μόνο η καλύτερη (προεπιλογή):</b> Από όλους τους κανόνες που πιάνουν, εφαρμόζεται μόνο ο υψηλότερης προτεραιότητας — σε ισοπαλία νικά ο μεγαλύτερος σε ποσό.<br><b>Συνδυασμός (stack):</b> Όλοι οι κανόνες αθροίζονται. Η συνολική έκπτωση δεν ξεπερνά ποτέ την αξία του καλαθιού.</p>'},
         {icon:'⚡', title:'Live', body:'<p>Κάθε αλλαγή στο καλάθι υπολογίζει αυτόματα την έκπτωση. Στο checkout γίνεται και επαλήθευση από τον server.</p>'}
       ]
     },
@@ -4151,6 +4152,7 @@ var HELP_CONTENT = {
       sections: [
         {icon:'🎁', title:'What it is', body:'<p>Define rules (e.g. "3 liquids −20%", "3rd item −50%", "bundle of 2 items −10%") and the POS computes the best cart price automatically, with no lag.</p>'},
         {icon:'📦', title:'Bundles', body:'<p>Define a combination of items (products or categories) with minimum quantities. If all are present in the cart, a % or fixed € discount is applied.</p>'},
+        {icon:'🔀', title:'Combination policy', body:'<p><b>Best only (default):</b> Of all triggered rules, only the highest-priority one applies — ties go to the largest amount.<br><b>Stack:</b> All rules accumulate. Total discount never exceeds cart total.</p>'},
         {icon:'⚡', title:'Live', body:'<p>Every cart change re-evaluates discounts live. At checkout the server does an authoritative recheck.</p>'}
       ]
     }
@@ -4162,6 +4164,7 @@ var HELP_CONTENT = {
         {icon:'🎁', title:'Δημιουργία κανόνα', body:'<p>Πάτα «Νέα Προσφορά», επίλεξε τύπο (% επί ποσότητας / combo κατηγορίας / n-οστό τεμάχιο / πακέτο bundle), βάλε τιμές και αποθήκευσε. Ο κανόνας ενεργοποιείται αμέσως στο POS.</p>'},
         {icon:'🔍', title:'Αναζήτηση προϊόντος', body:'<p>Όπου χρειάζεσαι να επιλέξεις προϊόν, πάτα το κουμπί «🔍 Επέλεξε προϊόν…» — ανοίγει ένα searchable picker με live φιλτράρισμα κατά όνομα ή barcode. Οι φορητοί σαρωτές λειτουργούν αυτόματα: scan → auto-επιλογή σε ακριβές barcode.</p>'},
         {icon:'📦', title:'Πακέτο (Bundle)', body:'<p>Επίλεξε τύπο «Πακέτο (Bundle)». Πρόσθεσε τουλάχιστον 2 είδη (προϊόν ή κατηγορία) με ελάχιστη ποσότητα. Όρισε έκπτωση % ή σταθερό ποσό €. Αν το καλάθι περιέχει όλα τα είδη, η έκπτωση εφαρμόζεται αυτόματα.</p>'},
+        {icon:'🔀', title:'Συνδυασμός προσφορών', body:'<p>Στις <b>Ρυθμίσεις → Πολιτική Προσφορών</b> ορίζεις αν εφαρμόζεται μόνο ο καλύτερος κανόνας ή αθροίζουν όλοι. Η συνολική έκπτωση δεν ξεπερνά ποτέ την αξία του καλαθιού.</p>'},
         {icon:'✅', title:'Ενεργοποίηση / Απενεργοποίηση', body:'<p>Με το checkbox «Ενεργό» σε κάθε κανόνα ελέγχεις αν εφαρμόζεται χωρίς να τον διαγράψεις. Κάνε toggle και η αλλαγή είναι άμεση.</p>'},
         {icon:'📅', title:'Ημερομηνίες ισχύος', body:'<p>Ορίζεις «Ισχύει από / έως» για sezonάλ προσφορές. Αν δεν βάλεις ημερομηνίες, ο κανόνας ισχύει για πάντα (όσο είναι ενεργός).</p>'}
       ]
@@ -4171,6 +4174,7 @@ var HELP_CONTENT = {
         {icon:'🎁', title:'Create a rule', body:'<p>Tap "New Promo", choose a type (% over qty / category combo / nth item discount / bundle), fill in values and save. The rule activates immediately in POS.</p>'},
         {icon:'🔍', title:'Product search', body:'<p>Wherever you need to pick a product, tap "🔍 Pick product…" — a searchable picker opens with live filtering by name or barcode. Handheld scanners work automatically: scan → auto-select on exact barcode match.</p>'},
         {icon:'📦', title:'Bundle', body:'<p>Choose type "Bundle". Add at least 2 items (product or category) with minimum quantities. Set a % discount or fixed € amount. If all items are in the cart, the discount applies automatically.</p>'},
+        {icon:'🔀', title:'Combination policy', body:'<p>In <b>Settings → Promotion Policy</b> choose whether only the best rule applies or all rules stack. Total discount never exceeds cart total.</p>'},
         {icon:'✅', title:'Enable / Disable', body:'<p>Toggle the "Active" checkbox on each rule to enable or disable it without deleting it. Changes take effect immediately.</p>'},
         {icon:'📅', title:'Valid dates', body:'<p>Set "Valid from / to" for seasonal promos. Leave blank for rules that are always active (while enabled).</p>'}
       ]
@@ -26938,6 +26942,21 @@ function renderSettings(){
     </details>
     </div>
 
+    <div class="card"><div class="section-title">🎁 Πολιτική Προσφορών</div>
+    <div class="text-sm muted mt-2 mb-3">Καθορίζει πώς συνδυάζονται πολλαπλοί κανόνες έκπτωσης όταν πιάνουν ταυτόχρονα στο ίδιο καλάθι.</div>
+    <div class="form-row">
+      <label class="form-label">Συνδυασμός προσφορών</label>
+      <select class="form-select" id="s_promoCombination">
+        <option value="best" ${(s.promoCombination||'best')==='best'?'selected':''}>Μόνο η καλύτερη (Προτεινόμενο)</option>
+        <option value="stack" ${s.promoCombination==='stack'?'selected':''}>Συνδυασμός — αθροίζουν όλες</option>
+      </select>
+    </div>
+    <div class="text-xs muted mt-1" style="padding:8px 10px;background:rgba(74,163,255,0.06);border-radius:8px;border-left:2px solid var(--info)">
+      <b>Μόνο η καλύτερη:</b> Από όλους τους κανόνες που ενεργοποιούνται, εφαρμόζεται μόνο ο υψηλότερης προτεραιότητας. Σε ισοπαλία, νικά ο μεγαλύτερος σε ποσό.<br>
+      <b>Συνδυασμός:</b> Όλοι οι ενεργοί κανόνες αθροίζονται — το σύνολο έκπτωσης δεν ξεπερνά ποτέ την αξία του καλαθιού.
+    </div>
+    </div>
+
     <div class="card"><div class="section-title">🖨️ Barcode / Εκτυπωτής</div>
     <div class="form-row mt-3"><label class="form-label">Εκτυπωτής αποδείξεων</label><select class="form-select" id="s_printer">
       <option ${s.printer==='browser'?'selected':''} value="browser">Browser Print (default)</option>
@@ -35565,7 +35584,7 @@ window.HELP_KB = {
     { id: 'kb_blind_audit', category: '02-inventory', title: 'Τυφλή Απογραφή (Blind Audit)',
       body: '# Τυφλή Απογραφή (Blind Audit)\n\nΗ απογραφή ξεκινά με «πάγωμα» (snapshot) του αποθέματος. Κατά τη διάρκεια, οι χειροκίνητες αλλαγές stock κλειδώνονται — επιτρέπονται μόνο οι πωλήσεις POS. Η καταμέτρηση είναι τυφλή και αποθηκεύεται τοπικά (IndexedDB) πριν συγχρονιστεί.\n\nΣτη συμφιλίωση: Πραγματικό = Καταμετρημένο − Πωλήσεις κατά τη διάρκεια. Μεγάλες αποκλίσεις (>50€) μπαίνουν για δεύτερη μέτρηση από άλλον υπάλληλο. Με την έγκριση του manager, το νέο stock γράφεται και το ιστορικό σφραγίζεται (δεν σβήνεται από κανέναν).' },
     { id: 'kb_promo_engine', category: '01-pos', title: 'Μηχανή Σύνθετων Προσφορών',
-      body: '# Μηχανή Σύνθετων Προσφορών\n\nΟι κανόνες προσφορών ζουν στη βάση και διαβάζονται από το ταμείο. Σε κάθε αλλαγή του καλαθιού υπολογίζεται live η βέλτιστη έκπτωση (ποσοστό σε ποσότητα, συνδυασμός κατηγορίας, ή έκπτωση στο n-οστό τεμάχιο). Ο υπολογισμός γίνεται τοπικά για μηδενική καθυστέρηση, με authoritative επανέλεγχο στον server.' },
+      body: '# Μηχανή Σύνθετων Προσφορών\n\nΟι κανόνες προσφορών ζουν στη βάση και διαβάζονται από το ταμείο. Σε κάθε αλλαγή του καλαθιού υπολογίζεται live η βέλτιστη έκπτωση — τοπικά, χωρίς καθυστέρηση.\n\n## Τύποι κανόνων\n\n- **% επί ποσότητας**: Για συγκεκριμένο προϊόν αν η ποσότητα ≥ ελάχιστο.\n- **Combo κατηγορίας**: Για κατηγορία αν η ποσότητα ≥ ελάχιστο.\n- **Έκπτωση n-οστού**: Το φθηνότερο τεμάχιο ανά n παίρνει έκπτωση (υπέρ πελάτη).\n- **Λήξη / Αδρανές stock**: Αυτόματη έκπτωση σε είδη κοντά στη λήξη ή χωρίς πωλήσεις.\n- **Πακέτο (Bundle)**: Συνδυασμός ειδών — αν όλα υπάρχουν στο καλάθι, εφαρμόζεται έκπτωση.\n\n## Πολιτική συνδυασμού\n\nΡυθμίζεται στις **Ρυθμίσεις → Πολιτική Προσφορών**:\n\n- **Μόνο η καλύτερη (default)**: Από όλους τους κανόνες που ενεργοποιούνται, εφαρμόζεται μόνο ο υψηλότερης προτεραιότητας (μικρότερος αριθμός = υψηλότερη προτεραιότητα). Σε ισοπαλία προτεραιότητας, νικά αυτός με το μεγαλύτερο ποσό έκπτωσης.\n- **Συνδυασμός (stack)**: Όλοι οι κανόνες αθροίζονται.\n\n## Cap ασφαλείας\n\nΗ συνολική έκπτωση δεν ξεπερνά ποτέ την αξία του καλαθιού — το τελικό σύνολο είναι πάντα ≥ 0. Αν η έκπτωση θα ξεπερνούσε, κλιμακώνεται αναλογικά ώστε να αθροίζει ακριβώς στην αξία του καλαθιού.' },
     { id: 'kb_anomaly', category: '11-security', title: 'Ανίχνευση Ανωμαλιών (Anti-fraud)',
       body: '# Ανίχνευση Ανωμαλιών (Anti-fraud)\n\nΎποπτα μοτίβα (ακυρώσεις/επιστροφές μεγάλης αξίας, συχνό άνοιγμα συρταριού χωρίς πώληση) καταγράφονται αθόρυβα σε ένα immutable log που κανείς — ούτε ο διαχειριστής — δεν μπορεί να σβήσει. Ο manager βλέπει συγκεντρωτική αναφορά στο τέλος της ημέρας με «καμπανάκια» πάνω από συγκεκριμένα κατώφλια.' },
     { id: 'kb_atomic_stock', category: '01-pos', title: 'Ασφαλής μείωση αποθέματος',

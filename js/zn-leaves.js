@@ -28778,6 +28778,8 @@ function saveSettings(){
     aadeUsername: $val('s_aadeUsername'),
     aadeKey: $val('s_aadeKey'),
     aadeEnv: $val('s_aadeEnv','sandbox'),
+    // Πολιτική συνδυασμού προσφορών
+    promoCombination: $val('s_promoCombination', _ex.promoCombination||'best'),
   };
   localStorage.setItem('katastimaSettings', JSON.stringify(settings));
   if(typeof refreshHIDScanner === 'function') refreshHIDScanner();
