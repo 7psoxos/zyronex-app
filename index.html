@@ -1224,8 +1224,9 @@ if(window.navigator && window.navigator.share){
   ::-webkit-scrollbar-track{background:var(--bg-0)}
   ::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:4px}
   ::-webkit-scrollbar-thumb:hover{background:var(--border-strong)}
-  /* Notification toast */
-  .toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px));right:16px;background:var(--bg-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:14px 18px;z-index:350;min-width:280px;max-width:calc(100vw - 32px);animation:slideIn 0.3s ease}
+  /* Notification toast — always above every modal/overlay/blur */
+  #toastHost{position:fixed;inset:0;pointer-events:none;z-index:2147483647}
+  .toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom,0px));right:16px;background:var(--bg-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:14px 18px;z-index:2147483647;pointer-events:auto;min-width:280px;max-width:calc(100vw - 32px);animation:slideIn 0.3s ease}
   @media(min-width:900px){.toast{bottom:80px;right:20px;}}
   .toast.success{border-left-color:var(--ok)}
   .toast.danger{border-left-color:var(--danger)}
