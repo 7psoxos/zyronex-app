@@ -476,9 +476,6 @@ if(window.navigator && window.navigator.share){
     position:sticky;
     top:0;
     z-index:100; /* υψηλό ώστε να μην το καλύπτει τίποτα */
-    /* iOS hint για layer-promotion (κρίσιμο για iOS Safari) */
-    -webkit-transform:translate3d(0,0,0);
-    transform:translate3d(0,0,0);
     will-change:transform;
     /* Safe-area για iPhone notch */
     padding-top:max(14px, env(safe-area-inset-top))
@@ -2514,9 +2511,11 @@ if(window.navigator && window.navigator.share){
   .scanner-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:flex;flex-direction:column}
   .scanner-header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.8);color:#fff}
   .scanner-title{font-weight:800;font-size:18px}
-  .scanner-area{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+  /* overflow:hidden αφαιρέθηκε — clip ancestors παγώνουν live camera feed σε iOS */
+  .scanner-area{flex:1;position:relative;display:flex;align-items:center;justify-content:center;background:#000}
   #qr-reader{width:100%;max-width:500px}
-  #qr-reader video{border-radius:12px;max-height:60vh;object-fit:cover;-webkit-transform:translateZ(0);transform:translateZ(0);-webkit-backface-visibility:hidden}
+  /* Χωρίς border-radius/transform/object-fit:cover — όλα αυτά προκαλούν black video σε iOS Safari */
+  #qr-reader video{max-height:60vh;width:100%;display:block}
   #qr-reader__scan_region{background:transparent !important}
   #qr-reader__dashboard{background:transparent !important;padding:10px !important}
   #qr-reader__dashboard_section_csr button{background:var(--accent) !important;color:#000 !important;padding:10px 16px !important;border-radius:10px !important;font-weight:700 !important;border:none !important;cursor:pointer !important}

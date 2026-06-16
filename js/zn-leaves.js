@@ -6195,6 +6195,9 @@ async function startScanner(mode){
 }
 
 async function startCameraNow(){
+  var _diagOk  = false;
+  var _diagErr = '';
+
   try{
     // Cleanup παλιός scanner
     if(SCANNER){
@@ -6245,16 +6248,13 @@ async function startCameraNow(){
       }
     };
 
-    // ΣΗΜΑΝΤΙΚΟ: Χρήση facingMode αντί για deviceId
-    // Αυτό είναι πιο αξιόπιστο σε iPhone Safari
     const cameraConfig = window.__useBackCamera
-      ? {facingMode: {exact: 'environment'}}  // Πίσω κάμερα
-      : {facingMode: 'user'};                  // Μπροστινή κάμερα
+      ? {facingMode: {exact: 'environment'}}
+      : {facingMode: 'user'};
 
     try{
       await SCANNER.start(cameraConfig, config, onScanSuccess, ()=>{});
     }catch(err1){
-      // Fallback: κάποια iPhone δεν υποστηρίζουν 'exact', δοκιμάζουμε χωρίς
       console.warn('Exact mode failed, trying fallback:', err1);
       const fallbackConfig = window.__useBackCamera
         ? {facingMode: 'environment'}
@@ -6262,14 +6262,12 @@ async function startCameraNow(){
       try{
         await SCANNER.start(fallbackConfig, config, onScanSuccess, ()=>{});
       }catch(err2){
-        // Τελικό fallback: πάρε λίστα καμερών και διάλεξε χειροκίνητα
         console.warn('facingMode failed, trying device list:', err2);
         const devices = await Html5Qrcode.getCameras();
         if(devices.length === 0){
           throw new Error('Δεν βρέθηκε κάμερα στη συσκευή');
         }
-        // Προτίμηση: back/rear/environment
-        let cameraId = devices[devices.length - 1].id; // Συνήθως η τελευταία είναι η πίσω
+        let cameraId = devices[devices.length - 1].id;
         const backCamera = devices.find(d=>/back|rear|environment|πίσω/i.test(d.label||''));
         if(backCamera && window.__useBackCamera) cameraId = backCamera.id;
         const frontCamera = devices.find(d=>/front|user|selfie|μπροστ/i.test(d.label||''));
@@ -6279,8 +6277,7 @@ async function startCameraNow(){
       }
     }
 
-    // iOS Safari black-screen fix: Html5Qrcode creates the <video> internally;
-    // force playsinline + muted + play() to prevent GPU compositing black frame.
+    // iOS Safari: ensure video attributes after Html5Qrcode creates <video>
     setTimeout(function() {
       const v = document.querySelector('#qr-reader video');
       if (v) {
@@ -6291,14 +6288,16 @@ async function startCameraNow(){
       }
     }, 300);
 
+    _diagOk = true;
+
     const st = document.getElementById('scannerStatus');
     if(st){
       st.innerHTML = `<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>`;
     }
   }catch(err){
     console.error('Scanner error:', err);
-    // [DBG] visible error on mobile
-    toast('[DBG] scanner error: ' + (err.name||'?') + ': ' + (err.message||err), 'danger');
+    _diagErr = (err.name||'Error') + ': ' + (err.message||String(err));
+    toast('[DBG] scanner error: ' + _diagErr, 'danger');
     const st = document.getElementById('scannerStatus');
     if(st){
       st.innerHTML = `
@@ -6314,6 +6313,45 @@ async function startCameraNow(){
         </div>`;
     }
   }
+
+  // [DBG] Persistent diagnostic overlay πάνω από τη μαύρη περιοχή
+  _scannerDiag(_diagOk, _diagErr);
+}
+
+/* Persistent diagnostic πάνω από το <video> — εμφανίζεται μέσα στη μαύρη περιοχή. */
+function _scannerDiag(ok, errMsg) {
+  var area = document.querySelector('.scanner-area');
+  if (!area) return;
+  var old = document.getElementById('znScanDiag');
+  if (old) old.parentNode.removeChild(old);
+  var box = document.createElement('div');
+  box.id = 'znScanDiag';
+  box.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:9999;'
+    + 'background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:15px;'
+    + 'line-height:1.7;padding:14px 12px;pointer-events:none';
+  area.appendChild(box);
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function _upd(){
+    var v  = document.querySelector('#qr-reader video');
+    var c  = document.getElementById('qr-reader');
+    var so = v && v.srcObject;
+    box.innerHTML =
+      '<b style="color:#ff0">[DBG] Scanner</b><br>'
+      + 'start() → ' + (ok
+          ? '<span style="color:#0f0">resolve ✓</span>'
+          : '<span style="color:#f00">REJECT: ' + _esc(errMsg) + '</span>') + '<br>'
+      + 'video: ' + (v
+          ? v.videoWidth + '×' + v.videoHeight + '  readyState=' + v.readyState
+          : '<span style="color:#f80">null</span>') + '<br>'
+      + 'srcObject: ' + (so
+          ? (so.active ? '<span style="color:#0f0">active</span>' : '<span style="color:#f80">inactive</span>')
+          : '<span style="color:#f00">null</span>') + '<br>'
+      + 'container: ' + (c ? c.offsetWidth + '×' + c.offsetHeight : 'null') + '<br>'
+      + 'area: ' + area.offsetWidth + '×' + area.offsetHeight;
+  }
+  _upd();
+  var _iv = setInterval(_upd, 500);
+  setTimeout(function(){ clearInterval(_iv); }, 20000);
 }
 
 async function switchCamera(){
