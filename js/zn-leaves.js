@@ -11760,6 +11760,8 @@ function renderInventory(preserveSelection){
     </div>
   </div>
 
+  ${znGuideBox('inventory')}
+
   <!-- Collapsible Tools Card -->
   <div class="inv-tools-card ${toolsOpen?'open':''}" id="invToolsCard" style="margin-bottom:14px;background:var(--bg-1);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all 0.25s">
     <button class="inv-tools-toggle" onclick="toggleInventoryTools()" style="width:100%;background:transparent;border:none;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--text-0);font-family:inherit;font-weight:700;font-size:14px;-webkit-tap-highlight-color:transparent">
@@ -13112,6 +13114,8 @@ function renderBatchesHTML(){
     <button class="btn btn-primary" onclick="openBatchModal()"><i data-lucide="plus" size="18"></i> Νέα Παρτίδα</button>
   </div>
 
+  ${znGuideBox('batches')}
+
   <!-- KPIs -->
   <div class="grid kpi-grid mb-3">
     <div class="card kpi">
@@ -13381,6 +13385,8 @@ function renderWasteHTML(){
     </div>
     <button class="btn btn-primary" onclick="openWasteModal()"><i data-lucide="plus" size="18"></i> Νέα Καταχώρηση</button>
   </div>
+
+  ${znGuideBox('waste')}
 
   <!-- Breakdown cards -->
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px">

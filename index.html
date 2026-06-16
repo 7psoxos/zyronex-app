@@ -2987,6 +2987,52 @@ Object.keys(__ZN_LAZY).forEach(function(n){
   }
 });
 
+/* ─── Guide Box helpers ───────────────────────────────────────────────────
+   znGuideBox(pageKey) → HTML string (empty if dismissed or no content).
+   Reutilises the ΕΦΚ card style: .card + rgba bg + left border.
+   Dismiss/toggle persist per-page in localStorage zn_guide_<key>. */
+function znGuideBox(pageKey) {
+  try { if (localStorage.getItem('zn_guide_' + pageKey) === 'dismissed') return ''; } catch(e) {}
+  var lang = (typeof HELP_LANG !== 'undefined' ? HELP_LANG : 'el');
+  var hc = (typeof HELP_CONTENT !== 'undefined') && HELP_CONTENT[pageKey];
+  if (!hc) return '';
+  var entry = hc[lang] || hc['el'];
+  if (!entry) return '';
+  var title = entry.title || '';
+  var snippet = '';
+  if (entry.sections && entry.sections.length) {
+    snippet = entry.sections.map(function(s){
+      return (s.icon ? s.icon + ' ' : '') + '<b>' + s.title + '</b>';
+    }).join(' &bull; ');
+  } else if (entry.body) {
+    snippet = entry.body;
+  }
+  if (!title && !snippet) return '';
+  return '<div class="card mb-4" id="znguide-' + pageKey + '" style="padding:14px 16px;background:rgba(120,120,120,0.05);border-left:3px solid var(--text-2)">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+    '<div class="text-xs fw-700" style="color:var(--text-2);flex:1">ℹ️ ' + title + '</div>' +
+    '<button onclick="znGuideToggle(\'' + pageKey + '\')" id="zngt-btn-' + pageKey + '" aria-label="Σύμπτυξη" style="background:none;border:none;cursor:pointer;min-height:44px;min-width:44px;color:var(--text-2);font-size:16px;line-height:1">▾</button>' +
+    '<button onclick="znGuideDismiss(\'' + pageKey + '\')" aria-label="Κλείσιμο" style="background:none;border:none;cursor:pointer;min-height:44px;min-width:44px;color:var(--text-2);font-size:20px;line-height:1">×</button>' +
+    '</div>' +
+    '<div id="znguide-body-' + pageKey + '" class="text-xs muted" style="line-height:1.6">' + snippet + '</div>' +
+    '</div>';
+}
+function znGuideDismiss(pageKey) {
+  try { localStorage.setItem('zn_guide_' + pageKey, 'dismissed'); } catch(e) {}
+  var el = document.getElementById('znguide-' + pageKey);
+  if (el) el.style.display = 'none';
+}
+function znGuideToggle(pageKey) {
+  var body = document.getElementById('znguide-body-' + pageKey);
+  var btn = document.getElementById('zngt-btn-' + pageKey);
+  if (!body) return;
+  var hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  if (btn) btn.textContent = hidden ? '▾' : '▸';
+}
+window.znGuideDismiss = znGuideDismiss;
+window.znGuideToggle = znGuideToggle;
+
 /* ============================================================
    ℹ️ HELP SYSTEM — Οδηγός χρήσης ανά σελίδα (EL + EN)
    ============================================================ */
@@ -4068,6 +4114,23 @@ var HELP_CONTENT = {
       sections: [
         {icon:'📦', title:'What it is', body:'<p>Scan a barcode and enter how many you counted — without seeing the expected number, so you really count. Works on bad WiFi (stores locally and syncs when back online) and across multiple tablets (locks the shelf someone else is counting). At the end it shows variances, accounting for anything sold meanwhile.</p>'},
         {icon:'🔒', title:'Admin only', body:'<p>Blind Audit is available to admins only. Find it in the sidebar below Audit Mode.</p>'}
+      ]
+    }
+  },
+
+  blindaudit: {
+    el: { title: '📦 Τυφλή Απογραφή',
+      sections: [
+        {icon:'1️⃣', title:'Έναρξη', body:'<p>Πάτα «Έναρξη Απογραφής». Το σύστημα παγώνει το απόθεμα (snapshot) — οι πωλήσεις POS συνεχίζουν κανονικά.</p>'},
+        {icon:'2️⃣', title:'Καταμέτρηση', body:'<p>Σκάναρε barcode και βάλε ποσότητα. Δεν βλέπεις το αναμενόμενο — μετράς αντικειμενικά. Αποθηκεύεται τοπικά αν κοπεί το δίκτυο.</p>'},
+        {icon:'3️⃣', title:'Ολοκλήρωση', body:'<p>Πάτα «Ολοκλήρωση» για να δεις τις αποκλίσεις (πραγματικό vs αναμενόμενο μείον όσα πουλήθηκαν). Εγκρίνει ο manager.</p>'}
+      ]
+    },
+    en: { title: '📦 Blind Inventory Audit',
+      sections: [
+        {icon:'1️⃣', title:'Start', body:'<p>Tap "Start Audit". The system freezes the stock (snapshot) — POS sales continue normally.</p>'},
+        {icon:'2️⃣', title:'Count', body:'<p>Scan a barcode and enter quantity. You do not see the expected amount — you count objectively. Stored locally if connectivity drops.</p>'},
+        {icon:'3️⃣', title:'Finish', body:'<p>Tap "Finish" to see variances (actual vs expected minus sales during audit). Manager approves.</p>'}
       ]
     }
   },
@@ -16633,7 +16696,7 @@ function _showPageInternal(p){
     'remember-this':renderRememberThis,
     'dosage-tracker':renderDosageTracker,
     'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,aicost:renderAICost,taxagent:renderTaxAgent,
-    blindaudit:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_AUDIT==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_AUDIT.render(); ZN_AUDIT.start(); },
+    blindaudit:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_AUDIT==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_AUDIT.render(); },
     balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,
     mixology:renderMixology,
     loyalty:renderLoyalty,
