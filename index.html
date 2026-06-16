@@ -25423,6 +25423,7 @@ function renderBalance(){
    ============================================================ */
 function renderAI(){
   const html=`<div class="page-head"><div><div class="page-title"><i data-lucide="sparkles" size="28" style="color:var(--accent);vertical-align:middle"></i> ZyroNex Βοηθός ✨</div><div class="page-sub">Πραγματική τεχνητή νοημοσύνη από το ZyroNex — ανάλυση & προτάσεις για το κατάστημά σου</div></div></div>
+  ${znGuideBox('ai')}
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
     <div class="ai-box"><div class="ai-header"><span class="ai-badge">AI</span><div class="fw-700">Έξυπνες Προσφορές</div></div>
     <div class="mt-3 text-sm">Αυτόματη πρόταση εκπτώσεων χωρίς ζημιά στα περιθώρια. Ανάλυση λήξεων, stagnate stock και περιθωρίων.</div>
@@ -25613,6 +25614,7 @@ function renderAlerts(){
       <button class="icon-btn" onclick="znGoBack()" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center"><i data-lucide="x" size="20"></i></button>
     </div>
   </div>
+  ${znGuideBox('alerts')}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:4px 0">
     <button onclick="_alertsFilter('all')" id="atab_all"
       style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:20px;font-weight:700;font-size:13px;cursor:pointer;border:none;transition:all 0.15s;-webkit-tap-highlight-color:transparent;min-height:40px;background:var(--accent);color:#0a0e1a">
@@ -28777,6 +28779,8 @@ function renderMixology(){
       </div>
     </div>
 
+    ${znGuideBox('mixology')}
+
     <div class="flex gap-2 mb-4" style="flex-wrap:wrap">
       <button class="btn ${MIX_TAB==='calculator'?'btn-primary':'btn-ghost'}" onclick="setMixTab('calculator')"><i data-lucide="calculator" size="16"></i> E-Liquid Calculator</button>
       <button class="btn ${MIX_TAB==='costing'?'btn-primary':'btn-ghost'}" onclick="setMixTab('costing')"><i data-lucide="euro" size="16"></i> Auto-Mix Costing</button>
@@ -30969,6 +30973,8 @@ function renderCompetitorsHTML(){
       <button class="btn btn-primary" onclick="openCompetitorPriceModal()"><i data-lucide="tag" size="18"></i> Καταγραφή Τιμής</button>
     </div>
   </div>
+
+  ${znGuideBox('competitors')}
 
   <!-- Alert για ακριβότερα από ανταγωνιστές -->
   ${alerts.length>0 ? `

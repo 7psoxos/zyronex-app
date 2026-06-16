@@ -13707,6 +13707,8 @@ function renderDashboard(){
     </div>
   </div>
 
+  ${znGuideBox('dashboard')}
+
   <!-- SHIFT HERO CARD (Clock in/out) -->
   <div id="shiftHeroCard"></div>
 
@@ -24648,6 +24650,7 @@ function renderPOS(){
       <button class="btn btn-ghost" onclick="openCustomerPicker()" style="flex:0 1 auto;min-width:0;overflow:hidden"><i data-lucide="user" size="18"></i> <span id="cartCustomer" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">Χωρίς πελάτη</span></button>
     </div>
   </div>
+  ${znGuideBox('pos')}
   ${modeToggle}
   ${modeBody}`;
   document.getElementById('content').innerHTML=html;
