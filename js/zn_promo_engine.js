@@ -8,6 +8,11 @@
  *   category_combo    : conditions {category, min_qty}     effect {percent}
  *   nth_discount      : conditions {product_id|category, n} effect {percent}
  *                       (έκπτωση στο n-οστό τεμάχιο, π.χ. 3ο −50%)
+ *   expiry            : conditions {scope, ids, days_before} effect {percent}
+ *                       scope: 'all'|'product'|'category'
+ *                       Εφαρμόζεται αν days_to_expiry <= days_before (από RPC context).
+ *   dead_stock        : conditions {scope, ids, days_no_sale} effect {percent}
+ *                       Εφαρμόζεται αν days_since_sale >= days_no_sale ή == null.
  *
  * Κανόνες: var, sbAuth, String-safe IDs.
  * ===================================================================== */
@@ -15,6 +20,7 @@ var ZN_PROMO = (function () {
   'use strict';
 
   var _rules = [];   // cache κανόνων
+  var _ctx   = {};   // cache offer context: { [product_id]: {days_to_expiry, days_since_sale} }
 
   function loadRules() {
     return sbAuth.from('promo_rules').select('*').eq('active', true)
@@ -28,6 +34,39 @@ var ZN_PROMO = (function () {
         }).sort(function (a, b) { return (a.priority || 100) - (b.priority || 100); });
         return _rules;
       });
+  }
+
+  /* Φορτώνει context ανά προϊόν από RPC: days_to_expiry, days_since_sale. */
+  function loadOfferContext() {
+    return sbAuth.rpc('zn_offer_context', {}).then(function (res) {
+      if (res.error) { _ctx = {}; return _ctx; }
+      var rows = res.data || [];
+      _ctx = {};
+      for (var j = 0; j < rows.length; j++) {
+        _ctx[String(rows[j].product_id)] = {
+          days_to_expiry:  rows[j].days_to_expiry  != null ? Number(rows[j].days_to_expiry)  : null,
+          days_since_sale: rows[j].days_since_sale != null ? Number(rows[j].days_since_sale) : null
+        };
+      }
+      return _ctx;
+    }).catch(function () { _ctx = {}; return _ctx; });
+  }
+
+  /* Scope matching helper — επιστρέφει τις γραμμές του cart που ταιριάζουν. */
+  function _scopeLines(cart, scope, ids) {
+    ids = ids || [];
+    if (scope === 'all') { return cart.slice(); }
+    if (scope === 'product') {
+      var pidSet = {};
+      for (var k = 0; k < ids.length; k++) { pidSet[String(ids[k])] = 1; }
+      return cart.filter(function (l) { return pidSet[String(l.productId)]; });
+    }
+    if (scope === 'category') {
+      var catSet = {};
+      for (var m = 0; m < ids.length; m++) { catSet[String(ids[m])] = 1; }
+      return cart.filter(function (l) { return catSet[String(l.category)]; });
+    }
+    return [];
   }
 
   /* cart: array {productId, qty, price, category}. Επιστρέφει {discount, applied[], breakdown[]}. */
@@ -88,6 +127,60 @@ var ZN_PROMO = (function () {
           applied.push(r.name);
           breakdown.push({ name: r.name, amount: namt });
         }
+
+      } else if (r.type === 'expiry') {
+        // Έκπτωση σε προϊόντα που λήγουν σύντομα
+        var eLines = _scopeLines(cart, cond.scope, cond.ids);
+        var daysBefore = Number(cond.days_before || 0);
+        var eTotalAmt = 0;
+        var eFired = false;
+        for (var ei = 0; ei < eLines.length; ei++) {
+          var ePid = String(eLines[ei].productId);
+          var eCtx = _ctx[ePid];
+          if (eCtx && eCtx.days_to_expiry != null
+              && eCtx.days_to_expiry >= 0
+              && eCtx.days_to_expiry <= daysBefore) {
+            var eAmt = Math.round(
+              Number(eLines[ei].qty) * Number(eLines[ei].price)
+              * Number(eff.percent || 0) / 100 * 100
+            ) / 100;
+            eTotalAmt += eAmt;
+            eFired = true;
+          }
+        }
+        if (eFired) {
+          discount += eTotalAmt;
+          applied.push(r.name);
+          breakdown.push({ name: r.name, amount: eTotalAmt });
+        }
+
+      } else if (r.type === 'dead_stock') {
+        // Έκπτωση σε αδρανή προϊόντα (δεν πουλήθηκαν αρκετό καιρό)
+        var dLines = _scopeLines(cart, cond.scope, cond.ids);
+        var daysNoSale = Number(cond.days_no_sale || 0);
+        var dTotalAmt = 0;
+        var dFired = false;
+        for (var di = 0; di < dLines.length; di++) {
+          var dPid = String(dLines[di].productId);
+          var dCtx = _ctx[dPid];
+          if (dCtx) {
+            // null days_since_sale = ποτέ δεν πουλήθηκε → μέτρα ως αδρανές
+            var dSince = dCtx.days_since_sale;
+            if (dSince === null || dSince >= daysNoSale) {
+              var dAmt = Math.round(
+                Number(dLines[di].qty) * Number(dLines[di].price)
+                * Number(eff.percent || 0) / 100 * 100
+              ) / 100;
+              dTotalAmt += dAmt;
+              dFired = true;
+            }
+          }
+        }
+        if (dFired) {
+          discount += dTotalAmt;
+          applied.push(r.name);
+          breakdown.push({ name: r.name, amount: dTotalAmt });
+        }
       }
     }
     return { discount: Math.round(discount * 100) / 100, applied: applied, breakdown: breakdown };
@@ -100,5 +193,5 @@ var ZN_PROMO = (function () {
     return arr.reduce(function (s, x) { return s + (Number(x.qty) || 0) * (Number(x.price) || 0); }, 0);
   }
 
-  return { loadRules: loadRules, evaluate: evaluate };
+  return { loadRules: loadRules, loadOfferContext: loadOfferContext, evaluate: evaluate };
 })();
