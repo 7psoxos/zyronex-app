@@ -15953,7 +15953,10 @@ async function submitPin(){
       }
     }).catch(function(){ try{ hideBootLoader(); }catch(_){} });
     inspectorAutoScanOnLogin();
-    if(typeof ZN_PROMO !== 'undefined') ZN_PROMO.loadRules().catch(function(){});
+    if(typeof ZN_PROMO !== 'undefined') {
+      ZN_PROMO.loadRules().catch(function(){});
+      ZN_PROMO.loadOfferContext().catch(function(){});
+    }
     if(typeof ZN_BUS !== 'undefined') ZN_BUS.connect();
     cleanupBadgeUpdate();
     if(typeof complianceUpdateBadge === 'function') complianceUpdateBadge();
