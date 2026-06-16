@@ -100,26 +100,30 @@ var ZN_REORDER = (function () {
     var i, j, o, ln;
     for (i = 0; i < orders.length; i++) {
       o = orders[i];
-      html += '<div class="card">';
-      html += '<h3>' + _esc(o.supplierName) + ' · ' + o.lines.length + ' προϊόντα</h3>';
-      html += '<table class="zn-table"><thead><tr>'
-           +  '<th>Προϊόν</th><th>Απόθεμα</th><th>Ρυθμός/ημ.</th>'
-           +  '<th>Ημέρες</th><th>Τάση</th><th>Πρόταση</th></tr></thead><tbody>';
+      html += '<div class="card" style="margin-bottom:16px">';
+      html += '<div style="font-weight:700;font-size:15px;margin-bottom:12px;word-break:break-word;min-width:0">'
+           +  _esc(o.supplierName)
+           +  ' <span style="font-weight:400;font-size:13px;color:var(--text-2)">· ' + o.lines.length + ' προϊόντα</span></div>';
       for (j = 0; j < o.lines.length; j++) {
         ln = o.lines[j];
-        html += '<tr>'
-             +  '<td style="word-break:break-word;min-width:0">' + _esc(ln.productName) + '</td>'
-             +  '<td>' + ln.currentStock + '</td>'
-             +  '<td>' + ln.dailyBurn.toFixed(2) + '</td>'
-             +  '<td>' + (ln.daysLeft === null ? '—' : ln.daysLeft) + '</td>'
-             +  '<td>' + _trendIcon(ln.trendFactor) + '</td>'
-             +  '<td><strong>' + ln.suggestedQty + '</strong></td>'
-             +  '</tr>';
+        html += '<div style="padding:10px 0;min-width:0;overflow:hidden;'
+             +  (j < o.lines.length - 1 ? 'border-bottom:1px solid var(--border);' : '') + '">';
+        html += '<div style="font-weight:600;font-size:14px;word-break:break-word;min-width:0;margin-bottom:6px">'
+             +  _esc(ln.productName) + '</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--text-2)">';
+        html += '<span>📦 ' + ln.currentStock + ' στοκ</span>';
+        html += '<span>🔥 ' + ln.dailyBurn.toFixed(2) + '/ημ.</span>';
+        html += '<span>📅 ' + (ln.daysLeft === null ? '—' : ln.daysLeft) + ' ημ.</span>';
+        html += '<span>' + _trendIcon(ln.trendFactor) + '</span>';
+        html += '<span style="font-size:13px;font-weight:800;color:var(--accent)">'
+             +  'Παρ. ×' + ln.suggestedQty + '</span>';
+        html += '</div>';
+        html += '</div>';
       }
-      html += '</tbody></table>';
-      html += '<button class="btn" onclick="ZN_REORDER.exportOrder(' +
-              (o.supplierId === null ? 'null' : "'" + String(o.supplierId) + "'") +
-              ')">📋 Αντιγραφή παραγγελίας</button>';
+      html += '<button class="btn" style="min-height:44px;margin-top:10px;width:100%"'
+           +  ' onclick="ZN_REORDER.exportOrder('
+           +  (o.supplierId === null ? 'null' : "'" + String(o.supplierId) + "'")
+           +  ')">📋 Αντιγραφή παραγγελίας</button>';
       html += '</div>';
     }
     content.innerHTML = html;
