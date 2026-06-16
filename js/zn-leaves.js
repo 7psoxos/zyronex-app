@@ -12456,7 +12456,8 @@ function _invObserveSentinel(){
 }
 
 function openProductModal(id){
-  const p=id?PRODUCTS.find(x=>x.id===id):{name:'',barcode:'',category:'Υγρά Αναπλήρωσης',price:0,cost:0,stock:0,minStock:10,supplier:null,altSupplier:null,expiry:'',hasNicotine:false,volumeMl:null,image_url:null,imageUrl:null};
+  if(id) id = +id || id;  // string→number για περιπτώσεις που έρχεται ως string
+  const p=(id?PRODUCTS.find(x=>x.id===id):null)||{name:'',barcode:'',category:'Υγρά Αναπλήρωσης',price:0,cost:0,stock:0,minStock:10,supplier:null,altSupplier:null,expiry:'',hasNicotine:false,volumeMl:null,image_url:null,imageUrl:null};
   const imgUrl = p.image_url || p.imageUrl;
   openModal(`<div class="modal-head"><h3 class="fw-800 text-xl">${id?'Επεξεργασία':'Νέο'} Προϊόν</h3><button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>
     <div class="modal-body">
