@@ -3256,6 +3256,8 @@ function renderCustomers(){
     </div>
   </div>
 
+  ${znGuideBox('customers')}
+
   <div class="card mb-4" style="background:linear-gradient(135deg,rgba(0,212,168,0.08),rgba(74,163,255,0.08))">
     <div class="fw-700 mb-2">🎁 Πρόγραμμα Πιστότητας</div>
     <div class="loyalty-tiers-grid">
@@ -6080,6 +6082,7 @@ function renderLoyalty(){
   if(_loyOvChart){ try{ _loyOvChart.destroy(); }catch(e){} _loyOvChart=null; }
   var t=_LOYALTY_TAB;
   content.innerHTML='<div class="page-head"><div><div class="page-title">🎁 Loyalty</div><div class="page-sub">Πρόγραμμα πιστότητας πελατών</div></div></div>'
+    +(typeof znGuideBox==='function'?znGuideBox('loyalty'):'')
     +'<div class="shifts-tabs-bar">'
     +'<button id="loyTab_overview" class="shifts-tab'+(t==='overview'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'overview\')">Επισκόπηση</button>'
     +'<button id="loyTab_members" class="shifts-tab'+(t==='members'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'members\')">Μέλη</button>'
@@ -19895,6 +19898,8 @@ function renderPurchasesHTML(){
       <button class="btn btn-primary" onclick="openPurchaseModal()"><i data-lucide="plus" size="18"></i> Νέα Αγορά</button>
     </div>
   </div>
+
+  ${znGuideBox('purchases')}
 
   <!-- VAT Summary -->
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px">
