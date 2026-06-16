@@ -6147,6 +6147,9 @@ async function startScanner(mode){
   SCAN_HISTORY = [];
   window.__useBackCamera = true; // ξεκινάμε με πίσω κάμερα
 
+  // [DBG] έλεγχος φόρτωσης βιβλιοθήκης
+  toast('[DBG] Html5Qrcode = ' + typeof Html5Qrcode, 'info');
+
   // Δημιουργία overlay
   const overlay = document.createElement('div');
   overlay.className = 'scanner-overlay';
@@ -6234,13 +6237,11 @@ async function startCameraNow(){
       experimentalFeatures: {
         useBarCodeDetectorIfSupported: true
       },
-      // Καλύτερη ανάγνωση για αργά barcode
+      // iOS Safari: omit focusMode (unsupported, causes silent stream failure)
       videoConstraints: {
         facingMode: window.__useBackCamera ? 'environment' : 'user',
         width: {ideal: 1280},
-        height: {ideal: 720},
-        focusMode: 'continuous',
-        advanced: [{focusMode: 'continuous'}]
+        height: {ideal: 720}
       }
     };
 
@@ -6278,12 +6279,26 @@ async function startCameraNow(){
       }
     }
 
+    // iOS Safari black-screen fix: Html5Qrcode creates the <video> internally;
+    // force playsinline + muted + play() to prevent GPU compositing black frame.
+    setTimeout(function() {
+      const v = document.querySelector('#qr-reader video');
+      if (v) {
+        v.setAttribute('playsinline', '');
+        v.setAttribute('webkit-playsinline', '');
+        v.muted = true;
+        v.play().catch(function() {});
+      }
+    }, 300);
+
     const st = document.getElementById('scannerStatus');
     if(st){
       st.innerHTML = `<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>`;
     }
   }catch(err){
     console.error('Scanner error:', err);
+    // [DBG] visible error on mobile
+    toast('[DBG] scanner error: ' + (err.name||'?') + ': ' + (err.message||err), 'danger');
     const st = document.getElementById('scannerStatus');
     if(st){
       st.innerHTML = `
@@ -6340,6 +6355,14 @@ async function onScanSuccess(decodedText, decodedResult){
     // Γέμισμα του πεδίου και κλείσιμο
     const input = document.getElementById('f_barcode');
     if(input) input.value = decodedText;
+    setTimeout(()=>stopScanner(), 500);
+  }else if(SCANNER_MODE === 'audit'){
+    // Τυφλή Απογραφή: γέμισε barcode field + trigger match
+    const auInput = document.getElementById('znAuBarcode');
+    if(auInput){
+      auInput.value = decodedText;
+      auInput.dispatchEvent(new Event('input'));
+    }
     setTimeout(()=>stopScanner(), 500);
   }else{
     // POS mode — προσπάθεια εύρεσης προϊόντος

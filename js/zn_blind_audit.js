@@ -274,6 +274,8 @@ var ZN_AUDIT = (function () {
       '<div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">1. Σκάναρε barcode</div>' +
       '<input id="znAuBarcode" type="text" inputmode="text" autocomplete="off" autocorrect="off" spellcheck="false" ' +
       'placeholder="🔍 Σκάναρε ή γράψε barcode" style="' + _INP + '">' +
+      '<button class="btn btn-ghost" style="width:100%;min-height:44px;margin-top:8px;font-size:14px;border:1px solid var(--border)" ' +
+      'onclick="if(typeof startScanner===\'function\')startScanner(\'audit\')">📷 Σκάναρε με κάμερα</button>' +
       '<div id="znAuMatch" style="min-height:28px;margin-top:8px;font-size:14px;line-height:1.4;word-break:break-word"></div>' +
       '</div>' +
 
