@@ -16561,6 +16561,16 @@ function _updatePageCloseBtn(p){
   } catch(_){}
 }
 
+// Stubs for lazy-loaded modules — defined here so _showPageInternal's renderers object
+// can reference them as bare identifiers without throwing. Bodies run only when a page
+// is actually navigated to, at which point ZN_MODULE_LOADER is already available.
+var __ZN_LAZY = { renderCustomerIntel:'customer-intel', renderCampaigns:'campaigns', renderSiteBuilder:'sitebuilder', renderPulse:'pulse' };
+Object.keys(__ZN_LAZY).forEach(function(n){
+  if (typeof window[n] !== 'function') {
+    window[n] = function(){ return ZN_MODULE_LOADER.loadAndRender(__ZN_LAZY[n]); };
+  }
+});
+
 // NAV CONTRACT — DO NOT BREAK:
 // History is captured ONLY at the top of _showPageInternal (the single render chokepoint).
 // znGoBack closes the current page and re-opens its section hub menu (znHubForPage -> open panel),
@@ -45411,21 +45421,6 @@ window._kioskRenderSliderTicks = _kioskRenderSliderTicks;
 </script>
 <script src="/js/zn_module_loader.js"></script>
 <script>
-/* Global stubs so bare references in _showPageInternal renderers map never throw.
-   Each stub delegates to the lazy loader and is replaced by the real function on first load. */
-(function(){
-  var __ZN_LAZY = {
-    renderCustomerIntel: 'customer-intel',
-    renderCampaigns:     'campaigns',
-    renderSiteBuilder:   'sitebuilder',
-    renderPulse:         'pulse'
-  };
-  Object.keys(__ZN_LAZY).forEach(function(n){
-    if (typeof window[n] !== 'function') {
-      window[n] = function(){ return ZN_MODULE_LOADER.loadAndRender(__ZN_LAZY[n]); };
-    }
-  });
-})();
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('message', function(e){
