@@ -358,6 +358,7 @@ var PAGE_PERMS = {
   inspector: '*',   // μόνο για Διαχειριστή (πλήρη δικαιώματα)
   audit: null,      // Audit Mode — ΟΛΟΙ έχουν πρόσβαση (έλεγχοι έρχονται ξαφνικά)
   blindaudit: '*',  // Τυφλή Απογραφή — μόνο Διαχειριστής
+  promos: '*',      // Σύνθετες Προσφορές — μόνο Διαχειριστής
   'data-cleanup': '*', // μόνο για Διαχειριστή
   'shop-changelog': '*', // Ιστορικό Αλλαγών — μόνο Διαχειριστής
   'age-log': '*', // Μητρώο Ηλικίας — μόνο Διαχειριστής
@@ -26083,9 +26084,10 @@ function renderCart(){
   var _promoResult = (typeof ZN_PROMO !== 'undefined') ? ZN_PROMO.evaluate(CART.map(function(it){
     var _pp = PRODUCTS.find(function(x){return x.id===it.productId;});
     return {productId:it.productId, qty:it.qty, price:it.price, category:_pp?(_pp.category||''):''};
-  })) : {discount:0,applied:[]};
+  })) : {discount:0,applied:[],breakdown:[]};
   var _promoAmt = _promoResult.discount || 0;
   window._promoDiscount = _promoAmt;
+  window._promoApplied  = (_promoResult.applied || []).slice();
   const subtotal = rawTotal - discAmt - _promoAmt;
   const vat = subtotal*0.24/1.24;
 
@@ -26111,9 +26113,19 @@ function renderCart(){
   const silentCost = typeof calcSilentCost==='function' ? calcSilentCost() : 0;
   const silentRow = silentCost > 0 ? `<div class="summary-row" style="color:#e74c3c;font-size:12px">
     <span>🧻 Αναλώσιμα</span><span>-${eur(silentCost)}</span></div>` : '';
-  // Promo engine discount row
-  const promoRow = _promoAmt > 0 ? `<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">
-    <span>🎁 Προσφορά${_promoResult.applied&&_promoResult.applied.length?' ('+_promoResult.applied.join(', ')+')':''}</span><span>-${eur(_promoAmt)}</span></div>` : '';
+  // Promo engine discount row — ένα row ανά κανόνα που έπιασε
+  var _promoBreakdown = _promoResult.breakdown || [];
+  var promoRow = '';
+  if (_promoBreakdown.length) {
+    promoRow = _promoBreakdown.map(function(bd) {
+      return '<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">'
+        + '<span>🎁 ' + (bd.name||'Προσφορά') + '</span>'
+        + '<span>-' + eur(bd.amount) + '</span></div>';
+    }).join('');
+  } else if (_promoAmt > 0) {
+    promoRow = '<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">'
+      + '<span>🎁 Προσφορά</span><span>-' + eur(_promoAmt) + '</span></div>';
+  }
 
   // Age verified badge update
   var _ageVerifiedCust = false;

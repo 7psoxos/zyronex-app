@@ -2791,6 +2791,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item nav-item-compliance" data-page="compliance"><i data-lucide="shield-check" size="18"></i> 🛡️ TPD Vault <span class="compliance-status-dot" id="complianceDot"></span></div>
   <div class="nav-item nav-item-audit" data-page="audit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle;flex-shrink:0"><defs><linearGradient id="auG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#eab308"/></linearGradient></defs><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,2 14,8 20,8" fill="none" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="15" r="3" fill="none" stroke="url(#auG)" stroke-width="1.5"/><path d="m15 21-2.5-2.5" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round"/><path d="m8 15 1 1 2-2" stroke="url(#auG)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Audit Mode</div>
   <div class="nav-item" data-page="blindaudit"><i data-lucide="scan-barcode" size="18"></i> 📦 Τυφλή Απογραφή</div>
+  <div class="nav-item" data-page="promos"><i data-lucide="tag" size="18"></i> 🎁 Σύνθετες Προσφορές</div>
   <div class="nav-item nav-item-online" data-page="online-orders"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" style="vertical-align:middle;flex-shrink:0"><defs><linearGradient id="olG" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#eab308"/></linearGradient></defs><rect x="5" y="2" width="14" height="20" rx="2" ry="2" fill="none" stroke="url(#olG)" stroke-width="1.5"/><line x1="12" y1="18" x2="12.01" y2="18" stroke="url(#olG)" stroke-width="2" stroke-linecap="round"/><path d="M3 9h3l1.5 5h7l1.5-5H21" fill="none" stroke="url(#olG)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="15" r="0.8" fill="url(#olG)"/><circle cx="15" cy="15" r="0.8" fill="url(#olG)"/></svg> Online Orders</div>
   <div class="nav-item nav-item-pricewar" data-page="pricewar"><i data-lucide="trending-down" size="18"></i> 💰 Price War</div>
   <div class="nav-item nav-item-inspector-comp" data-page="inspector-competitors" style="display:none;background:linear-gradient(135deg,rgba(255,107,107,0.08),rgba(74,163,255,0.08));border-left:3px solid #ff6b6b"><i data-lucide="search" size="18"></i> 🥷 Inspector Ανταγωνισμού <span style="font-size:10px;background:#ff6b6b;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px">DEV</span></div>
@@ -2973,6 +2974,7 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="/js/zn_atomic_checkout.js"></script>
 <script src="/js/zn_blind_audit.js"></script>
 <script src="/js/zn_promo_engine.js"></script>
+<script src="/js/zn_promos_ui.js"></script>
 <script src="/js/zn_event_bus.js"></script>
 <script src="/js/zn_offline_sync.js"></script>
 <script>
@@ -4146,6 +4148,23 @@ var HELP_CONTENT = {
       sections: [
         {icon:'🎁', title:'What it is', body:'<p>Define rules (e.g. "3 liquids −20%", "3rd item −50%") and the POS computes the best cart price automatically, with no lag.</p>'},
         {icon:'⚡', title:'Live', body:'<p>Every cart change re-evaluates discounts live. At checkout the server does an authoritative recheck.</p>'}
+      ]
+    }
+  },
+
+  promos: {
+    el: { title: '🎁 Διαχείριση Σύνθετων Προσφορών',
+      sections: [
+        {icon:'🎁', title:'Δημιουργία κανόνα', body:'<p>Πάτα «Νέα Προσφορά», επίλεξε τύπο (% επί ποσότητας / combo κατηγορίας / n-οστό τεμάχιο), βάλε τιμές και αποθήκευσε. Ο κανόνας ενεργοποιείται αμέσως στο POS.</p>'},
+        {icon:'✅', title:'Ενεργοποίηση / Απενεργοποίηση', body:'<p>Με το checkbox «Ενεργό» σε κάθε κανόνα ελέγχεις αν εφαρμόζεται χωρίς να τον διαγράψεις. Κάνε toggle και η αλλαγή είναι άμεση.</p>'},
+        {icon:'📅', title:'Ημερομηνίες ισχύος', body:'<p>Ορίζεις «Ισχύει από / έως» για sezonάλ προσφορές. Αν δεν βάλεις ημερομηνίες, ο κανόνας ισχύει για πάντα (όσο είναι ενεργός).</p>'}
+      ]
+    },
+    en: { title: '🎁 Manage Advanced Promotions',
+      sections: [
+        {icon:'🎁', title:'Create a rule', body:'<p>Tap "New Promo", choose a type (% over qty / category combo / nth item discount), fill in values and save. The rule activates immediately in POS.</p>'},
+        {icon:'✅', title:'Enable / Disable', body:'<p>Toggle the "Active" checkbox on each rule to enable or disable it without deleting it. Changes take effect immediately.</p>'},
+        {icon:'📅', title:'Valid dates', body:'<p>Set "Valid from / to" for seasonal promos. Leave blank for rules that are always active (while enabled).</p>'}
       ]
     }
   }
@@ -16697,6 +16716,7 @@ function _showPageInternal(p){
     'dosage-tracker':renderDosageTracker,
     'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,aicost:renderAICost,taxagent:renderTaxAgent,
     blindaudit:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_AUDIT==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_AUDIT.render(); },
+    promos:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_PROMOS==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_PROMOS.render(); },
     balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,
     mixology:renderMixology,
     loyalty:renderLoyalty,
@@ -25809,7 +25829,7 @@ var ZN_PAGE_TO_TAB = {
   inventory:'inventory', suppliers:'inventory', purchases:'inventory',
   shipments:'pos', waste:'inventory', batches:'inventory',
   hardware:'inventory', 'dead-stock':'inventory', 'data-cleanup':'inventory',
-  compliance:'inventory', blindaudit:'inventory',
+  compliance:'inventory', blindaudit:'inventory', promos:'inventory',
   // Customers tab
   customers:'customers', 'customer-intel':'customers', mixology:'customers',
   pulse:'customers', dypa:'customers', campaigns:'customers', loyalty:'customers',
@@ -25863,6 +25883,7 @@ var ZN_HUBS = {
       {icon:'🛡️', label:'Συμμόρφωση TPD', page:'compliance', plan:'pro'},
       {icon:'🧹', label:'Data Cleanup', page:'data-cleanup'},
       {icon:'📦', label:'Τυφλή Απογραφή', page:'blindaudit'},
+      {icon:'🎁', label:'Σύνθετες Προσφορές', page:'promos'},
     ]
   },
   customers: {
@@ -25930,7 +25951,7 @@ var ZN_HUBS = {
 var ZN_TILE_NEW = {vat:1, dypa:1, shifts:1, 'gift-cards':1};
 var ZN_TILE_DESC = {
   dashboard:'Κεντρικός πίνακας', pos:'POS & εκδόσεις', shifts:'Έλεγχος βαρδιών', 'gift-cards':'Έκδοση & εξαργύρωση', 'online-orders':'Online παραγγελίες', exchange:'Ανταλλαγές προϊόντων', shipments:'Διαχείριση αποστολών', documents:'Παραστατικά & αρχεία',
-  inventory:'Προϊόντα & στοκ', suppliers:'Διαχείριση προμηθευτών', purchases:'Παραγγελίες & παραλαβές', waste:'Καταστροφές & waste', batches:'Lot & λήξεις', hardware:'Συσκευές & εξοπλισμός', 'dead-stock':'Ακίνητο απόθεμα', compliance:'Κανονιστική TPD', 'data-cleanup':'Καθαρισμός δεδομένων', blindaudit:'Τυφλή απογραφή (admin)',
+  inventory:'Προϊόντα & στοκ', suppliers:'Διαχείριση προμηθευτών', purchases:'Παραγγελίες & παραλαβές', waste:'Καταστροφές & waste', batches:'Lot & λήξεις', hardware:'Συσκευές & εξοπλισμός', 'dead-stock':'Ακίνητο απόθεμα', compliance:'Κανονιστική TPD', 'data-cleanup':'Καθαρισμός δεδομένων', blindaudit:'Τυφλή απογραφή (admin)', promos:'Διαχείριση κανόνων έκπτωσης',
   customers:'Καρτέλες πελατών', loyalty:'Πόντοι & ανταμοιβές', 'customer-intel':'Segmentation & insights', campaigns:'Marketing automation', pulse:'Έξυπνες προσφορές', mixology:'Συνταγές αναμείξεων',
   reports:'Πωλήσεις & απόδοση', cashbook:'Άνοιγμα/κλείσιμο', banking:'Συμφωνία λογαριασμών', 'expense-calendar':'Πάγια & έξοδα', 'compliance-calendar':'Προθεσμίες', breakeven:'Break-even ανάλυση', taxagent:'Αυτόματη λογιστική', vat:'Δηλώσεις & ΑΑΔΕ', dypa:'Μισθοδοσία & δηλώσεις', balance:'Λογιστικά ισοζύγια', bi:'BI & insights', warroom:'War Room', 'energy-tracker':'ΔΕΗ & πάγια',
   kiosk:'Οθόνη πελάτη', plugins:'Πρόσθετα', sitebuilder:'Κατασκευή site', vault:'Διαχείριση αρχείων', users:'Προσωπικό & βάρδιες', alerts:'Ειδοποιήσεις', oracle:'AI σύμβουλος', brain:'AI μνήμη', 'seasonal-intel':'Σεζόν & καιρός', 'supplier-scorecard':'Scorecards', 'remember-this':'Υπενθυμίσεις', 'dosage-tracker':'Δοσολογία νικοτίνης', pricewar:'Ανταγωνισμός τιμών', ai:'AI εργαλεία', agents:'AI agents', competitors:'Παρακολούθηση', helpdesk:'Γνωσιακή βάση', 'shop-changelog':'Ιστορικό αλλαγών', 'age-log':'Μητρώο ηλικίας', settings:'Ρυθμίσεις', subscription:'Συνδρομή & billing', help:'Βοήθεια', support:'Υποστήριξη', legal:'Όροι & GDPR'
@@ -35496,6 +35517,8 @@ window.HELP_KB = {
 // HELP_KB_ADV merge — 4 advanced entries
 (function(){
   var _adv = [
+    { id: 'kb_promos_ui', category: '01-pos', title: 'Διαχείριση Σύνθετων Προσφορών',
+      body: '# Διαχείριση Σύνθετων Προσφορών\n\nΗ σελίδα «Σύνθετες Προσφορές» (admin) επιτρέπει τη δημιουργία, επεξεργασία, ενεργοποίηση/απενεργοποίηση και διαγραφή κανόνων εκπτώσεων. Κάθε κανόνας έχει τύπο (% επί ποσότητας, combo κατηγορίας, έκπτωση στο n-οστό τεμάχιο), έκπτωση %, προτεραιότητα και προαιρετικές ημερομηνίες ισχύος. Οι αλλαγές εφαρμόζονται αμέσως στο POS μέσω ZN_PROMO.loadRules().' },
     { id: 'kb_blind_audit', category: '02-inventory', title: 'Τυφλή Απογραφή (Blind Audit)',
       body: '# Τυφλή Απογραφή (Blind Audit)\n\nΗ απογραφή ξεκινά με «πάγωμα» (snapshot) του αποθέματος. Κατά τη διάρκεια, οι χειροκίνητες αλλαγές stock κλειδώνονται — επιτρέπονται μόνο οι πωλήσεις POS. Η καταμέτρηση είναι τυφλή και αποθηκεύεται τοπικά (IndexedDB) πριν συγχρονιστεί.\n\nΣτη συμφιλίωση: Πραγματικό = Καταμετρημένο − Πωλήσεις κατά τη διάρκεια. Μεγάλες αποκλίσεις (>50€) μπαίνουν για δεύτερη μέτρηση από άλλον υπάλληλο. Με την έγκριση του manager, το νέο stock γράφεται και το ιστορικό σφραγίζεται (δεν σβήνεται από κανέναν).' },
     { id: 'kb_promo_engine', category: '01-pos', title: 'Μηχανή Σύνθετων Προσφορών',

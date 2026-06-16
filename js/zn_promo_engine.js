@@ -30,11 +30,12 @@ var ZN_PROMO = (function () {
       });
   }
 
-  /* cart: array {productId, qty, price, category}. Επιστρέφει {discount, applied[]}. */
+  /* cart: array {productId, qty, price, category}. Επιστρέφει {discount, applied[], breakdown[]}. */
   function evaluate(cart) {
     cart = cart || [];
     var discount = 0;
     var applied = [];
+    var breakdown = [];  // [{name, amount}] — ένα entry ανά κανόνα που έπιασε
     var i, r;
 
     for (i = 0; i < _rules.length; i++) {
@@ -49,8 +50,10 @@ var ZN_PROMO = (function () {
         var q = _sum(lines, 'qty');
         if (q >= Number(cond.min_qty || 0)) {
           var base = _sumProduct(lines);
-          discount += base * Number(eff.percent || 0) / 100;
+          var amt = Math.round(base * Number(eff.percent || 0) / 100 * 100) / 100;
+          discount += amt;
           applied.push(r.name);
+          breakdown.push({ name: r.name, amount: amt });
         }
 
       } else if (r.type === 'category_combo') {
@@ -60,8 +63,10 @@ var ZN_PROMO = (function () {
         var cq = _sum(clines, 'qty');
         if (cq >= Number(cond.min_qty || 0)) {
           var cbase = _sumProduct(clines);
-          discount += cbase * Number(eff.percent || 0) / 100;
+          var camt = Math.round(cbase * Number(eff.percent || 0) / 100 * 100) / 100;
+          discount += camt;
           applied.push(r.name);
+          breakdown.push({ name: r.name, amount: camt });
         }
 
       } else if (r.type === 'nth_discount') {
@@ -78,12 +83,14 @@ var ZN_PROMO = (function () {
             return (Number(a.price) <= Number(b.price)) ? a : b;
           });
           var hits = Math.floor(totalQty / n); // πόσες φορές «πιάνει»
-          discount += Number(cheapest.price) * hits * Number(eff.percent || 0) / 100;
+          var namt = Math.round(Number(cheapest.price) * hits * Number(eff.percent || 0) / 100 * 100) / 100;
+          discount += namt;
           applied.push(r.name);
+          breakdown.push({ name: r.name, amount: namt });
         }
       }
     }
-    return { discount: Math.round(discount * 100) / 100, applied: applied };
+    return { discount: Math.round(discount * 100) / 100, applied: applied, breakdown: breakdown };
   }
 
   function _sum(arr, key) {
