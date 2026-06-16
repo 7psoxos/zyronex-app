@@ -6149,8 +6149,6 @@ async function startScanner(mode){
   SCAN_HISTORY = [];
   window.__useBackCamera = true; // ξεκινάμε με πίσω κάμερα
 
-  // [DBG] έλεγχος φόρτωσης βιβλιοθήκης
-  toast('[DBG] ZXing = ' + typeof ZXing, 'info');
 
   // Δημιουργία overlay
   const overlay = document.createElement('div');
@@ -6197,7 +6195,6 @@ async function startScanner(mode){
 }
 
 async function startCameraNow(){
-  var _diagErr = '';
   var _st, v, el;
 
   // Cleanup παλιού ZXing reader + tracks (ΧΩΡΙΣ await — gesture chain iOS)
@@ -6211,23 +6208,10 @@ async function startCameraNow(){
   }
 
   el = document.getElementById('qr-reader');
-  if(!el){
-    _diagErr = 'DOM FAIL: #qr-reader λείπει';
-    _scannerDiag(false, _diagErr);
-    toast('Scanner: ' + _diagErr, 'danger');
-    return;
-  }
-  if(el.offsetHeight === 0){
-    _diagErr = 'DOM FAIL: #qr-reader offsetHeight=0';
-    _scannerDiag(false, _diagErr);
-    toast('Scanner: ' + _diagErr, 'danger');
-    return;
-  }
+  if(!el || el.offsetHeight === 0) return;
 
   if(typeof ZXing === 'undefined' || !ZXing.BrowserMultiFormatReader){
-    _diagErr = 'LIB FAIL: ZXing δεν φορτώθηκε';
-    _scannerDiag(false, _diagErr);
-    toast('Scanner: ' + _diagErr, 'danger');
+    toast('Η βιβλιοθήκη σάρωσης δεν φορτώθηκε ακόμα. Ξαναπροσπάθησε σε λίγο.', 'danger');
     return;
   }
 
@@ -6241,7 +6225,6 @@ async function startCameraNow(){
   v.style.cssText = 'width:100%;height:100%;object-fit:cover';
   el.appendChild(v);
 
-  // -- ZXing decode σε δικό του try/catch --
   try{
     ZXING_READER = new ZXing.BrowserMultiFormatReader();
     await ZXING_READER.decodeFromConstraints(
@@ -6249,89 +6232,45 @@ async function startCameraNow(){
       v,
       function(result, err){
         if(result) onScanSuccess(result.getText(), result);
-        // err ειναι συνηθως NotFoundException ανα frame — αγνοουμε
       }
     );
   }catch(se){
     var _sn = se.name || 'Error';
     var _sm = se.message || String(se);
-    _diagErr = 'START FAIL: ' + _sn + ': ' + _sm;
     var _userMsg;
     if(_sn === 'NotAllowedError' || _sn === 'PermissionDeniedError'){
-      _userMsg = 'Η αδεια καμερας ειναι κλειστη. Ρυθμισεις -> Safari -> Καμερα -> Να επιτρεπεται για το site, η επιτρεψε στο popup.';
+      _userMsg = 'Να επιτρέψεις πρόσβαση στην κάμερα. Ρυθμίσεις → Safari → Κάμερα → Να επιτρέπεται για αυτήν τη σελίδα.';
     } else if(_sn === 'NotReadableError' || _sn === 'TrackStartError'){
-      _userMsg = 'Η καμερα χρησιμοποιειται απο αλλη εφαρμογη/καρτελα. Κλεισε τες και ξαναπροσπαθησε.';
+      _userMsg = 'Η κάμερα χρησιμοποιείται από άλλη εφαρμογή/καρτέλα. Κλείστε τες και ξαναπροσπαθήστε.';
     } else {
       _userMsg = _sn + ': ' + _sm;
     }
     _st = document.getElementById('scannerStatus');
     if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _userMsg + '</div>';
-    toast('Scanner: ' + _diagErr, 'danger');
-    _scannerDiag(false, _diagErr);
+    toast(_userMsg, 'danger');
     return;
   }
 
-  // Κρατησε το stream για cleanup
   if(v.srcObject) ACTIVE_STREAM = v.srcObject;
 
-  // Επαληθευση εικονας: videoWidth>0 (εως 3x700ms)
+  // Επαλήθευση εικόνας (έως 3×700ms)
   for(var _i = 0; _i < 3; _i++){
     await new Promise(function(r){ setTimeout(r, 700); });
     if(v.videoWidth > 0) break;
   }
   if(v.videoWidth === 0){
-    _diagErr = 'VIDEO FAIL: videoWidth=0 (readyState:' + v.readyState + ' srcObject:' + (v.srcObject ? 'yes' : 'null') + ')';
+    var _vmsg = 'Αποτυχία εκκίνησης κάμερας. Κλείστε και ξαναπροσπαθήστε.';
     _st = document.getElementById('scannerStatus');
-    if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _diagErr + '</div>';
-    toast('Scanner: ' + _diagErr, 'danger');
-    _scannerDiag(false, _diagErr);
+    if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _vmsg + '</div>';
+    toast(_vmsg, 'danger');
     return;
   }
   if(v.srcObject) ACTIVE_STREAM = v.srcObject;
 
   _st = document.getElementById('scannerStatus');
-  if(_st) _st.innerHTML = '<div style="color:var(--accent)">📷 Καμερα ενεργη — σκαναρε barcode η QR</div>';
-  _scannerDiag(true, '');
+  if(_st) _st.innerHTML = '<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>';
 }
 
-/* Persistent diagnostic πάνω από το <video> — εμφανίζεται μέσα στη μαύρη περιοχή. */
-function _scannerDiag(ok, errMsg) {
-  var area = document.querySelector('.scanner-area');
-  if (!area) return;
-  var old = document.getElementById('znScanDiag');
-  if (old) old.parentNode.removeChild(old);
-  var box = document.createElement('div');
-  box.id = 'znScanDiag';
-  box.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:9999;'
-    + 'background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:15px;'
-    + 'line-height:1.7;padding:14px 12px;pointer-events:none';
-  area.appendChild(box);
-  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function _upd(){
-    var v  = document.querySelector('#qr-reader video');
-    var c  = document.getElementById('qr-reader');
-    var so = v && v.srcObject;
-    var inner = c ? c.innerHTML.trim().replace(/\s+/g,' ').substring(0, 120) : '';
-    box.innerHTML =
-      '<b style="color:#ff0">[DBG] Scanner</b><br>'
-      + 'engine: <span style="color:#0ff">ZXing</span> #qr-reader DOM:' + (c ? '<span style="color:#0f0">✓</span>' : '<span style="color:#f00">✗ missing!</span>') + '<br>'
-      + 'children(' + (c ? c.children.length : '?') + '): ' + _esc(inner) + '<br>'
-      + 'start() → ' + (ok
-          ? '<span style="color:#0f0">resolve ✓</span>'
-          : '<span style="color:#f00">REJECT: ' + _esc(errMsg) + '</span>') + '<br>'
-      + 'video: ' + (v
-          ? v.videoWidth + '×' + v.videoHeight + '  readyState=' + v.readyState
-          : '<span style="color:#f80">null</span>') + '<br>'
-      + 'srcObject: ' + (so
-          ? (so.active ? '<span style="color:#0f0">active</span>' : '<span style="color:#f80">inactive</span>')
-          : '<span style="color:#f00">null</span>') + '<br>'
-      + 'container: ' + (c ? c.offsetWidth + '×' + c.offsetHeight : 'null') + '<br>'
-      + 'area: ' + area.offsetWidth + '×' + area.offsetHeight;
-  }
-  _upd();
-  var _iv = setInterval(_upd, 500);
-  setTimeout(function(){ clearInterval(_iv); }, 20000);
-}
 
 async function switchCamera(){
   window.__useBackCamera = !window.__useBackCamera;
