@@ -153,13 +153,13 @@ var ZN_PROMOS = (function () {
     if (type === 'expiry') {
       return _row(_lbl('Scope') + '<select id="znpf-scope" style="' + _INP + '">' + scopeOpts + '</select>')
            + _row(_lbl('IDs (προϊόντα ή κατηγορίες, comma-separated — κενό αν scope=Όλα)')
-               + '<input id="znpf-ids" type="text" value="' + _esc(curIds) + '" placeholder="π.χ. 42,55 ή Ποτά,Τρόφιμα" style="' + _INP + '">')
+               + '<input id="znpf-ids" type="text" value="' + _esc(curIds) + '" placeholder="π.χ. 42,55 ή E-Liquids,Coils" style="' + _INP + '">')
            + _row(_lbl('Ημέρες πριν τη λήξη') + '<input id="znpf-daysbefore" type="number" min="1" value="' + (cond.days_before||'') + '" placeholder="π.χ. 7" style="' + _INP + '">');
     }
     if (type === 'dead_stock') {
       return _row(_lbl('Scope') + '<select id="znpf-scope" style="' + _INP + '">' + scopeOpts + '</select>')
            + _row(_lbl('IDs (προϊόντα ή κατηγορίες, comma-separated — κενό αν scope=Όλα)')
-               + '<input id="znpf-ids" type="text" value="' + _esc(curIds) + '" placeholder="π.χ. 42,55 ή Ποτά,Τρόφιμα" style="' + _INP + '">')
+               + '<input id="znpf-ids" type="text" value="' + _esc(curIds) + '" placeholder="π.χ. 42,55 ή E-Liquids,Coils" style="' + _INP + '">')
            + _row(_lbl('Ημέρες χωρίς πώληση') + '<input id="znpf-daysnonsale" type="number" min="1" value="' + (cond.days_no_sale||'') + '" placeholder="π.χ. 30" style="' + _INP + '">');
     }
     return '';
