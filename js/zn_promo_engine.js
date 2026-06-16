@@ -160,9 +160,11 @@ var ZN_PROMO = (function () {
         var daysNoSale = Number(cond.days_no_sale || 0);
         var dTotalAmt = 0;
         var dFired = false;
+        var dbgMapSize = Object.keys(_ctx).length; // [DBG]
         for (var di = 0; di < dLines.length; di++) {
           var dPid = String(dLines[di].productId);
           var dCtx = _ctx[dPid];
+          var dbgFire = false; // [DBG]
           if (dCtx) {
             // null days_since_sale = ποτέ δεν πουλήθηκε → μέτρα ως αδρανές
             var dSince = dCtx.days_since_sale;
@@ -173,7 +175,20 @@ var ZN_PROMO = (function () {
               ) / 100;
               dTotalAmt += dAmt;
               dFired = true;
+              dbgFire = true; // [DBG]
             }
+          }
+          // [DBG] προσωρινό debug toast — αφαίρεσε μόλις λυθεί το πρόβλημα
+          if (typeof toast === 'function') {
+            toast(
+              '[DBG] dead_stock ' + (dLines[di].name || dPid) +
+              ': mapSize=' + dbgMapSize +
+              ' ctx=' + (dCtx ? 'βρέθηκε' : 'όχι') +
+              ' dss=' + (dCtx ? (dCtx.days_since_sale === null ? 'null' : String(dCtx.days_since_sale)) : '—') +
+              ' thr=' + daysNoSale +
+              ' fire=' + (dbgFire ? 'yes' : 'no'),
+              'info', 6000
+            );
           }
         }
         if (dFired) {
