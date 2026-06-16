@@ -174,6 +174,20 @@ var ZN_AUDIT = (function () {
   function render() {
     var content = document.getElementById('content');
     if (!content) { return; }
+    var guide = (typeof znGuideBox === 'function') ? znGuideBox('blindaudit') : '';
+    if (!_auditId) {
+      /* Pre-start: guide box + explicit start button — no auto-start. */
+      content.innerHTML =
+        '<div class="page-head"><h2>📦 Τυφλή Απογραφή</h2>' +
+        '<p class="muted">Η απογραφή ξεκινά μόνο με το κουμπί. Οι πωλήσεις POS συνεχίζουν κανονικά.</p></div>' +
+        guide +
+        '<div class="card" style="text-align:center;padding:32px 16px">' +
+        '<p class="text-xs muted mb-3">Πάτα «Έναρξη» για να παγώσει το απόθεμα και να αρχίσει η τυφλή καταμέτρηση.</p>' +
+        '<button class="btn btn-primary" style="min-height:44px;min-width:180px" onclick="ZN_AUDIT.start()">📦 Έναρξη Απογραφής</button>' +
+        '</div>';
+      return;
+    }
+    /* Active audit: scanner UI. */
     content.innerHTML =
       '<div class="page-head"><h2>📦 Τυφλή Απογραφή</h2>' +
       '<p class="muted">Σκάναρε barcode και βάλε ποσότητα. Δεν φαίνεται το αναμενόμενο.</p></div>' +

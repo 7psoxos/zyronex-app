@@ -358,6 +358,7 @@ var PAGE_PERMS = {
   inspector: '*',   // μόνο για Διαχειριστή (πλήρη δικαιώματα)
   audit: null,      // Audit Mode — ΟΛΟΙ έχουν πρόσβαση (έλεγχοι έρχονται ξαφνικά)
   blindaudit: '*',  // Τυφλή Απογραφή — μόνο Διαχειριστής
+  promos: '*',      // Σύνθετες Προσφορές — μόνο Διαχειριστής
   'data-cleanup': '*', // μόνο για Διαχειριστή
   'shop-changelog': '*', // Ιστορικό Αλλαγών — μόνο Διαχειριστής
   'age-log': '*', // Μητρώο Ηλικίας — μόνο Διαχειριστής
@@ -3256,6 +3257,8 @@ function renderCustomers(){
     </div>
   </div>
 
+  ${znGuideBox('customers')}
+
   <div class="card mb-4" style="background:linear-gradient(135deg,rgba(0,212,168,0.08),rgba(74,163,255,0.08))">
     <div class="fw-700 mb-2">🎁 Πρόγραμμα Πιστότητας</div>
     <div class="loyalty-tiers-grid">
@@ -6080,6 +6083,7 @@ function renderLoyalty(){
   if(_loyOvChart){ try{ _loyOvChart.destroy(); }catch(e){} _loyOvChart=null; }
   var t=_LOYALTY_TAB;
   content.innerHTML='<div class="page-head"><div><div class="page-title">🎁 Loyalty</div><div class="page-sub">Πρόγραμμα πιστότητας πελατών</div></div></div>'
+    +(typeof znGuideBox==='function'?znGuideBox('loyalty'):'')
     +'<div class="shifts-tabs-bar">'
     +'<button id="loyTab_overview" class="shifts-tab'+(t==='overview'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'overview\')">Επισκόπηση</button>'
     +'<button id="loyTab_members" class="shifts-tab'+(t==='members'?' active':'')+'" style="min-height:44px;font-size:14px" onclick="_setLoyaltyTab(\'members\')">Μέλη</button>'
@@ -11760,6 +11764,8 @@ function renderInventory(preserveSelection){
     </div>
   </div>
 
+  ${znGuideBox('inventory')}
+
   <!-- Collapsible Tools Card -->
   <div class="inv-tools-card ${toolsOpen?'open':''}" id="invToolsCard" style="margin-bottom:14px;background:var(--bg-1);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all 0.25s">
     <button class="inv-tools-toggle" onclick="toggleInventoryTools()" style="width:100%;background:transparent;border:none;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--text-0);font-family:inherit;font-weight:700;font-size:14px;-webkit-tap-highlight-color:transparent">
@@ -13112,6 +13118,8 @@ function renderBatchesHTML(){
     <button class="btn btn-primary" onclick="openBatchModal()"><i data-lucide="plus" size="18"></i> Νέα Παρτίδα</button>
   </div>
 
+  ${znGuideBox('batches')}
+
   <!-- KPIs -->
   <div class="grid kpi-grid mb-3">
     <div class="card kpi">
@@ -13381,6 +13389,8 @@ function renderWasteHTML(){
     </div>
     <button class="btn btn-primary" onclick="openWasteModal()"><i data-lucide="plus" size="18"></i> Νέα Καταχώρηση</button>
   </div>
+
+  ${znGuideBox('waste')}
 
   <!-- Breakdown cards -->
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px">
@@ -13697,6 +13707,8 @@ function renderDashboard(){
       <button class="btn btn-primary btn-lg" onclick="showPage('pos')" style="font-size:13px;padding:10px 18px;box-shadow:0 0 20px rgba(0,212,168,0.25)"><i data-lucide="scan-line" size="16"></i> Νέα Πώληση</button>
     </div>
   </div>
+
+  ${znGuideBox('dashboard')}
 
   <!-- SHIFT HERO CARD (Clock in/out) -->
   <div id="shiftHeroCard"></div>
@@ -14856,7 +14868,9 @@ function renderReports(){
   <div class="page-head"><div><div class="page-title">Στατιστικά Πωλήσεων</div><div class="page-sub">Ανάλυση ανά προϊόν, κατηγορία, περίοδο</div></div>
   <div class="flex gap-2" style="flex-wrap:wrap"><button class="btn btn-ghost" onclick="exportSales()"><i data-lucide="file-spreadsheet" size="18"></i> Excel Πωλήσεων</button>
   <button class="btn btn-ghost" onclick="exportCashbookPDF()"><i data-lucide="file-text" size="18"></i> PDF Ταμείου</button></div></div>
-  
+
+  ${znGuideBox('reports')}
+
   <!-- Date Range Filter -->
   <div class="card" style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <div style="font-size:12px;color:var(--text-2);font-weight:600">Περίοδος:</div>
@@ -15306,6 +15320,7 @@ async function renderBI(){
     <div><div class="page-title">🧠 Επιχειρηματική Ανάλυση</div><div class="page-sub">ZyroNex Smart ανάλυση και προβλέψεις</div></div>
     <button class="btn btn-primary" onclick="aiBIAnalysis()"><i data-lucide="sparkles" size="16"></i> AI Βαθιά Ανάλυση</button>
   </div>
+  ${znGuideBox('bi')}
   ${(typeof honestDataBanner==='function')?honestDataBanner():''}
 
   <div class="grid kpi-grid mb-4">
@@ -17047,6 +17062,8 @@ function renderShiftsHTML(){
       }
     </div>
   </div>
+
+  ${znGuideBox('shifts')}
 
   ${myShift ? _renderActiveShiftCard(myShift) : ''}
 
@@ -19889,6 +19906,8 @@ function renderPurchasesHTML(){
       <button class="btn btn-primary" onclick="openPurchaseModal()"><i data-lucide="plus" size="18"></i> Νέα Αγορά</button>
     </div>
   </div>
+
+  ${znGuideBox('purchases')}
 
   <!-- VAT Summary -->
   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px">
@@ -24632,6 +24651,7 @@ function renderPOS(){
       <button class="btn btn-ghost" onclick="openCustomerPicker()" style="flex:0 1 auto;min-width:0;overflow:hidden"><i data-lucide="user" size="18"></i> <span id="cartCustomer" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">Χωρίς πελάτη</span></button>
     </div>
   </div>
+  ${znGuideBox('pos')}
   ${modeToggle}
   ${modeBody}`;
   document.getElementById('content').innerHTML=html;
@@ -26064,9 +26084,10 @@ function renderCart(){
   var _promoResult = (typeof ZN_PROMO !== 'undefined') ? ZN_PROMO.evaluate(CART.map(function(it){
     var _pp = PRODUCTS.find(function(x){return x.id===it.productId;});
     return {productId:it.productId, qty:it.qty, price:it.price, category:_pp?(_pp.category||''):''};
-  })) : {discount:0,applied:[]};
+  })) : {discount:0,applied:[],breakdown:[]};
   var _promoAmt = _promoResult.discount || 0;
   window._promoDiscount = _promoAmt;
+  window._promoApplied  = (_promoResult.applied || []).slice();
   const subtotal = rawTotal - discAmt - _promoAmt;
   const vat = subtotal*0.24/1.24;
 
@@ -26092,9 +26113,19 @@ function renderCart(){
   const silentCost = typeof calcSilentCost==='function' ? calcSilentCost() : 0;
   const silentRow = silentCost > 0 ? `<div class="summary-row" style="color:#e74c3c;font-size:12px">
     <span>🧻 Αναλώσιμα</span><span>-${eur(silentCost)}</span></div>` : '';
-  // Promo engine discount row
-  const promoRow = _promoAmt > 0 ? `<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">
-    <span>🎁 Προσφορά${_promoResult.applied&&_promoResult.applied.length?' ('+_promoResult.applied.join(', ')+')':''}</span><span>-${eur(_promoAmt)}</span></div>` : '';
+  // Promo engine discount row — ένα row ανά κανόνα που έπιασε
+  var _promoBreakdown = _promoResult.breakdown || [];
+  var promoRow = '';
+  if (_promoBreakdown.length) {
+    promoRow = _promoBreakdown.map(function(bd) {
+      return '<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">'
+        + '<span>🎁 ' + (bd.name||'Προσφορά') + '</span>'
+        + '<span>-' + eur(bd.amount) + '</span></div>';
+    }).join('');
+  } else if (_promoAmt > 0) {
+    promoRow = '<div class="summary-row" style="color:#27ae60;font-weight:700;font-size:13px">'
+      + '<span>🎁 Προσφορά</span><span>-' + eur(_promoAmt) + '</span></div>';
+  }
 
   // Age verified badge update
   var _ageVerifiedCust = false;
