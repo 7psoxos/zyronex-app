@@ -72,6 +72,16 @@ var ZN_PROMO = (function () {
   /* cart: array {productId, qty, price, category}. Επιστρέφει {discount, applied[], breakdown[]}. */
   function evaluate(cart) {
     cart = cart || [];
+    // [DBG] προσωρινό — αφαίρεσε μόλις λυθεί το πρόβλημα
+    if (typeof toast === 'function') {
+      var dbgDead = _rules.filter(function(x){ return x.type === 'dead_stock'; }).length;
+      toast(
+        '[DBG] evaluate ΚΛΗΘΗΚΕ: rules=' + _rules.length +
+        ' dead=' + dbgDead +
+        ' ctx=' + Object.keys(_ctx).length,
+        'info', 7000
+      );
+    }
     var discount = 0;
     var applied = [];
     var breakdown = [];  // [{name, amount}] — ένα entry ανά κανόνα που έπιασε
