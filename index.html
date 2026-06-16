@@ -30554,10 +30554,10 @@ function openWarrantyModal(id){
     </div>
     <div class="form-row">
       <label class="form-label">Προϊόν/Συσκευή</label>
-      <select class="form-select" id="wa_product" onchange="document.getElementById('wa_deviceName').value=this.options[this.selectedIndex].text">
-        <option value="">—</option>
-        ${PRODUCTS.filter(p=>p.category==='Συσκευές'||p.category==='Μπαταρίες').map(p=>`<option value="${p.id}" ${w?.product_id==p.id?'selected':''}>${p.name}</option>`).join('')}
-      </select>
+      <button type="button" id="wa_product" data-pid="${w?.product_id||''}" onclick="znPickerOpenWarranty(this)"
+        style="display:block;width:100%;font-size:16px;min-height:44px;padding:0 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:8px;background:var(--bg-1,#12121e);color:var(--text-0,#fff);text-align:left;cursor:pointer;word-break:break-word;box-sizing:border-box">
+        ${(()=>{const wp=w?.product_id?PRODUCTS.find(p=>p.id==w.product_id):null;return wp?wp.name:'🔍 Επέλεξε συσκευή…';})()}
+      </button>
     </div>
     <div class="form-row">
       <label class="form-label">Όνομα Συσκευής (αν δεν είναι στον κατάλογο)</label>
@@ -30618,7 +30618,7 @@ async function saveWarranty(id){
 
   const data = {
     customer_id: document.getElementById('wa_customer').value?+document.getElementById('wa_customer').value:null,
-    product_id: document.getElementById('wa_product').value?+document.getElementById('wa_product').value:null,
+    product_id: (document.getElementById('wa_product')?.dataset?.pid) ? +(document.getElementById('wa_product').dataset.pid) : null,
     device_name: document.getElementById('wa_deviceName').value.trim()||null,
     serial_number: serial,
     purchase_date: document.getElementById('wa_purchaseDate').value||null,
@@ -30644,6 +30644,22 @@ async function saveWarranty(id){
   }catch(err){
     toast('Σφάλμα: '+err.message,'danger');
   }
+}
+
+function znPickerOpenWarranty(btn) {
+  if (typeof ZN_PICKER === 'undefined') { return; }
+  ZN_PICKER.open(btn, {
+    filter: function (p) {
+      var cat = (p.category || '');
+      return cat === 'Συσκευές' || cat === 'Μπαταρίες';
+    },
+    onSelect: function (p) {
+      btn.dataset.pid = String(p.id);
+      btn.textContent = p.name;
+      var devName = document.getElementById('wa_deviceName');
+      if (devName) { devName.value = p.name; }
+    }
+  });
 }
 
 async function deleteWarranty(id){
@@ -31304,10 +31320,10 @@ function openCompetitorPriceModal(id){
     </div>
     <div class="form-row">
       <label class="form-label">Προϊόν (δικό μου) *</label>
-      <select class="form-select" id="cp_product">
-        <option value="">— Επίλεξε —</option>
-        ${PRODUCTS.map(pr=>`<option value="${pr.id}" ${p?.product_id==pr.id?'selected':''}>${pr.name} (δική μου: ${eur(pr.price)})</option>`).join('')}
-      </select>
+      <button type="button" id="cp_product" data-pid="${p?.product_id||''}" onclick="znPickerOpenCompetitor(this)"
+        style="display:block;width:100%;font-size:16px;min-height:44px;padding:0 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:8px;background:var(--bg-1,#12121e);color:var(--text-0,#fff);text-align:left;cursor:pointer;word-break:break-word;box-sizing:border-box">
+        ${(()=>{const pp=p?.product_id?PRODUCTS.find(pr=>pr.id==p.product_id):null;return pp?`${pp.name} (δική μου: ${eur(pp.price)})`:'🔍 Επέλεξε προϊόν…';})()}
+      </button>
     </div>
     <div class="form-grid">
       <div class="form-row">
@@ -31337,7 +31353,7 @@ function openCompetitorPriceModal(id){
 
 async function saveCompetitorPrice(id){
   const compId = document.getElementById('cp_competitor').value;
-  const prodId = document.getElementById('cp_product').value;
+  const prodId = document.getElementById('cp_product')?.dataset?.pid || '';
   const price = parseFloat(document.getElementById('cp_price').value);
   const date = document.getElementById('cp_date').value;
   if(!compId){toast('Επίλεξε ανταγωνιστή','danger');return;}
@@ -31371,6 +31387,16 @@ async function saveCompetitorPrice(id){
   }catch(err){
     toast('Σφάλμα: '+err.message,'danger');
   }
+}
+
+function znPickerOpenCompetitor(btn) {
+  if (typeof ZN_PICKER === 'undefined') { return; }
+  ZN_PICKER.open(btn, {
+    onSelect: function (p) {
+      btn.dataset.pid = String(p.id);
+      btn.textContent = p.name + (p.price ? ' (δική μου: ' + (typeof eur === 'function' ? eur(p.price) : p.price) + ')' : '');
+    }
+  });
 }
 
 async function deleteCompetitorPrice(id){
