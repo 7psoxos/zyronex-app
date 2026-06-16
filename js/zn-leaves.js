@@ -6120,6 +6120,7 @@ var SCAN_CONTINUOUS = true;
 var SCAN_HISTORY = [];
 var LAST_SCAN = '';
 var LAST_SCAN_TIME = 0;
+var ACTIVE_STREAM = null; // MediaStream reference για cleanup tracks σε iOS
 
 function playBeep(){
   try{
@@ -6208,6 +6209,12 @@ async function startCameraNow(){
       SCANNER = null;
     }
 
+    // iOS: σταμάτα παλιό MediaStream ώστε να μην μείνει locked η κάμερα
+    if(ACTIVE_STREAM){
+      try{ ACTIVE_STREAM.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+      ACTIVE_STREAM = null;
+    }
+
     SCANNER = new Html5Qrcode('qr-reader');
 
     // Όλα τα formats που υποστηρίζουμε (barcodes + QR)
@@ -6281,6 +6288,7 @@ async function startCameraNow(){
     setTimeout(function() {
       const v = document.querySelector('#qr-reader video');
       if (v) {
+        if (v.srcObject) ACTIVE_STREAM = v.srcObject; // capture για track cleanup
         v.setAttribute('playsinline', '');
         v.setAttribute('webkit-playsinline', '');
         v.muted = true;
@@ -6335,8 +6343,11 @@ function _scannerDiag(ok, errMsg) {
     var v  = document.querySelector('#qr-reader video');
     var c  = document.getElementById('qr-reader');
     var so = v && v.srcObject;
+    var inner = c ? c.innerHTML.trim().replace(/\s+/g,' ').substring(0, 120) : '';
     box.innerHTML =
       '<b style="color:#ff0">[DBG] Scanner</b><br>'
+      + 'id→Html5Qrcode: <span style="color:#0ff">"qr-reader"</span> DOM:' + (c ? '<span style="color:#0f0">✓</span>' : '<span style="color:#f00">✗ missing!</span>') + '<br>'
+      + 'children(' + (c ? c.children.length : '?') + '): ' + _esc(inner) + '<br>'
       + 'start() → ' + (ok
           ? '<span style="color:#0f0">resolve ✓</span>'
           : '<span style="color:#f00">REJECT: ' + _esc(errMsg) + '</span>') + '<br>'
@@ -6444,6 +6455,11 @@ async function onScanSuccess(decodedText, decodedResult){
 }
 
 async function stopScanner(){
+  // iOS: σταμάτα tracks ώστε η κάμερα να αφεθεί ελεύθερη
+  if(ACTIVE_STREAM){
+    try{ ACTIVE_STREAM.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+    ACTIVE_STREAM = null;
+  }
   try{
     if(SCANNER && SCANNER.isScanning){
       await SCANNER.stop();
