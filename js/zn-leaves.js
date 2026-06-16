@@ -6196,14 +6196,16 @@ async function startScanner(mode){
 }
 
 async function startCameraNow(){
-  var _diagOk  = false;
+  var _diagOk = false;
   var _diagErr = '';
+  var _st, v, el;
 
   try{
-    // 1. Cleanup: σταμάτα παλιό instance + MediaStream tracks
+    // Cleanup ΧΩΡΙΣ await — stop() αφήνει κάμερα sync (track.stop() εσωτερικά),
+    // αλλά το await πριν start() σπάει το user-gesture chain σε iOS Safari
     if(SCANNER){
-      try{ if(SCANNER.isScanning) await SCANNER.stop(); }catch(e){}
       try{ SCANNER.clear(); }catch(e){}
+      SCANNER.stop().catch(function(){});  // fire-and-forget, ΟΧΙ await
       SCANNER = null;
     }
     if(ACTIVE_STREAM){
@@ -6211,24 +6213,66 @@ async function startCameraNow(){
       ACTIVE_STREAM = null;
     }
 
-    // 2. Επαλήθευση: #qr-reader πρέπει να είναι στο DOM ΜΕ ύψος πριν το new
-    var el = document.getElementById('qr-reader');
+    el = document.getElementById('qr-reader');
     if(!el) throw new Error('#qr-reader λείπει από το DOM');
-    if(el.offsetHeight === 0) throw new Error('#qr-reader: offsetHeight=0, δεν έχει ύψος');
+    if(el.offsetHeight === 0) throw new Error('#qr-reader offsetHeight=0');
 
-    // 3. Φρέσκο instance — false = χωρίς verbose logging
+    // Φρέσκο instance ΑΜΕΣΩΣ πριν το start() — ΟΧΙ cached/global
     SCANNER = new Html5Qrcode('qr-reader', false);
 
-    // 4. Start: μόνο facingMode:"environment" — ΟΧΙ {exact:...}, ΟΧΙ camera-id λίστα
-    await SCANNER.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: undefined, aspectRatio: 1.0 },
-      onScanSuccess,
-      function(err){ console.warn('[scan-frame-err]', err); }
-    );
+    var _cfg = { fps: 10, qrbox: undefined, aspectRatio: 1.0 };
+    var _startErr = null;
 
-    // 5. iOS Safari: inject playsinline + muted αμέσως μετά το start()
-    var v = document.querySelector('#qr-reader video');
+    // Πρώτο await = start() → gesture chain ΟΚ στο iOS
+    try{
+      await SCANNER.start(
+        { facingMode: 'environment' },
+        _cfg,
+        onScanSuccess,
+        function(e){ console.warn('[scan-frame]', e); }
+      );
+    }catch(se){
+      _startErr = se;
+    }
+
+    // OverconstrainedError/NotFoundError: retry χωρίς facingMode constraint
+    if(_startErr && (_startErr.name === 'OverconstrainedError' || _startErr.name === 'NotFoundError')){
+      try{ SCANNER.clear(); }catch(e){} SCANNER = null;
+      SCANNER = new Html5Qrcode('qr-reader', false);
+      try{
+        await SCANNER.start(
+          { facingMode: 'user' },
+          _cfg,
+          onScanSuccess,
+          function(e){ console.warn('[scan-frame]', e); }
+        );
+        _startErr = null;
+      }catch(re){
+        _startErr = re;
+      }
+    }
+
+    // Χαρτογράφηση σφάλματος σε οδηγία χρήστη
+    if(_startErr){
+      var _n = _startErr.name || 'Error';
+      var _userMsg;
+      if(_n === 'NotAllowedError' || _n === 'PermissionDeniedError'){
+        _userMsg = 'Η άδεια κάμερας είναι κλειστή. Ρυθμίσεις → Safari → Κάμερα → Να επιτρέπεται για το site, ή επίτρεψε στο popup.';
+      } else if(_n === 'NotReadableError' || _n === 'TrackStartError'){
+        _userMsg = 'Η κάμερα χρησιμοποιείται από άλλη εφαρμογή/καρτέλα. Κλείσ’τες και ξαναπροσπάθησε.';
+      } else {
+        _userMsg = _n + ': ' + (_startErr.message || String(_startErr));
+      }
+      _diagErr = _n + ': ' + (_startErr.message || '');
+      _st = document.getElementById('scannerStatus');
+      if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _userMsg + '</div>';
+      toast('Scanner: ' + _userMsg, 'danger');
+      _scannerDiag(false, _diagErr);
+      return;
+    }
+
+    // iOS Safari: playsinline + muted αμέσως μετά το start()
+    v = document.querySelector('#qr-reader video');
     if(v){
       if(v.srcObject) ACTIVE_STREAM = v.srcObject;
       v.setAttribute('playsinline', '');
@@ -6237,34 +6281,32 @@ async function startCameraNow(){
       v.play().catch(function(){});
     }
 
-    // 6. Επαλήθευση εικόνας: video ΚΑΙ videoWidth>0 (έως 2×700ms)
+    // Επαλήθευση: video ΚΑΙ videoWidth>0 (έως 2×700ms)
     for(var _i = 0; _i < 2; _i++){
       await new Promise(function(r){ setTimeout(r, 700); });
       v = document.querySelector('#qr-reader video');
       if(v && v.videoWidth > 0) break;
     }
     if(!v){
-      throw new Error('Html5Qrcode δεν έκανε inject <video> στο #qr-reader (children:' + el.children.length + ')');
+      throw new Error('Δεν δημιουργήθηκε <video> στο #qr-reader (children:' + el.children.length + ')');
     }
     if(v.videoWidth === 0){
-      throw new Error('<video> υπάρχει αλλά videoWidth=0 — stream χωρίς εικόνα (readyState:' + v.readyState + ' srcObject:' + (v.srcObject ? 'yes' : 'null') + ')');
+      throw new Error('<video> χωρίς εικόνα (readyState:' + v.readyState + ' srcObject:' + (v.srcObject ? 'yes' : 'null') + ')');
     }
     if(v.srcObject) ACTIVE_STREAM = v.srcObject;
 
     _diagOk = true;
-
-    var st = document.getElementById('scannerStatus');
-    if(st) st.innerHTML = '<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>';
+    _st = document.getElementById('scannerStatus');
+    if(_st) _st.innerHTML = '<div style="color:var(--accent)">📷 Κάμερα ενεργή — σκανάρισε barcode ή QR</div>';
 
   }catch(err){
     console.error('[startCameraNow]', err);
     _diagErr = (err.name || 'Error') + ': ' + (err.message || String(err));
     toast('Scanner: ' + _diagErr, 'danger');
-    var st = document.getElementById('scannerStatus');
-    if(st) st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _diagErr + '</div>';
+    _st = document.getElementById('scannerStatus');
+    if(_st) _st.innerHTML = '<div style="color:var(--danger)">⚠️ ' + _diagErr + '</div>';
   }
 
-  // [DBG] Persistent diagnostic overlay
   _scannerDiag(_diagOk, _diagErr);
 }
 
