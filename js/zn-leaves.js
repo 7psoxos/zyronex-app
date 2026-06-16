@@ -14865,7 +14865,9 @@ function renderReports(){
   <div class="page-head"><div><div class="page-title">Στατιστικά Πωλήσεων</div><div class="page-sub">Ανάλυση ανά προϊόν, κατηγορία, περίοδο</div></div>
   <div class="flex gap-2" style="flex-wrap:wrap"><button class="btn btn-ghost" onclick="exportSales()"><i data-lucide="file-spreadsheet" size="18"></i> Excel Πωλήσεων</button>
   <button class="btn btn-ghost" onclick="exportCashbookPDF()"><i data-lucide="file-text" size="18"></i> PDF Ταμείου</button></div></div>
-  
+
+  ${znGuideBox('reports')}
+
   <!-- Date Range Filter -->
   <div class="card" style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <div style="font-size:12px;color:var(--text-2);font-weight:600">Περίοδος:</div>
@@ -15315,6 +15317,7 @@ async function renderBI(){
     <div><div class="page-title">🧠 Επιχειρηματική Ανάλυση</div><div class="page-sub">ZyroNex Smart ανάλυση και προβλέψεις</div></div>
     <button class="btn btn-primary" onclick="aiBIAnalysis()"><i data-lucide="sparkles" size="16"></i> AI Βαθιά Ανάλυση</button>
   </div>
+  ${znGuideBox('bi')}
   ${(typeof honestDataBanner==='function')?honestDataBanner():''}
 
   <div class="grid kpi-grid mb-4">
@@ -17056,6 +17059,8 @@ function renderShiftsHTML(){
       }
     </div>
   </div>
+
+  ${znGuideBox('shifts')}
 
   ${myShift ? _renderActiveShiftCard(myShift) : ''}
 

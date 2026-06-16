@@ -23273,6 +23273,8 @@ function renderCashbook(){
     </div>
   </div>
 
+  ${znGuideBox('cashbook')}
+
   <div class="grid kpi-grid">
     <div class="card kpi"><div class="kpi-label">Ημέρα (Brutto)</div><div class="kpi-value">${eur(tToday)}</div><div class="kpi-sub ${tToday>=tYest?'trend-up':'trend-down'}">vs χθες ${eur(tYest)}</div></div>
     <div class="card kpi"><div class="kpi-label">Εβδομάδα</div><div class="kpi-value">${eur(tWeek)}</div><div class="kpi-sub muted">Μ.Ο. ημέρας: ${eur(tWeek/7)}</div></div>
