@@ -12673,7 +12673,9 @@ function openProductModal(id){
       const currentSet = HARDWARE_COMPAT[id] || new Set();
       const rows = consumables.map(x=>{
         const checked = currentSet.has(x.id) ? 'checked' : '';
-        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
+        const dnm = (x.name||'').toLowerCase().replace(/"/g,'&quot;');
+        const dbc = (x.barcode||'').toLowerCase();
+        return `<label class="znhc-row" data-name="${dnm}" data-barcode="${dbc}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">
           <input type="checkbox" id="hc_${x.id}" value="${x.id}" ${checked} style="width:15px;height:15px;accent-color:var(--accent)">
           <span style="flex:1;font-size:13px">${x.name}</span>
           <span style="font-size:11px;color:var(--muted);background:var(--bg-2);padding:2px 7px;border-radius:20px">${x.category}</span>
@@ -12682,7 +12684,9 @@ function openProductModal(id){
       return `<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
         <div style="font-weight:800;font-size:14px;margin-bottom:4px">🔗 Συμβατά αναλώσιμα</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Επίλεξε ποια pods / αντιστάσεις / αξεσουάρ ταιριάζουν με αυτή τη συσκευή. Εμφανίζονται στο POS tab "🔗 Συμβατά" όταν η συσκευή είναι στο καλάθι.</div>
-        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">${rows||'<div style="color:var(--muted);font-size:13px;padding:8px">Δεν υπάρχουν άλλα προϊόντα.</div>'}</div>
+        <input type="text" id="znhc-search" oninput="znHcFilter(this)" placeholder="🔍 Αναζήτηση ή barcode" autocomplete="off"
+          style="width:100%;font-size:16px;min-height:44px;padding:0 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-1);color:var(--text-0);box-sizing:border-box;-webkit-appearance:none;margin-bottom:8px">
+        <div id="znhc-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">${rows||'<div style="color:var(--muted);font-size:13px;padding:8px">Δεν υπάρχουν άλλα προϊόντα.</div>'}</div>
       </div>`;
     })()}
 
@@ -12724,6 +12728,25 @@ function openProductModal(id){
     // Initial pack total display (για non-liquid κατηγορίες)
     if(typeof _updatePackTotal === 'function') _updatePackTotal();
   }, 50);
+}
+
+/* Live φίλτρο για το «🔗 Συμβατά αναλώσιμα» section στη φόρμα προϊόντος */
+function znHcFilter(inp) {
+  var q = (inp.value || '').trim().toLowerCase();
+  var list = document.getElementById('znhc-list');
+  if (!list) { return; }
+  var rows = list.querySelectorAll('.znhc-row');
+  for (var i = 0; i < rows.length; i++) {
+    var name = rows[i].dataset.name || '';
+    var bc   = rows[i].dataset.barcode || '';
+    var show = !q || name.indexOf(q) !== -1 || (bc && bc.indexOf(q) === 0);
+    rows[i].style.display = show ? '' : 'none';
+    // ακριβές barcode match → auto-check
+    if (q && bc === q) {
+      var cb = rows[i].querySelector('input[type="checkbox"]');
+      if (cb && !cb.checked) { cb.checked = true; }
+    }
+  }
 }
 
 async function handleImageUpload(event, productId){

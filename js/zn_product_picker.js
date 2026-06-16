@@ -15,6 +15,7 @@ var ZN_PICKER = (function () {
   var _host = null;
   var _onSelect = null;
   var _triggerEl = null;
+  var _filter = null;  // optional function(product) → bool
 
   function _prods() {
     return typeof PRODUCTS !== 'undefined' ? PRODUCTS : [];
@@ -79,6 +80,7 @@ var ZN_PICKER = (function () {
 
   function _render(q) {
     var all = _prods();
+    if (_filter) { all = all.filter(_filter); }
     var q2 = (q || '').trim().toLowerCase();
     var list = document.getElementById('znPickerList');
     if (!list) { return; }
@@ -159,6 +161,7 @@ var ZN_PICKER = (function () {
   function open(triggerEl, opts) {
     _triggerEl = triggerEl;
     _onSelect  = (opts && opts.onSelect) || null;
+    _filter    = (opts && opts.filter)   || null;
     if (!_host) { _host = _buildHost(); }
     var inp = document.getElementById('znPickerSearch');
     if (inp) { inp.value = ''; }
@@ -172,6 +175,7 @@ var ZN_PICKER = (function () {
     if (_host) { _host.style.display = 'none'; }
     _onSelect  = null;
     _triggerEl = null;
+    _filter    = null;
   }
 
   function _pick(p) {
