@@ -12579,8 +12579,8 @@ async function openProductStockHistory(productId){
 
   var body = document.getElementById('znStockSheetBody');
   try{
-    if(typeof sb === 'undefined' || !sb.rpc) throw new Error('Μη διαθέσιμη σύνδεση');
-    var res = await sb.rpc('zn_stock_history', { p_product_id: productId, p_limit: 100 });
+    if(typeof sbAuth === 'undefined' || !sbAuth.rpc) throw new Error('Μη διαθέσιμη σύνδεση');
+    var res = await sbAuth.rpc('zn_stock_history', { p_product_id: productId, p_limit: 100 });
     if(!document.getElementById('znStockSheet')) return; // έκλεισε στο μεταξύ
     if(res && res.error) throw new Error(res.error.message || 'RPC error');
     var rows = (res && res.data) ? res.data : [];
@@ -12604,8 +12604,8 @@ async function renderStockMovements(){
   content.innerHTML = '<div class="page-head"><div class="page-title">📦 Κινήσεις Αποθέματος</div></div>' +
     '<div class="muted" style="padding:40px;text-align:center"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Φόρτωση...</div>';
   try{
-    if(typeof sb === 'undefined' || !sb.rpc) throw new Error('Μη διαθέσιμη σύνδεση');
-    var res = await sb.rpc('zn_stock_history', { p_product_id: null, p_limit: 100 });
+    if(typeof sbAuth === 'undefined' || !sbAuth.rpc) throw new Error('Μη διαθέσιμη σύνδεση');
+    var res = await sbAuth.rpc('zn_stock_history', { p_product_id: null, p_limit: 100 });
     if(window.CURRENT_PAGE_ID && window.CURRENT_PAGE_ID !== 'stock-movements') return; // ο χρήστης έφυγε
     if(res && res.error) throw new Error(res.error.message || 'RPC error');
     var rows = (res && res.data) ? res.data : [];
