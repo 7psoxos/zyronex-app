@@ -27011,10 +27011,42 @@ async function _doCheckout(){
         },300);
       }
     } else {
-      // Non-Sunmi device → show PDF option as before
-      setTimeout(()=>{
-        showConfirm('Θέλεις να κατεβάσεις απόδειξη σε PDF;', ()=>generateReceipt(saleId, items, subtotal, vat, customerId));
-      },300);
+      // Non-Sunmi device → WebUSB ESC/POS αν είναι ρυθμισμένο + auto-print ON, αλλιώς Browser Print
+      var _aps = (typeof getAppSettings==='function') ? getAppSettings() : {};
+      var _escposDone = false;
+      if(_aps.autoPrint && typeof ZN_ESCPOS!=='undefined' && ZN_ESCPOS.available()
+         && ZN_ESCPOS.currentProfile().protocol !== 'browser'){
+        try{
+          var _rec = {
+            shopName: _aps.shopName || 'ZyroNex',
+            address: _aps.address || _aps.addr || '',
+            phone: _aps.phone || '',
+            afm: _aps.afm || '',
+            title: 'ΑΠΟΔΕΙΞΗ',
+            saleId: saleId,
+            datetime: new Date().toLocaleString('el-GR'),
+            items: items.map(function(it){ return { name: it.product_name, qty: it.quantity, price: it.unit_price }; }),
+            total: subtotal,
+            footer: _aps.receiptFooter || 'Ευχαριστούμε για την προτίμηση!'
+          };
+          var _printed = await ZN_ESCPOS.printReceipt(_rec);
+          if(_printed){
+            _escposDone = true;
+            var _pm = saleData.payment_method;
+            if(_pm === 'cash' || _pm === 'Μετρητά'){ ZN_ESCPOS.openDrawer().catch(function(){}); }
+            toast('🖨️ Απόδειξη εκτυπώθηκε (ESC/POS)','success');
+          }
+        }catch(_escErr){
+          // ΠΟΤΕ block της πώλησης — πτώση σε Browser Print
+          toast('Σφάλμα WebUSB — Browser Print','warning');
+        }
+      }
+      if(!_escposDone){
+        // Browser Print (window.print μέσω generateReceipt)
+        setTimeout(()=>{
+          showConfirm('Θέλεις να κατεβάσεις απόδειξη σε PDF;', ()=>generateReceipt(saleId, items, subtotal, vat, customerId));
+        },300);
+      }
     }
   }catch(err){
     console.error('[checkout] Error:', err);
