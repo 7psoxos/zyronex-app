@@ -4177,6 +4177,9 @@ var HELP_CONTENT = {
         {icon:'🔄', title:'Μέθοδοι εκτύπωσης', body:'<p>Το ZyroNex υποστηρίζει τρεις μεθόδους: <b>Sunmi</b> (ενσωματωμένος εκτυπωτής V3 Mix-D), <b>WebUSB ESC/POS</b> (θερμικοί εκτυπωτές μέσω USB) και <b>Browser Print</b> (πάντα διαθέσιμο). Στις Ρυθμίσεις → Εκτυπωτής & Απόδειξη, επίλεξε <b>Αυτόματη</b> (Sunmi → WebUSB → Browser) ή override σε συγκεκριμένη μέθοδο.</p>'},
         {icon:'📟', title:'Sunmi V3 Mix-D', body:'<p>Σε Sunmi συσκευή, ο εκτυπωτής ανιχνεύεται αυτόματα — εκτυπώνει στο checkout χωρίς επιπλέον ρύθμιση. Κουμπί <b>Test Sunmi</b> για δοκιμή, <b>Άνοιγμα Συρταριού</b> για συρτάρι.</p>'},
         {icon:'🖨️', title:'WebUSB ESC/POS', body:'<p>Επίλεξε μοντέλο: Generic 80/58mm, EPSON TM-T20III/T88/m30, Xprinter XP-80/58, Rongta RP80/58, Bixolon SRP-350III, Citizen CT-E351, Star TSP143/654II. Πάτα <b>«🔌 Σύνδεση εκτυπωτή»</b> — ο browser ζητά άδεια USB (μία φορά). Μετά <b>«🧾 Δοκιμαστική»</b> για δοκιμή. WebUSB: Chrome desktop + Android. iOS → Browser Print.</p>'},
+        {icon:'🖼️', title:'Logo επιχείρησης', body:'<p>Το logo από τα settings μπαίνει στην κορυφή της απόδειξης: σε Browser/A4/preview ως εικόνα <b>πλήρους ανάλυσης</b>, σε θερμικό ως <b>rasterized bitmap στο native DPI (~203)</b> του εκτυπωτή. Χωρίς logo → όνομα καταστήματος.</p>'},
+        {icon:'📐', title:'Μορφή: 58 / 80 / A4', body:'<p>Ρύθμιση «Μορφή απόδειξης» (μόνιμη) + override ανά εκτύπωση με κουμπιά <b>58 | 80 | A4</b> στην προεπισκόπηση. 58/80 = θερμική λωρίδα (monospace). A4 = πλήρης σελίδα με μεγάλο logo, proportional γραμματοσειρά και πίνακα ειδών (laser/inkjet).</p>'},
+        {icon:'🔎', title:'Ευκρίνεια', body:'<p>Browser/A4/PDF: πραγματικό vector κείμενο (όχι raster) + logo πλήρους ανάλυσης + σωστό @media print/@page. Για PDF ≥300 DPI χρησιμοποίησε «Αποθήκευση ως PDF» του browser. Θερμικό: logo στο μέγιστο DPI του hardware.</p>'},
         {icon:'🧾', title:'Αυτόματη εκτύπωση', body:'<p>Με ενεργό το checkbox <b>«Αυτόματη εκτύπωση μετά από πώληση»</b>, κάθε checkout τυπώνει αυτόματα με την τρέχουσα μέθοδο. Σε πληρωμή με μετρητά ανοίγει και το συρτάρι.</p>'},
         {icon:'🛟', title:'Fallback (μη διαπραγματεύσιμο)', body:'<p>Κάθε σφάλμα → ειδοποίηση + πτώση στην επόμενη μέθοδο. <b>Η πώληση δεν μπλοκάρεται ποτέ.</b></p>'}
       ]
@@ -4186,6 +4189,9 @@ var HELP_CONTENT = {
         {icon:'🔄', title:'Print methods', body:'<p>ZyroNex supports three methods: <b>Sunmi</b> (built-in V3 Mix-D printer), <b>WebUSB ESC/POS</b> (thermal printers via USB) and <b>Browser Print</b> (always available). In Settings → Printer & Receipt, choose <b>Auto</b> (Sunmi → WebUSB → Browser) or override to a specific method.</p>'},
         {icon:'📟', title:'Sunmi V3 Mix-D', body:'<p>On a Sunmi device, the printer is auto-detected — prints at checkout with no extra setup. Use the <b>Test Sunmi</b> button to verify, <b>Open Drawer</b> for the cash drawer.</p>'},
         {icon:'🖨️', title:'WebUSB ESC/POS', body:'<p>Select model: Generic 80/58mm, EPSON TM-T20III/T88/m30, Xprinter XP-80/58, Rongta RP80/58, Bixolon SRP-350III, Citizen CT-E351, Star TSP143/654II. Tap <b>"🔌 Connect printer"</b> — browser asks for USB permission once. Then <b>"🧾 Test print"</b>. WebUSB: Chrome desktop + Android. iOS → Browser Print.</p>'},
+        {icon:'🖼️', title:'Business logo', body:'<p>The logo from settings is placed at the top of the receipt: in Browser/A4/preview as a <b>full-resolution</b> image, on thermal as a <b>rasterized bitmap at the native DPI (~203)</b>. No logo → shop name fallback.</p>'},
+        {icon:'📐', title:'Format: 58 / 80 / A4', body:'<p>A persistent "Receipt format" setting + per-print override buttons <b>58 | 80 | A4</b> in the preview. 58/80 = thermal strip (monospace). A4 = full page with large logo, proportional font and items table (laser/inkjet).</p>'},
+        {icon:'🔎', title:'Crisp rendering', body:'<p>Browser/A4/PDF: real vector text (not raster) + full-res logo + correct @media print/@page. For ≥300 DPI PDF use the browser "Save as PDF". Thermal: logo at the hardware max DPI.</p>'},
         {icon:'🧾', title:'Auto-print', body:'<p>With <b>"Auto-print receipt after sale"</b> enabled, every checkout prints automatically using the current method. Cash payments also open the drawer.</p>'},
         {icon:'🛟', title:'Fallback (non-negotiable)', body:'<p>Any error → notification + drop to next method. <b>The sale is never blocked.</b></p>'}
       ]
@@ -19254,314 +19260,206 @@ function generateReceipt(saleId, items, subtotal, vat, customerId){
       if (it.efk_amount) efkTotal += parseFloat(it.efk_amount);
     });
 
-    // Premium HTML receipt — Pepper-style layout
+    // Receipt document — 58/80/A4 selectable, full-res logo, vector text
+    var _fmtDefault = (s.receiptFormat === '58' || s.receiptFormat === 'A4') ? s.receiptFormat : '80';
+    var _isPreview = (saleId === 'PREVIEW');
+    var _logo = (typeof getCustomLogo === 'function') ? (getCustomLogo() || '') : '';
+    var _data = {
+      saleId: saleId,
+      isPreview: _isPreview,
+      logo: _logo,
+      shopName: shopName,
+      shopAddr: shopAddr,
+      shopAfm: shopAfm,
+      shopDoy: shopDoy,
+      shopPhone: shopPhone,
+      shopEmail: shopEmail,
+      footerText: footerText,
+      date: now.toLocaleDateString('el-GR'),
+      time: now.toLocaleTimeString('el-GR'),
+      customer: customer ? customer.name : '',
+      cashier: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) ? (CURRENT_USER.name || '') : '',
+      subtotal: subtotal,
+      vat: vat,
+      efkTotal: efkTotal,
+      fmt: _fmtDefault,
+      items: items.map(function(it){
+        return {
+          name: it.product_name,
+          qty: it.quantity,
+          unitPrice: parseFloat(it.unit_price),
+          total: parseFloat(it.total),
+          nicotine_mg: (it.nicotine_mg != null ? it.nicotine_mg : null)
+        };
+      })
+    };
+    var _json = JSON.stringify(_data).replace(/</g, '\\u003c');
+
     const html = `<!DOCTYPE html>
 <html lang="el">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Απόδειξη #${saleId}</title>
+<style id="pageStyle">@page{ size:80mm auto; margin:0; }</style>
 <style>
-  @page { size: 80mm auto; margin: 0; }
-  * { box-sizing: border-box; }
-  body { 
-    font-family: 'Courier New', 'Consolas', monospace; 
-    font-size: 12px; 
-    width: 76mm; 
-    margin: 0 auto; 
-    padding: 6mm 4mm; 
-    color: #000;
-    line-height: 1.4;
-    background: #fff;
-  }
-  .center { text-align: center; }
-  .right { text-align: right; }
-  .bold { font-weight: bold; }
-  .small { font-size: 10px; }
-  .large { font-size: 16px; }
-  .xlarge { font-size: 20px; font-weight: bold; }
-  .uppercase { text-transform: uppercase; letter-spacing: 0.5px; }
-  
-  .logo-wrap {
-    text-align: center;
-    margin-bottom: 8px;
-  }
-  .logo-wrap img {
-    max-width: 50mm;
-    max-height: 22mm;
-    object-fit: contain;
-    display: inline-block;
-  }
-  
-  .shop-name {
-    font-size: 17px;
-    font-weight: bold;
-    text-align: center;
-    margin-bottom: 4px;
-    letter-spacing: 0.5px;
-  }
-  
-  .shop-info {
-    text-align: center;
-    font-size: 11px;
-    margin-bottom: 6px;
-    line-height: 1.5;
-  }
-  
-  .divider-double { 
-    border-top: 2px solid #000; 
-    margin: 8px 0; 
-  }
-  .divider {
-    border-top: 1px dashed #000;
-    margin: 6px 0;
-  }
-  
-  .receipt-title {
-    text-align: center;
-    font-weight: bold;
-    font-size: 13px;
-    letter-spacing: 1px;
-    margin: 4px 0;
-    padding: 4px 0;
-    border-top: 2px solid #000;
-    border-bottom: 2px solid #000;
-  }
-  
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 2px;
-    font-size: 11px;
-  }
-  
-  .items-header {
-    display: flex;
-    justify-content: space-between;
-    font-weight: bold;
-    font-size: 11px;
-    padding: 4px 0 2px;
-    border-bottom: 1px solid #000;
-    margin-bottom: 4px;
-  }
-  
-  .item {
-    margin-bottom: 6px;
-  }
-  .item-name { 
-    font-weight: 600;
-    font-size: 12px;
-  }
-  .item-line {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    padding-left: 8px;
-  }
-  .item-extra {
-    font-size: 10px;
-    color: #444;
-    padding-left: 8px;
-    font-style: italic;
-  }
-  
-  .totals {
-    margin-top: 8px;
-  }
-  .total-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 1px 0;
-    font-size: 12px;
-  }
-  .grand-total {
-    display: flex;
-    justify-content: space-between;
-    padding: 6px 0;
-    font-size: 16px;
-    font-weight: bold;
-    border-top: 2px solid #000;
-    border-bottom: 2px solid #000;
-    margin: 4px 0;
-  }
-  
-  .payment-info {
-    margin-top: 6px;
-    font-size: 11px;
-    text-align: center;
-  }
-  
-  .mark-section {
-    text-align: center;
-    margin-top: 12px;
-    padding: 6px;
-    border: 1px dashed #000;
-    font-size: 10px;
-  }
-  .mark-label {
-    font-weight: bold;
-    margin-bottom: 2px;
-  }
-  
-  .footer {
-    text-align: center;
-    font-size: 11px;
-    margin-top: 12px;
-    font-style: italic;
-  }
-  
-  @media print { 
-    .no-print { display: none !important; }
-    body { padding: 4mm 2mm; }
-  }
-  .no-print { 
-    position: fixed; 
-    top: 10px; 
-    right: 10px; 
-    padding: 10px 14px; 
-    background: #00d4a8; 
-    color: #fff; 
-    border: none; 
-    border-radius: 8px; 
-    font-weight: bold; 
-    cursor: pointer; 
-    font-family: -apple-system, sans-serif; 
-    z-index: 1000;
-    font-size: 13px;
-    box-shadow: 0 4px 12px rgba(0,212,168,0.3);
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:#f3f4f6; }
+  body{ color:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .rcpt-toolbar{ position:fixed; top:0; left:0; right:0; display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+    padding:10px 12px; background:linear-gradient(135deg,#00d4a8,#00a387); color:#fff; z-index:1000;
+    font-family:-apple-system,Segoe UI,Roboto,sans-serif; box-shadow:0 2px 12px rgba(0,0,0,.15); }
+  .rcpt-toolbar b{ font-size:13px; margin-right:4px; }
+  .rcpt-toolbar button{ border:none; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;
+    font-family:inherit; font-size:13px; background:rgba(255,255,255,.2); color:#fff; min-height:40px; }
+  .rcpt-toolbar button.active{ background:#fff; color:#00a387; }
+  .rcpt-toolbar .sp{ flex:1; }
+  #rcptRoot{ margin:64px auto 24px; }
+  /* ---- Θερμική λωρίδα (58/80) — monospace ---- */
+  .thermal{ font-family:'Courier New','Consolas',monospace; color:#000; background:#fff; margin:0 auto;
+    padding:6mm 4mm; line-height:1.4; box-shadow:0 2px 16px rgba(0,0,0,.12); }
+  .thermal.w58{ width:58mm; font-size:11px; }
+  .thermal.w80{ width:80mm; font-size:12px; }
+  .thermal .logo{ text-align:center; margin-bottom:8px; }
+  .thermal .logo img{ max-width:90%; max-height:24mm; object-fit:contain; }
+  .thermal .shop{ text-align:center; font-weight:bold; font-size:1.35em; letter-spacing:.5px; text-transform:uppercase; margin-bottom:4px; }
+  .thermal .info{ text-align:center; font-size:.92em; margin-bottom:6px; line-height:1.5; }
+  .thermal .title{ text-align:center; font-weight:bold; letter-spacing:1px; margin:6px 0; padding:4px 0; border-top:2px solid #000; border-bottom:2px solid #000; }
+  .thermal .row{ display:flex; justify-content:space-between; font-size:.92em; margin-bottom:2px; }
+  .thermal .dash{ border-top:1px dashed #000; margin:6px 0; }
+  .thermal .it{ margin-bottom:6px; }
+  .thermal .it .nm{ font-weight:600; }
+  .thermal .it .ln{ display:flex; justify-content:space-between; padding-left:8px; font-size:.92em; }
+  .thermal .it .ex{ font-size:.82em; color:#444; padding-left:8px; font-style:italic; }
+  .thermal .grand{ display:flex; justify-content:space-between; font-weight:bold; font-size:1.3em; padding:6px 0; margin:4px 0; border-top:2px solid #000; border-bottom:2px solid #000; }
+  .thermal .foot{ text-align:center; font-size:.92em; margin-top:12px; font-style:italic; }
+  /* ---- A4 — proportional, πλήρης σελίδα ---- */
+  .a4{ width:210mm; min-height:297mm; background:#fff; margin:0 auto; padding:18mm 16mm; color:#111;
+    font-family:-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial,sans-serif; font-size:12pt; line-height:1.5; box-shadow:0 2px 24px rgba(0,0,0,.12); }
+  .a4 .head{ display:flex; align-items:center; gap:18px; border-bottom:3px solid #00a387; padding-bottom:16px; margin-bottom:18px; }
+  .a4 .head img{ max-height:90px; max-width:200px; object-fit:contain; }
+  .a4 .head .nm{ font-size:24pt; font-weight:800; letter-spacing:-.3px; }
+  .a4 .head .meta{ font-size:10.5pt; color:#444; margin-top:4px; line-height:1.45; }
+  .a4 .docttl{ font-size:15pt; font-weight:700; margin:6px 0 14px; }
+  .a4 .sub{ display:flex; justify-content:space-between; font-size:10.5pt; color:#333; margin-bottom:14px; flex-wrap:wrap; gap:8px; }
+  .a4 table{ width:100%; border-collapse:collapse; margin-bottom:16px; }
+  .a4 th{ text-align:left; font-size:10.5pt; text-transform:uppercase; letter-spacing:.4px; color:#555; border-bottom:2px solid #111; padding:8px 6px; }
+  .a4 th.r,.a4 td.r{ text-align:right; }
+  .a4 td{ padding:8px 6px; border-bottom:1px solid #e2e2e2; font-size:11pt; }
+  .a4 .tot{ width:46%; margin-left:auto; }
+  .a4 .tot .tr{ display:flex; justify-content:space-between; padding:4px 0; }
+  .a4 .tot .grand{ display:flex; justify-content:space-between; padding:10px 0; margin-top:6px; border-top:2px solid #111; border-bottom:2px solid #111; font-size:15pt; font-weight:800; }
+  .a4 .foot{ text-align:center; margin-top:28px; color:#555; font-style:italic; }
+  @media print{
+    html,body{ background:#fff; }
+    .no-print{ display:none !important; }
+    #rcptRoot{ margin:0 auto; }
+    .thermal{ box-shadow:none; }
+    .a4{ box-shadow:none; margin:0; width:auto; min-height:auto; padding:14mm; }
   }
 </style>
 </head>
-<body${saleId === 'PREVIEW' ? ' class="is-preview"' : ''}>
-
-${saleId === 'PREVIEW' ? `
-<div class="preview-watermark">ΠΡΟΕΠΙΣΚΟΠΗΣΗ</div>
-<div class="preview-header no-print">
-  <div class="preview-title">👁️ Προεπισκόπηση Απόδειξης</div>
-  <div class="preview-sub">Δείγμα με sample προϊόντα — έτσι θα φαίνεται η πραγματική σου απόδειξη</div>
-  <button class="preview-close-btn" onclick="window.close()">✕ Κλείσιμο</button>
+<body>
+<div class="rcpt-toolbar no-print">
+  <b>Μορφή:</b>
+  <button type="button" data-fmt="58">58mm</button>
+  <button type="button" data-fmt="80">80mm</button>
+  <button type="button" data-fmt="A4">A4</button>
+  ${_isPreview ? '<span style="background:rgba(255,255,255,.25);padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700">👁️ ΠΡΟΕΠΙΣΚΟΠΗΣΗ</span>' : ''}
+  <span class="sp"></span>
+  <button type="button" id="rcptPrint">🖨️ Εκτύπωση</button>
+  <button type="button" onclick="window.close()">✕</button>
 </div>
-<style>
-  body.is-preview { padding-top: 90px; }
-  .preview-watermark {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) rotate(-30deg);
-    font-size: 60px;
-    font-weight: 900;
-    color: rgba(255,71,87,0.12);
-    pointer-events: none;
-    z-index: 999;
-    white-space: nowrap;
-    letter-spacing: 4px;
+<div id="rcptRoot"></div>
+<scr` + `ipt>
+(function(){
+  var R = ${_json};
+  var eur = function(n){ return (Number(n)||0).toFixed(2).replace('.',',')+' €'; };
+  var esc = function(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  function infoLine(){
+    var p=[];
+    if(R.shopAddr) p.push(esc(R.shopAddr));
+    var t2=[]; if(R.shopAfm) t2.push('ΑΦΜ: '+esc(R.shopAfm)); if(R.shopDoy) t2.push('ΔΟΥ: '+esc(R.shopDoy));
+    if(t2.length) p.push(t2.join('  •  '));
+    if(R.shopPhone) p.push('Τηλ: '+esc(R.shopPhone));
+    if(R.shopEmail) p.push(esc(R.shopEmail));
+    return p;
   }
-  .preview-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(135deg, #00d4a8, #00a387);
-    color: #fff;
-    padding: 12px 16px;
-    text-align: center;
-    z-index: 1000;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-    font-family: -apple-system, sans-serif;
+  function renderThermal(w){
+    var net = R.subtotal - R.vat - R.efkTotal;
+    var logo = R.logo ? '<div class="logo"><img src="'+R.logo+'" alt="logo"></div>' : '';
+    var name = '<div class="shop">'+esc(R.shopName)+'</div>';
+    var info = '<div class="info">'+infoLine().join('<br>')+'</div>';
+    var rows = '';
+    rows += '<div class="row"><span>Α/Α:</span><span><b>#'+esc(R.saleId)+'</b></span></div>';
+    rows += '<div class="row"><span>Ημ/νία:</span><span>'+esc(R.date)+'</span></div>';
+    rows += '<div class="row"><span>Ώρα:</span><span>'+esc(R.time)+'</span></div>';
+    if(R.customer) rows += '<div class="row"><span>Πελάτης:</span><span>'+esc(R.customer)+'</span></div>';
+    rows += '<div class="row"><span>Ταμίας:</span><span>'+(esc(R.cashier)||'—')+'</span></div>';
+    var its = R.items.map(function(it){
+      var ex = (it.nicotine_mg!=null) ? '<div class="ex">Νικοτίνη: '+esc(it.nicotine_mg)+' mg/ml</div>' : '';
+      return '<div class="it"><div class="nm">'+esc(it.name)+'</div><div class="ln"><span>'+esc(it.qty)+' × '+eur(it.unitPrice)+'</span><span><b>'+eur(it.total)+'</b></span></div>'+ex+'</div>';
+    }).join('');
+    var tot = '<div class="row"><span>Καθαρή Αξία:</span><span>'+eur(net)+'</span></div>'+
+              '<div class="row"><span>ΦΠΑ 24%:</span><span>'+eur(R.vat)+'</span></div>'+
+              (R.efkTotal>0?'<div class="row"><span>ΕΦΚ Υγρών:</span><span>'+eur(R.efkTotal)+'</span></div>':'');
+    return '<div class="thermal '+(w==='58'?'w58':'w80')+'">'+
+      logo+name+info+
+      '<div class="title">ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ</div>'+rows+
+      '<div class="dash"></div>'+its+'<div class="dash"></div>'+tot+
+      '<div class="grand"><span>ΣΥΝΟΛΟ:</span><span>'+eur(R.subtotal)+'</span></div>'+
+      '<div class="foot">'+esc(R.footerText)+'</div></div>';
   }
-  .preview-title {
-    font-weight: 700;
-    font-size: 14px;
-    margin-bottom: 2px;
+  function renderA4(){
+    var net = R.subtotal - R.vat - R.efkTotal;
+    var logo = R.logo ? '<img src="'+R.logo+'" alt="logo">' : '';
+    var its = R.items.map(function(it){
+      var nm = esc(it.name) + (it.nicotine_mg!=null?(' <span style="color:#777;font-size:9.5pt">('+esc(it.nicotine_mg)+' mg/ml)</span>'):'');
+      return '<tr><td>'+nm+'</td><td class="r">'+esc(it.qty)+'</td><td class="r">'+eur(it.unitPrice)+'</td><td class="r">'+eur(it.total)+'</td></tr>';
+    }).join('');
+    var sub=[];
+    sub.push('<span>Α/Α: <b>#'+esc(R.saleId)+'</b></span>');
+    sub.push('<span>'+esc(R.date)+' '+esc(R.time)+'</span>');
+    if(R.customer) sub.push('<span>Πελάτης: '+esc(R.customer)+'</span>');
+    sub.push('<span>Ταμίας: '+(esc(R.cashier)||'—')+'</span>');
+    return '<div class="a4"><div class="head">'+logo+
+      '<div><div class="nm">'+esc(R.shopName)+'</div><div class="meta">'+infoLine().join(' · ')+'</div></div></div>'+
+      '<div class="docttl">Απόδειξη Λιανικής</div>'+
+      '<div class="sub">'+sub.join('')+'</div>'+
+      '<table><thead><tr><th>Περιγραφή</th><th class="r">Ποσ.</th><th class="r">Τιμή</th><th class="r">Αξία</th></tr></thead><tbody>'+its+'</tbody></table>'+
+      '<div class="tot">'+
+        '<div class="tr"><span>Καθαρή Αξία</span><span>'+eur(net)+'</span></div>'+
+        '<div class="tr"><span>ΦΠΑ 24%</span><span>'+eur(R.vat)+'</span></div>'+
+        (R.efkTotal>0?'<div class="tr"><span>ΕΦΚ Υγρών</span><span>'+eur(R.efkTotal)+'</span></div>':'')+
+        '<div class="grand"><span>ΣΥΝΟΛΟ</span><span>'+eur(R.subtotal)+'</span></div>'+
+      '</div>'+
+      '<div class="foot">'+esc(R.footerText)+'</div></div>';
   }
-  .preview-sub {
-    font-size: 11px;
-    opacity: 0.9;
+  function pageCss(fmt){
+    if(fmt==='A4') return '@page{ size:A4; margin:12mm; }';
+    if(fmt==='58') return '@page{ size:58mm auto; margin:0; }';
+    return '@page{ size:80mm auto; margin:0; }';
   }
-  .preview-close-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(255,255,255,0.2);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    font-family: inherit;
+  function render(fmt){
+    document.getElementById('pageStyle').textContent = pageCss(fmt);
+    document.getElementById('rcptRoot').innerHTML = (fmt==='A4') ? renderA4() : renderThermal(fmt);
+    var btns = document.querySelectorAll('.rcpt-toolbar [data-fmt]');
+    for(var i=0;i<btns.length;i++){ btns[i].className = (btns[i].getAttribute('data-fmt')===fmt)?'active':''; }
+    R.fmt = fmt;
   }
-  .preview-close-btn:hover {
-    background: rgba(255,255,255,0.3);
-  }
-  @media print {
-    .preview-watermark { display: none; }
-    .preview-header { display: none; }
-    body.is-preview { padding-top: 0; }
-  }
-</style>
-` : ''}
-
-<button class="no-print" onclick="window.print()">🖨️ Εκτύπωση</button>
-
-${getCustomLogo() ? `<div class="logo-wrap"><img src="${getCustomLogo()}" alt="Logo"></div>` : ''}
-
-<div class="shop-name uppercase">${shopName}</div>
-
-<div class="shop-info">
-  ${shopAddr ? `${shopAddr}<br>` : ''}
-  ${shopAfm ? `ΑΦΜ: ${shopAfm}` : ''}${shopAfm && shopDoy ? '  •  ' : ''}${shopDoy ? `ΔΟΥ: ${shopDoy}` : ''}
-  ${shopPhone ? `<br>Τηλ: ${shopPhone}` : ''}
-  ${shopEmail ? `<br>${shopEmail}` : ''}
-</div>
-
-<div class="receipt-title">ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ</div>
-
-<div class="info-row"><span>Α/Α:</span><span class="bold">#${saleId}</span></div>
-<div class="info-row"><span>Ημερομηνία:</span><span>${now.toLocaleDateString('el-GR')}</span></div>
-<div class="info-row"><span>Ώρα:</span><span>${now.toLocaleTimeString('el-GR')}</span></div>
-${customer ? `<div class="info-row"><span>Πελάτης:</span><span>${customer.name}</span></div>` : ''}
-<div class="info-row"><span>Ταμίας:</span><span>${CURRENT_USER?.name || '—'}</span></div>
-
-<div class="divider"></div>
-
-<div class="items-header">
-  <span>ΠΕΡΙΓΡΑΦΗ</span>
-  <span>ΑΞΙΑ</span>
-</div>
-
-${items.map(it => `
-<div class="item">
-  <div class="item-name">${it.product_name}</div>
-  <div class="item-line">
-    <span>${it.quantity} × ${parseFloat(it.unit_price).toFixed(2).replace('.',',')} €</span>
-    <span class="bold">${parseFloat(it.total).toFixed(2).replace('.',',')} €</span>
-  </div>
-  ${it.nicotine_mg != null ? `<div class="item-extra">Νικοτίνη: ${it.nicotine_mg} mg/ml</div>` : ''}
-</div>`).join('')}
-
-<div class="divider"></div>
-
-<div class="totals">
-  <div class="total-row"><span>Καθαρή Αξία:</span><span>${(subtotal - vat - efkTotal).toFixed(2).replace('.',',')} €</span></div>
-  <div class="total-row"><span>ΦΠΑ 24%:</span><span>${vat.toFixed(2).replace('.',',')} €</span></div>
-  ${efkTotal > 0 ? `<div class="total-row"><span>ΕΦΚ Υγρών:</span><span>${efkTotal.toFixed(2).replace('.',',')} €</span></div>` : ''}
-</div>
-
-<div class="grand-total">
-  <span>ΣΥΝΟΛΟ:</span>
-  <span>${subtotal.toFixed(2).replace('.',',')} €</span>
-</div>
-
-<div class="footer">${footerText}</div>
-
-<scr` + `ipt>setTimeout(()=>window.print(), 300);</scr` + `ipt>
+  var fbtns = document.querySelectorAll('.rcpt-toolbar [data-fmt]');
+  for(var i=0;i<fbtns.length;i++){ (function(b){ b.onclick=function(){ render(b.getAttribute('data-fmt')); }; })(fbtns[i]); }
+  document.getElementById('rcptPrint').onclick = function(){ window.print(); };
+  render(R.fmt);
+  if(!R.isPreview){ setTimeout(function(){ window.print(); }, 450); }
+})();
+</scr` + `ipt>
 
 </body>
 </html>`;
 
-    // Άνοιγμα σε νέο παράθυρο
-    const w = window.open('', '_blank', 'width=400,height=600');
+    // Άνοιγμα σε νέο παράθυρο (αρκετά πλατύ για A4 preview)
+    const w = window.open('', '_blank', 'width=820,height=720');
     if(!w){
       toast('Ο browser μπλόκαρε το popup. Επίτρεψε popups για αυτό το site.','warn');
       return;
@@ -26865,11 +26763,22 @@ function renderSettings(){
       </div>
     </div>
 
+    <!-- Μορφή απόδειξης (μόνιμη προεπιλογή) -->
+    <div class="form-row mt-3">
+      <label class="form-label">Μορφή απόδειξης</label>
+      <select class="form-select" id="s_receiptFormat">
+        <option value="58" ${s.receiptFormat==='58'?'selected':''}>58mm (θερμική λωρίδα)</option>
+        <option value="80" ${(s.receiptFormat||'80')==='80'?'selected':''}>80mm (θερμική λωρίδα)</option>
+        <option value="A4" ${s.receiptFormat==='A4'?'selected':''}>A4 (laser/inkjet — πλήρης σελίδα)</option>
+      </select>
+      <div class="text-xs muted mt-2">💡 Στην προεπισκόπηση/εκτύπωση μπορείς να αλλάξεις μορφή ανά εκτύπωση (58 | 80 | A4).</div>
+    </div>
+
     <!-- Preview + auto-print -->
     <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
       <button class="btn btn-primary" onclick="previewReceiptSample()"><i data-lucide="eye" size="16"></i> 👁️ Προεπισκόπηση Απόδειξης</button>
     </div>
-    <div class="text-xs muted mt-2">💡 Προεπισκόπηση με δείγμα δεδομένων και τρέχοντα στοιχεία επιχείρησης.</div>
+    <div class="text-xs muted mt-2">💡 Προεπισκόπηση με δείγμα δεδομένων και τρέχοντα στοιχεία επιχείρησης. Το logo της επιχείρησης εμφανίζεται στην κορυφή.</div>
 
     <div class="form-row mt-3">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
@@ -35671,7 +35580,7 @@ window.HELP_KB = {
     { id: 'kb_blind_audit', category: '02-inventory', title: 'Τυφλή Απογραφή (Blind Audit)',
       body: '# Τυφλή Απογραφή (Blind Audit)\n\n> Καταμέτρηση φυσικού αποθέματος χωρίς να φαίνεται το θεωρητικό stock — για αντικειμενικά αποτελέσματα. **Admin only.**\n\n## Τι είναι\n\nΗ Τυφλή Απογραφή (**Blind Audit**) επιτρέπει σε υπαλλήλους να μετρούν φυσικά τα ράφια χωρίς να γνωρίζουν το αναμενόμενο απόθεμα — εξαλείφοντας τη διαστρέβλωση (confirmation bias).\n\n## AUDIT LOCK — Τι κλειδώνει και τι επιτρέπεται\n\nΌσο η απογραφή είναι ανοιχτή:\n\n- 🔴 **Κλειδώνουν** οι χειροκίνητες αλλαγές stock (manual adjustments, import CSV, bulk update)\n- ✅ **Επιτρέπονται** οι πωλήσεις POS (μειώνουν stock κανονικά — λαμβάνονται υπόψη στη συμφιλίωση)\n- ✅ **Επιτρέπονται** οι παραλαβές από προμηθευτές\n\nΚάθε αποκλεισμένη ενέργεια επιστρέφει σφάλμα **«AUDIT_LOCK»**.\n\n## Πώς ξεκινά\n\nΗ απογραφή **δεν ξεκινά αυτόματα** όταν ανοίξει η σελίδα. Απαιτείται ρητό πάτημα **«📦 Έναρξη Απογραφής»**.\n\n1. Sidebar → **📦 Τυφλή Απογραφή**\n2. Πάτα **«📦 Έναρξη Απογραφής»**\n3. Το σύστημα καλεί `create_audit_snapshot` → δημιουργείται εγγραφή `inventory_audits` με `status = open`\n4. Το AUDIT LOCK τίθεται αυτόματα\n\n## Ροή Καταμέτρησης\n\n1. Σκάναρε barcode (φορητός σαρωτής ή κάμερα)\n2. Σε ακριβές match: εμφανίζεται **μόνο** το όνομα (χωρίς θεωρητικό stock)\n3. Γράψε πόσα μέτρησες → Enter ή «Καταγραφή»\n4. Αποθηκεύεται τοπικά (IndexedDB) · συγχρονίζεται στο background\n5. Επαναλάμβανε για κάθε προϊόν\n\n## Πώς ακυρώνεται\n\nΑν ανοίχτηκε κατά λάθος ή χρειάζεται διακοπή:\n\n1. Πάτα **«🛑 Ακύρωση Απογραφής»** (banner στην κορυφή)\n2. Καλείται `cancel_audit({ p_audit: <id> })`\n3. Εγγραφή → `status = cancelled` · AUDIT LOCK αίρεται αμέσως\n4. Χειροκίνητες αλλαγές stock επιτρέπονται ξανά\n\n## Συμφιλίωση & Ολοκλήρωση\n\nΠάτα «🏁 Ολοκλήρωση & Συμφιλίωση»:\n\n- **Πραγματικό = Καταμετρημένο − Πωλήσεις κατά τη διάρκεια**\n- Αποκλίσεις > 50 μονάδες → δεύτερη μέτρηση από άλλον υπάλληλο\n- Manager εγκρίνει → `commit_audit` → νέο stock εγγράφεται · ιστορικό σφραγίζεται (immutable)\n\n## Offline & Multi-device\n\n- Counts αποθηκεύονται στο **IndexedDB** αν κοπεί το δίκτυο · synced αυτόματα όταν επιστρέψει\n- Πολλές συσκευές ταυτόχρονα: κάθε συσκευή «κλειδώνει» προσωρινά το ράφι που μετράει (Realtime Presence)\n\n## Συχνά Λάθη\n\n❌ **«AUDIT_LOCK κατά manual αλλαγή»** → Υπάρχει ανοιχτή απογραφή. Ολοκλήρωσε ή ακύρωσέ την.\n❌ **«Ξέχασα ανοιχτή απογραφή»** → Αποθήκη → Τυφλή Απογραφή → banner ⚠️ → 🛑 Ακύρωση.\n❌ **«Η σελίδα ξεκίνησε απογραφή μόνη της»** → Αδύνατο. Απαιτείται ρητό κουμπί Έναρξης.\n\n## Δες επίσης\n\n- [Διαχείριση Stock](02-inventory/stock-management.md)\n- [Κινήσεις Αποθέματος](02-inventory/stock-movements.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v47*\n' },
     { id: 'kb_print_hub', category: '08-administration', title: 'Εκτυπωτής & Απόδειξη',
-      body: '# 🖨️ Εκτυπωτής & Απόδειξη\n\n> Ενοποιημένο hub εκτύπωσης: **Sunmi → WebUSB ESC/POS → Browser Print**. Αυτόματη ανίχνευση με δυνατότητα manual override. Η πώληση δεν μπλοκάρεται ποτέ.\n\n## Μέθοδοι εκτύπωσης\n\nΡυθμίσεις → **🖨️ Εκτυπωτής & Απόδειξη** → Μέθοδος εκτύπωσης:\n\n| Επιλογή | Συμπεριφορά |\n|---------|-------------|\n| 🔄 Αυτόματη | Προσπαθεί Sunmi, μετά WebUSB ESC/POS (αν autoPrint ON), μετά Browser Print |\n| 📟 Sunmi | Force Sunmi · fallback Browser Print |\n| 🖨️ WebUSB ESC/POS | Force WebUSB · fallback Browser Print |\n| 🌐 Browser Print | Πάντα Browser Print |\n\n## Sunmi V3 Mix-D\n\nΑνιχνεύεται αυτόματα σε Sunmi συσκευή. Εκτυπώνει 58mm thermal χωρίς ρύθμιση. Κουμπί **Test Sunmi** για δοκιμή, **Άνοιγμα Συρταριού** για cash drawer.\n\n## WebUSB ESC/POS\n\nΘερμικοί εκτυπωτές μέσω USB:\n\n- **Generic** 80mm / 58mm\n- **EPSON**: TM-T20III, TM-T88VI/VII, TM-m30/m30II\n- **Xprinter**: XP-80 (80mm), XP-58 (58mm)\n- **Rongta**: RP80 (80mm), RP58 (58mm)\n- **Bixolon** SRP-350III (80mm) · **Citizen** CT-E351 (80mm)\n- **Star** TSP143 (raster → Browser Print) · TSP654II / mC-Print3 (ESC/POS emulation)\n\n**Πού δουλεύει WebUSB:** Chrome desktop (Windows/Mac/Linux) + Chrome Android. Σε iPhone/iPad (Safari) → αυτόματο Browser Print.\n\n### Σύνδεση\n\n1. Επίλεξε μοντέλο από τη λίστα.\n2. Πάτα **«🔌 Σύνδεση εκτυπωτή»** — ο browser ζητά άδεια USB (μία φορά).\n3. Πάτα **«🧾 Δοκιμαστική εκτύπωση»** για δοκιμαστική απόδειξη + άνοιγμα συρταριού.\n4. Status → **«Συνδεδεμένος: &lt;όνομα&gt;»**.\n\n## Header / Footer απόδειξης\n\nΌλες οι μέθοδοι χρησιμοποιούν τα ίδια πεδία:\n- **Όνομα καταστήματος**, **ΑΦΜ**, **Διεύθυνση** (από το card Εκτυπωτής & Απόδειξη)\n- **Κείμενο footer** (π.χ. «Ευχαριστούμε για την προτίμηση!»)\n\n## Αυτόματη εκτύπωση μετά πώληση\n\nCheckbox **«Αυτόματη εκτύπωση απόδειξης μετά από πώληση»**:\n- ON: εκτυπώνει αυτόματα (με τη ρυθμισμένη μέθοδο)\n- OFF: εμφανίζει «Θέλεις να κατεβάσεις απόδειξη σε PDF;» (Browser Print)\n\nΣε πληρωμή **μετρητά** → ανοίγει αυτόματα το συρτάρι (αν υποστηρίζεται).\n\n## Προεπισκόπηση\n\nΠάτα **«👁️ Προεπισκόπηση Απόδειξης»** για δείγμα με τρέχοντα στοιχεία επιχείρησης.\n\n## Fallback (μη διαπραγματεύσιμο)\n\nΚάθε σφάλμα σε οποιαδήποτε μέθοδο → ειδοποίηση + αυτόματη πτώση στην επόμενη. **Η πώληση δεν μπλοκάρεται ποτέ.**\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v48*\n' },
+      body: '# 🖨️ Εκτυπωτής & Απόδειξη\n\n> Ενοποιημένο hub εκτύπωσης: **Sunmi → WebUSB ESC/POS → Browser Print**. Αυτόματη ανίχνευση με δυνατότητα manual override. Η πώληση δεν μπλοκάρεται ποτέ.\n\n## Μέθοδοι εκτύπωσης\n\nΡυθμίσεις → **🖨️ Εκτυπωτής & Απόδειξη** → Μέθοδος εκτύπωσης:\n\n| Επιλογή | Συμπεριφορά |\n|---------|-------------|\n| 🔄 Αυτόματη | Προσπαθεί Sunmi, μετά WebUSB ESC/POS (αν autoPrint ON), μετά Browser Print |\n| 📟 Sunmi | Force Sunmi · fallback Browser Print |\n| 🖨️ WebUSB ESC/POS | Force WebUSB · fallback Browser Print |\n| 🌐 Browser Print | Πάντα Browser Print |\n\n## Sunmi V3 Mix-D\n\nΑνιχνεύεται αυτόματα σε Sunmi συσκευή. Εκτυπώνει 58mm thermal χωρίς ρύθμιση. Κουμπί **Test Sunmi** για δοκιμή, **Άνοιγμα Συρταριού** για cash drawer.\n\n## WebUSB ESC/POS\n\nΘερμικοί εκτυπωτές μέσω USB:\n\n- **Generic** 80mm / 58mm\n- **EPSON**: TM-T20III, TM-T88VI/VII, TM-m30/m30II\n- **Xprinter**: XP-80 (80mm), XP-58 (58mm)\n- **Rongta**: RP80 (80mm), RP58 (58mm)\n- **Bixolon** SRP-350III (80mm) · **Citizen** CT-E351 (80mm)\n- **Star** TSP143 (raster → Browser Print) · TSP654II / mC-Print3 (ESC/POS emulation)\n\n**Πού δουλεύει WebUSB:** Chrome desktop (Windows/Mac/Linux) + Chrome Android. Σε iPhone/iPad (Safari) → αυτόματο Browser Print.\n\n### Σύνδεση\n\n1. Επίλεξε μοντέλο από τη λίστα.\n2. Πάτα **«🔌 Σύνδεση εκτυπωτή»** — ο browser ζητά άδεια USB (μία φορά).\n3. Πάτα **«🧾 Δοκιμαστική εκτύπωση»** για δοκιμαστική απόδειξη + άνοιγμα συρταριού.\n4. Status → **«Συνδεδεμένος: &lt;όνομα&gt;»**.\n\n## Header / Footer απόδειξης\n\nΌλες οι μέθοδοι χρησιμοποιούν τα ίδια πεδία:\n- **Όνομα καταστήματος**, **ΑΦΜ**, **Διεύθυνση** (από το card Εκτυπωτής & Απόδειξη)\n- **Κείμενο footer** (π.χ. «Ευχαριστούμε για την προτίμηση!»)\n\n## Αυτόματη εκτύπωση μετά πώληση\n\nCheckbox **«Αυτόματη εκτύπωση απόδειξης μετά από πώληση»**:\n- ON: εκτυπώνει αυτόματα (με τη ρυθμισμένη μέθοδο)\n- OFF: εμφανίζει «Θέλεις να κατεβάσεις απόδειξη σε PDF;» (Browser Print)\n\nΣε πληρωμή **μετρητά** → ανοίγει αυτόματα το συρτάρι (αν υποστηρίζεται).\n\n## Logo επιχείρησης\n\nΤο logo που ανεβάζεις στα business settings (Ρυθμίσεις → Logo) εμφανίζεται **στην κορυφή** κάθε απόδειξης:\n\n- **Browser / A4 / Προεπισκόπηση**: ως εικόνα πλήρους ανάλυσης (`<img>`, vector-sharp).\n- **Θερμικό (Sunmi & WebUSB ESC/POS)**: rasterized bitmap στο **native dot-width** του εκτυπωτή (58mm = 384 dots, 80mm = 576 dots, ~203 DPI) με Floyd-Steinberg dithering για μέγιστη ευκρίνεια.\n- **Χωρίς logo** → fallback στο όνομα καταστήματος.\n\n## Μορφή απόδειξης: 58mm / 80mm / A4\n\nΡύθμιση **«Μορφή απόδειξης»** (μόνιμη προεπιλογή) + **override ανά εκτύπωση** με κουμπιά **58 | 80 | A4** στην προεπισκόπηση/εκτύπωση:\n\n| Μορφή | Χρήση | Layout |\n|-------|-------|--------|\n| **58mm** | θερμικός 58mm | λωρίδα, monospace |\n| **80mm** | θερμικός 80mm | λωρίδα, monospace |\n| **A4** | laser / inkjet | πλήρης σελίδα, μεγάλο logo, proportional γραμματοσειρά, πίνακας ειδών |\n\n## Ποιότητα εκτύπωσης\n\n- **Browser / A4 / PDF**: πραγματικό **vector κείμενο** (όχι raster), logo πλήρους ανάλυσης, σωστό `@media print` + `@page` ανά μορφή. Για PDF σε ≥300 DPI χρησιμοποίησε «Αποθήκευση ως PDF» από τον browser.\n- **Θερμικό**: logo στο native DPI (~203) — το μέγιστο του hardware.\n\n## Προεπισκόπηση\n\nΠάτα **«👁️ Προεπισκόπηση Απόδειξης»** για δείγμα με τρέχοντα στοιχεία επιχείρησης + logo. Μέσα στο παράθυρο αλλάζεις μορφή (58 | 80 | A4) και τυπώνεις.\n\n## Fallback (μη διαπραγματεύσιμο)\n\nΚάθε σφάλμα σε οποιαδήποτε μέθοδο → ειδοποίηση + αυτόματη πτώση στην επόμενη. **Η πώληση δεν μπλοκάρεται ποτέ.**\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v49*\n' },
     { id: 'kb_promo_engine', category: '01-pos', title: 'Μηχανή Σύνθετων Προσφορών',
       body: '# Μηχανή Σύνθετων Προσφορών\n\nΟι κανόνες προσφορών ζουν στη βάση και διαβάζονται από το ταμείο. Σε κάθε αλλαγή του καλαθιού υπολογίζεται live η βέλτιστη έκπτωση — τοπικά, χωρίς καθυστέρηση.\n\n## Τύποι κανόνων\n\n- **% επί ποσότητας**: Για συγκεκριμένο προϊόν αν η ποσότητα ≥ ελάχιστο.\n- **Combo κατηγορίας**: Για κατηγορία αν η ποσότητα ≥ ελάχιστο.\n- **Έκπτωση n-οστού**: Το φθηνότερο τεμάχιο ανά n παίρνει έκπτωση (υπέρ πελάτη).\n- **Λήξη / Αδρανές stock**: Αυτόματη έκπτωση σε είδη κοντά στη λήξη ή χωρίς πωλήσεις.\n- **Πακέτο (Bundle)**: Συνδυασμός ειδών — αν όλα υπάρχουν στο καλάθι, εφαρμόζεται έκπτωση.\n\n## Πολιτική συνδυασμού\n\nΡυθμίζεται στις **Ρυθμίσεις → Πολιτική Προσφορών**:\n\n- **Μόνο η καλύτερη (default)**: Από όλους τους κανόνες που ενεργοποιούνται, εφαρμόζεται μόνο αυτός με τον μεγαλύτερο αριθμό Προτεραιότητας (μεγαλύτερος = υψηλότερη). Σε ισοπαλία, νικά αυτός με το μεγαλύτερο ποσό έκπτωσης.\n- **Συνδυασμός (stack)**: Όλοι οι κανόνες αθροίζονται.\n\n## Cap ασφαλείας\n\nΗ συνολική έκπτωση δεν ξεπερνά ποτέ την αξία του καλαθιού — το τελικό σύνολο είναι πάντα ≥ 0. Αν η έκπτωση θα ξεπερνούσε, κλιμακώνεται αναλογικά ώστε να αθροίζει ακριβώς στην αξία του καλαθιού.' },
     { id: 'kb_anomaly', category: '11-security', title: 'Ανίχνευση Ανωμαλιών (Anti-fraud)',

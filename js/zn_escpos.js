@@ -104,7 +104,7 @@ var ZN_ESCPOS = (function () {
   }
 
   /* ---------- ESC/POS builder ---------- */
-  function buildReceiptBytes(profile, data) {
+  function buildReceiptBytes(profile, data, logoBytes) {
     var chars = (profile && profile.chars) || 48;
     var b = [];
     function raw(arr) { for (var i = 0; i < arr.length; i++) { b.push(arr[i]); } }
@@ -113,6 +113,9 @@ var ZN_ESCPOS = (function () {
 
     raw([ESC, 0x40]);            // init
     raw([ESC, 0x74, 0x0E]);      // code page PC737 (Greek)
+
+    /* Logo (rasterized, native DPI) — αν υπάρχει */
+    if (logoBytes && logoBytes.length) { raw(logoBytes); }
 
     /* Header — center + bold + double */
     raw([ESC, 0x61, 0x01]);      // center
@@ -169,6 +172,75 @@ var ZN_ESCPOS = (function () {
 
   function _drawerBytes() {
     return new Uint8Array([ESC, 0x70, 0x00, 0x19, 0xFA]); // drawer kick
+  }
+
+  /* ---------- Logo raster (native DPI ~203) ---------- */
+  /* Rasterize logo σε GS v 0 bit-image, centered, στο native dot-width
+     του εκτυπωτή (58mm=384, 80mm=576). Floyd-Steinberg για ευκρίνεια.
+     Επιστρέφει Array bytes ή null (ποτέ throw). */
+  function _rasterizeLogo(url, maxDots) {
+    return new Promise(function (resolve) {
+      if (!url || typeof document === 'undefined') { resolve(null); return; }
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () {
+        try {
+          var ratio = img.width / img.height;
+          var w = Math.min(img.width, maxDots);
+          var h = Math.round(w / ratio);
+          if (h > 240) { h = 240; w = Math.round(h * ratio); }
+          w = Math.floor(w / 8) * 8;                 // width πολλαπλάσιο του 8
+          if (w < 8) { resolve(null); return; }
+          var cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          var cx = cv.getContext('2d');
+          cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h);
+          cx.drawImage(img, 0, 0, w, h);
+          var d = cx.getImageData(0, 0, w, h).data;
+          var gray = new Float32Array(w * h);
+          var i;
+          for (i = 0; i < w * h; i++) {
+            gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+          }
+          var mono = new Uint8Array(w * h); // 1 = μαύρο
+          for (var y = 0; y < h; y++) {
+            for (var x = 0; x < w; x++) {
+              var idx = y * w + x;
+              var old = gray[idx];
+              var nw = old < 128 ? 0 : 255;
+              mono[idx] = nw === 0 ? 1 : 0;
+              var err = old - nw;
+              if (x + 1 < w) { gray[idx + 1] += err * 7 / 16; }
+              if (y + 1 < h) {
+                if (x > 0) { gray[idx + w - 1] += err * 3 / 16; }
+                gray[idx + w] += err * 5 / 16;
+                if (x + 1 < w) { gray[idx + w + 1] += err * 1 / 16; }
+              }
+            }
+          }
+          var bytesPerRow = w / 8;
+          var out = [ESC, 0x61, 0x01];               // center
+          out.push(GS, 0x76, 0x30, 0x00,
+            bytesPerRow & 0xFF, (bytesPerRow >> 8) & 0xFF,
+            h & 0xFF, (h >> 8) & 0xFF);
+          for (var ry = 0; ry < h; ry++) {
+            for (var bx = 0; bx < bytesPerRow; bx++) {
+              var bits = 0;
+              for (var bit = 0; bit < 8; bit++) {
+                var px = bx * 8 + bit;
+                if (px < w && mono[ry * w + px]) { bits |= (0x80 >> bit); }
+              }
+              out.push(bits);
+            }
+          }
+          out.push(0x0A);                            // feed
+          out.push(ESC, 0x61, 0x00);                 // left
+          resolve(out);
+        } catch (e) { resolve(null); }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = url;
+    });
   }
 
   /* ---------- WebUSB σύνδεση ---------- */
@@ -228,7 +300,17 @@ var ZN_ESCPOS = (function () {
       return false;
     }
     /* escpos + star_line (emulation) → ESC/POS path */
-    var bytes = buildReceiptBytes(profile, data);
+    /* Logo rasterized στο native dot-width (58mm=384, 80mm=576) */
+    var logoBytes = null;
+    try {
+      var _logoUrl = (typeof getCustomLogo === 'function') ? getCustomLogo()
+        : ((typeof window !== 'undefined' && window.getCustomLogo) ? window.getCustomLogo() : null);
+      if (_logoUrl) {
+        var dots = (profile.chars === 32) ? 384 : 576;
+        logoBytes = await _rasterizeLogo(_logoUrl, dots);
+      }
+    } catch (e) { logoBytes = null; }
+    var bytes = buildReceiptBytes(profile, data, logoBytes);
     await _send(bytes);
     return true;
   }

@@ -28928,6 +28928,7 @@ function saveSettings(){
     notifyEmail: $val('s_notifyEmail'),
     printer: $val('s_printer'),
     printMethod: $val('s_printMethod'),
+    receiptFormat: $val('s_receiptFormat','80'),
     scanner: $val('s_scanner'),
     autoPrint: $chk('s_autoPrint'),
     // Daily reports
