@@ -341,7 +341,7 @@ async function openRMADetail(id) {
   if (!r) { toast('Δεν βρέθηκε το RMA', 'warning'); return; }
   var num = _rmaNumber(r);
   var curStatus = _rf(r, ['status']);
-  var supplier = _rf(r, ['supplier_name']);
+  var hasSupplier = !!(_rf(r, ['supplier_name']) || _rf(r, ['supplier_id']));
   openModal('<div class="modal-head">' +
     '<h3 class="fw-800 text-xl">🔧 ' + _rmaEsc(num) + '</h3>' +
     '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>' +
@@ -367,7 +367,7 @@ async function openRMADetail(id) {
     '<div class="flex gap-2" style="flex-wrap:wrap">' +
       '<button class="btn btn-primary" onclick="rmaSetStatus(\'' + _rmaEsc(id) + '\')"><i data-lucide="check" size="16"></i> Αλλαγή κατάστασης</button>' +
       '<button class="btn btn-ghost" onclick="znPrintRmaLabel(\'' + _rmaEsc(id) + '\')"><i data-lucide="tag" size="16"></i> Ετικέτα</button>' +
-      (supplier ? ('<button class="btn btn-ghost" onclick="rmaSupplierClaim(\'' + _rmaEsc(id) + '\')"><i data-lucide="mail" size="16"></i> 📧 Claim προμηθευτή</button>') : '') +
+      (hasSupplier ? ('<button class="btn btn-ghost" onclick="rmaSupplierClaim(\'' + _rmaEsc(id) + '\')"><i data-lucide="mail" size="16"></i> 📧 Claim προμηθευτή</button>') : '') +
     '</div>' +
     '<div class="section-title" style="font-size:13px;margin:16px 0 8px">📜 Ιστορικό</div>' +
     '<div id="rma_events"><div class="muted text-sm">Φόρτωση...</div></div>' +
@@ -422,12 +422,52 @@ async function rmaSetStatus(id) {
 }
 
 /* ---------- (προαιρετικό) Claim προμηθευτή via email Edge Function ---------- */
+function _rmaIsEmail(v) {
+  return (typeof v === 'string') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+/* Ανάλυση email προμηθευτή: από SUPPLIERS cache (supplier_id) → DB → '' */
+async function _rmaResolveSupplierEmail(r) {
+  var supplierId = _rf(r, ['supplier_id']);
+  // 1) Τοπικό cache SUPPLIERS
+  try {
+    if (supplierId && typeof SUPPLIERS !== 'undefined' && SUPPLIERS && SUPPLIERS.length) {
+      var sc = SUPPLIERS.find(function (x) { return String(x.id) === String(supplierId); });
+      if (sc && sc.email) { return String(sc.email).trim(); }
+    }
+  } catch (e) {}
+  // 2) DB (sbAuth) — στήλη email του suppliers
+  try {
+    if (supplierId && typeof sbAuth !== 'undefined' && sbAuth.from) {
+      var res = await sbAuth.from('suppliers').select('email').eq('id', supplierId).limit(1);
+      if (res && !res.error && res.data && res.data.length && res.data[0].email) {
+        return String(res.data[0].email).trim();
+      }
+    }
+  } catch (e2) {}
+  return '';
+}
+
 async function rmaSupplierClaim(id) {
   var r = RMA_CACHE.find(function (x) { return String(_rf(x, ['id'])) === String(id); });
   if (!r) { return; }
   if (typeof sendEmail !== 'function') { toast('Email μη διαθέσιμο', 'warning'); return; }
-  var to = prompt('Email προμηθευτή για το claim:');
-  if (!to) { return; }
+
+  // 5) Χωρίς προμηθευτή → μην προχωράς
+  var supplierName = _rf(r, ['supplier_name']);
+  var supplierId = _rf(r, ['supplier_id']);
+  if (!supplierName && !supplierId) { toast('Δεν έχει οριστεί προμηθευτής σε αυτό το RMA', 'warning'); return; }
+
+  // 2/3) Ανάλυση email (prefill) — αν δεν υπάρχει, ζήτα το χειροκίνητα
+  var prefill = await _rmaResolveSupplierEmail(r);
+  var label = 'Email προμηθευτή' + (supplierName ? (' (' + supplierName + ')') : '') + ':';
+  var to = prompt(label, prefill || '');
+  if (to === null) { return; } // άκυρο
+
+  // 4) Το to πρέπει να είναι πάντα έγκυρο string
+  to = (typeof to === 'string') ? to.trim() : '';
+  if (!_rmaIsEmail(to)) { toast('Λείπει έγκυρο email προμηθευτή', 'warning'); return; }
+
   var num = _rmaNumber(r);
   var s = (typeof getSettings === 'function') ? getSettings() : {};
   var bodyHtml = '<h2>Αίτημα RMA ' + _rmaEsc(num) + '</h2>' +
@@ -441,7 +481,7 @@ async function rmaSupplierClaim(id) {
     : bodyHtml;
   try {
     await sendEmail({ to: to, subject: 'RMA ' + num + ' — ' + (s.shopName || 'ZyroNex'), html: html, text: 'RMA ' + num });
-    toast('📧 Claim στάλθηκε στον προμηθευτή', 'success');
+    toast('📧 Claim στάλθηκε στον προμηθευτή (' + to + ')', 'success');
   } catch (e) {
     toast('Σφάλμα αποστολής: ' + (e.message || e), 'danger');
   }
