@@ -18678,7 +18678,11 @@ function renderInvoiceScanResults(inv) {
 //   5. Token-based match (για "VapeExperts" vs "Vape Experts ΟΕ")
 function _normalizeSupplierName(s){
   if(!s) return '';
-  let n = String(s);
+  var n = String(s);
+  // Αφαίρεση Greek branch designators πριν οποιαδήποτε μετατροπή
+  n = n.replace(/Υποκατάστημα\s+Αλλοδαπής/g, ' ')
+       .replace(/ΥΠΟΚΑΤΑΣΤΗΜΑ\s+ΑΛΛΟΔΑΠΗΣ/g, ' ')
+       .replace(/Υποκ\/μα/g, ' ');
   // Αφαίρεση legal forms ΠΡΙΝ από οτιδήποτε άλλο — με πολλαπλά variants
   // Επιτρέπει spaces μεταξύ letters (π.χ. "Ι. Κ. Ε." ή "Ι.Κ.Ε.")
   n = n.replace(/\b(Ο\s*\.\s*Ε\.?|O\s*\.\s*E\.?|ΟΕ|OE)\b/g,' ')
@@ -18686,13 +18690,14 @@ function _normalizeSupplierName(s){
        .replace(/\b(Α\s*\.\s*Ε\.?|A\s*\.\s*E\.?|ΑΕ|AE)\b/g,' ')
        .replace(/\b(Ι\s*\.\s*Κ\s*\.\s*Ε\.?|I\s*\.\s*K\s*\.\s*E\.?|ΙΚΕ|IKE)\b/g,' ')
        .replace(/\b(Μ\s*\.\s*Ε\s*\.\s*Π\s*\.\s*Ε\.?|M\s*\.\s*E\s*\.\s*P\s*\.\s*E\.?|ΜΕΠΕ|MEPE)\b/g,' ')
-       .replace(/\b(Ltd\.?|Inc\.?|LLC|GmbH|S\.A\.?|S\.r\.l\.?|SRL|BV|Sp\.?\s*z\.?\s*o\.?\s*o\.?)\b/gi,' ');
+       // International legal forms (ξένες νομικές μορφές)
+       .replace(/\b(Ltd\.?|Inc\.?|LLC|Corp\.?|Co\.|GmbH|S\.A\.?|SA|AG|B\.V\.?|S\.R\.L\.?|S\.r\.l\.?|SRL|BV|Sp\.?\s*z\.?\s*o\.?\s*o\.?)\b/gi,' ');
   // Lowercase + remove accents
   n = n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   // Καθάρισμα
   n = n.replace(/[^a-z0-9α-ω]+/gi,' ').replace(/\s+/g,' ').trim();
   // Αφαίρεση orphan single-letter Greek tokens που ίσως έμειναν
-  n = n.split(' ').filter(t => t.length >= 2 || /[a-z0-9]/.test(t)).join(' ');
+  n = n.split(' ').filter(function(t){ return t.length >= 2 || /[a-z0-9]/.test(t); }).join(' ');
   return n;
 }
 
@@ -18757,14 +18762,30 @@ function _findSupplierSmart(supplierName, supplierVat){
       }
     }
   }
-  if(bestRatio >= 0.7){ best._matchType='fuzzy'; return best; }
+  if(bestRatio >= 0.75){ best._matchType='fuzzy'; return best; }
   return null;
+}
+
+// Προσδιορισμός country_type από φορολογικά στοιχεία (ΑΦΜ/VIES), ΟΧΙ από το όνομα
+function _inferCountryType(supplierVat, invoiceType){
+  if(supplierVat){
+    var vatClean = String(supplierVat).replace(/[\s\-\.]/g,'').toUpperCase();
+    // Καθαρό 9ψήφιο ελληνικό ΑΦΜ
+    if(/^[0-9]{9}$/.test(vatClean)) return 'GR';
+    // GR-πρόθεμα + 9 ψηφία
+    if(/^GR[0-9]{9}$/.test(vatClean)) return 'GR';
+    // VIES με πρόθεμα χώρας ΕΕ (2 γράμματα + ψηφία)
+    var euCodes = ['AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK'];
+    if(vatClean.length >= 5 && /^[A-Z]{2}/.test(vatClean) && euCodes.indexOf(vatClean.substring(0,2)) !== -1) return 'EU';
+  }
+  // Fallback: invoiceType
+  return invoiceType === 'intraeu' ? 'EU' : (invoiceType === 'import' ? 'NON_EU' : 'GR');
 }
 
 // Auto-create supplier με τα δεδομένα του τιμολογίου
 async function _autoCreateSupplier(inv){
   if(!inv.supplierName) return null;
-  const ct = inv.invoiceType === 'intraeu' ? 'EU' : (inv.invoiceType === 'import' ? 'NON_EU' : 'GR');
+  const ct = _inferCountryType(inv.supplierVat, inv.invoiceType);
   try{
     const insertData = {
       shop_id: SHOP_ID,
@@ -18807,6 +18828,7 @@ async function _enrichSupplierFields(supplier, inv){
     console.warn('[EnrichSupplier]', e.message);
   }
 }
+window._inferCountryType = _inferCountryType;
 window._findSupplierSmart = _findSupplierSmart;
 window._autoCreateSupplier = _autoCreateSupplier;
 window._enrichSupplierFields = _enrichSupplierFields;
