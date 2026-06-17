@@ -19853,7 +19853,47 @@ function _openDocSettings() {
 }
 
 // ── Preview + PDF generation ──────────────────────────────────────
+// 🔗 Ενοποίηση: μετατροπή DOC_STATE → κοινό R schema (receipt-builder)
+function _znDocToR(isPreview) {
+  var s = (typeof getSettings === 'function') ? getSettings() : {};
+  var dt = INVOICE_DOC_TYPES.find(function(t){ return t.id === DOC_STATE.type; }) || INVOICE_DOC_TYPES[0];
+  var rate = (typeof EFK_RATE_PER_ML !== 'undefined') ? EFK_RATE_PER_ML : 0.10;
+  var net = 0, vatAmt = 0, efkAmt = 0;
+  var items = (DOC_STATE.lines || []).filter(function(l){ return l.desc || l.unitPrice; }).map(function(l){
+    var qty = l.qty || 1;
+    var lineNet = (l.unitPrice || 0) * qty;
+    var efk = (DOC_STATE.showEfk && l.efkMl) ? l.efkMl * qty * rate : 0;
+    net += lineNet; vatAmt += lineNet * (l.vat || 24) / 100; efkAmt += efk;
+    return { name: l.desc || '—', qty: qty, unit: l.unit || '', unitPrice: l.unitPrice || 0,
+             vatPct: (l.vat != null ? l.vat : 24), efk: efk, lineNet: lineNet, total: lineNet };
+  });
+  return {
+    kind: 'document',
+    title: (dt.label || 'Παραστατικό').toUpperCase(),
+    number: DOC_STATE.docNumber,
+    isPreview: !!isPreview,
+    logo: (typeof getCustomLogo === 'function') ? (getCustomLogo() || '') : '',
+    shopName: s.shopName || 'ZyroNex', shopAddr: s.addr || s.address || '', shopCity: s.city || '',
+    shopAfm: s.afm || '', shopDoy: s.doy || '', shopPhone: s.phone || '', shopEmail: s.email || '',
+    client: (dt.needsClient && DOC_STATE.clientName)
+      ? { name: DOC_STATE.clientName, afm: DOC_STATE.clientAfm, doy: DOC_STATE.clientDoy,
+          addr: DOC_STATE.clientAddr, city: DOC_STATE.clientCity }
+      : null,
+    date: DOC_STATE.docDate || new Date().toISOString().slice(0,10),
+    time: '',
+    items: items,
+    totals: { net: net, vat: vatAmt, efk: efkAmt, total: net + vatAmt + efkAmt },
+    notes: DOC_STATE.notes || '',
+    fmt: 'A4'
+  };
+}
+
 function _previewDoc() {
+  // Ενοποιημένο παράθυρο (format selector 58|80|A4 + ZyroNex footer)
+  if (typeof znOpenPrintDoc === 'function') {
+    try { if (znOpenPrintDoc(_znDocToR(true))) { return; } } catch (e) {}
+  }
+  // LEGACY fallback — inline preview
   DOC_STATE.view = 'preview';
   _renderDocPreview();
 }
@@ -20038,6 +20078,12 @@ function _buildDocHTML() {
       <div style="margin-top:24px;padding-top:16px;${st.divider};text-align:center;font-size:10px;color:#aaa">
         ${s.shopName||''} | ΑΦΜ: ${s.afm||'—'} | ${s.addr||''} ${s.city||''} | ${s.phone||''} | ${s.email||''}
       </div>
+
+      <!-- ZyroNex software branding (όχι στοιχεία παρόχου) -->
+      <div style="margin-top:14px;padding-top:10px;border-top:1px dashed #ddd;text-align:center">
+        ${(typeof window!=='undefined' && window._ZN_BRAND_SVG) ? window._ZN_BRAND_SVG : '<b style="color:#0f172a">ZyroNex POS</b>'}
+        <div style="font-size:10px;color:#999;margin-top:5px">Δημιουργήθηκε με το ZyroNex POS System</div>
+      </div>
     </div>
   </div>`;
 }
@@ -20062,7 +20108,17 @@ async function _generateAndDownload() {
   localStorage.setItem('docHistory', JSON.stringify(hist.slice(0, 200)));
   DOC_STATE.history = hist;
 
-  // Generate PDF using jsPDF + html2canvas approach (open in new window)
+  // 🔗 Ενοποιημένη εκτύπωση (format selector 58|80|A4 + ZyroNex footer + logo)
+  if (typeof znOpenPrintDoc === 'function') {
+    try {
+      if (znOpenPrintDoc(_znDocToR(false))) {
+        toast(`✅ ${DOC_STATE.docNumber} — Πάτα Εκτύπωση → Save as PDF`, 'success');
+        return;
+      }
+    } catch (e) { /* πέφτει στο legacy παρακάτω */ }
+  }
+
+  // LEGACY fallback — Generate PDF (open in new window)
   const html = `<!DOCTYPE html><html><head>
     <meta charset="UTF-8">
     <style>

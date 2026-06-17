@@ -163,6 +163,11 @@ var ZN_ESCPOS = (function () {
     /* Footer */
     raw([ESC, 0x61, 0x01]);
     txt(data.footer || 'Ευχαριστούμε!'); nl();
+
+    /* ZyroNex software branding (όχι στοιχεία παρόχου) */
+    txt(_repeat('-', chars)); nl();
+    txt('ZyroNex POS'); nl();
+    txt('Δημιουργήθηκε με το ZyroNex POS System'); nl();
     raw([ESC, 0x61, 0x00]);
 
     nl(4);                       // feed
