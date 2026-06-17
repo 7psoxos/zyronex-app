@@ -18001,6 +18001,21 @@ function _znParseInvoiceText(text) {
     }
   }
 
+  // Τηλέφωνο
+  var mPhone = t.match(/(?:ΤΗΛ\.?|Τηλ\.?|TEL\.?|Tel\.?|Phone)[:\s.]+(\+?[\d][\d\s\-\.]{7,14}[\d])/i);
+  if(!mPhone) mPhone = t.match(/\b(\+?3[01]\d[\d\s]{8,12})\b/);
+  if(!mPhone) mPhone = t.match(/\b((?:2\d{9}|69\d{8}))\b/);
+  if(mPhone) inv.supplierPhone = mPhone[1].replace(/[\s\-\.]/g,'');
+
+  // Email
+  var mEmail = t.match(/\b([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,6})\b/);
+  if(mEmail) inv.supplierEmail = mEmail[1];
+
+  // Διεύθυνση (ΤΚ pattern ή αριθμός οδού)
+  var mAddr = t.match(/([^\n\r,]{5,60}(?:ΤΚ|Τ\.?Κ\.?)[:\s]*\d{3}\s*\d{2})/i);
+  if(!mAddr) mAddr = t.match(/(?:^|\n)\s*([^\n\r]{4,60}(?:ΑΡ\.|αρ\.|Αρ\.)\s*\d+[^\n\r]{0,40})/m);
+  if(mAddr) inv.supplierAddress = mAddr[1].trim().replace(/\s+/g,' ').substring(0,100);
+
   // Γραμμές προϊόντων: ανά γραμμή κειμένου — περιγραφή qty τιμή σύνολο
   var tLinesArr = t.split(/\n/);
   for (var rli = 0; rli < tLinesArr.length; rli++) {
@@ -18691,7 +18706,7 @@ function _findSupplierSmart(supplierName, supplierVat){
       (s.vies_number && String(s.vies_number).replace(/\s+/g,'').toUpperCase() === vatNorm) ||
       (s.vat_number && String(s.vat_number).replace(/\s+/g,'').toUpperCase() === vatNorm)
     );
-    if(vatExact) return vatExact;
+    if(vatExact){ vatExact._matchType='exact'; return vatExact; }
     // Σύγκριση μόνο των αριθμητικών μερών (αν το VIES περιέχει "GR123456789")
     const vatDigits = vatNorm.replace(/[^0-9]/g,'');
     if(vatDigits.length >= 8){
@@ -18699,18 +18714,18 @@ function _findSupplierSmart(supplierName, supplierVat){
         const sd = String(s.vies_number||s.vat_number||'').replace(/[^0-9]/g,'');
         return sd && sd === vatDigits;
       });
-      if(vatDigitsMatch) return vatDigitsMatch;
+      if(vatDigitsMatch){ vatDigitsMatch._matchType='exact'; return vatDigitsMatch; }
     }
   }
-  
+
   if(!supplierName) return null;
   const targetNorm = _normalizeSupplierName(supplierName);
   if(!targetNorm) return null;
-  
+
   // 2. Exact match στο όνομα (μετά από normalization)
   const exact = SUPPLIERS.find(s => _normalizeSupplierName(s.name) === targetNorm);
-  if(exact) return exact;
-  
+  if(exact){ exact._matchType='exact'; return exact; }
+
   // 3. Match σε notes/contact (για "trade names" όπως VapeExperts → Παπαδάκος)
   const inNotes = SUPPLIERS.find(s => {
     const notesNorm = _normalizeSupplierName(s.notes || '');
@@ -18718,7 +18733,7 @@ function _findSupplierSmart(supplierName, supplierVat){
     return (notesNorm && (notesNorm.includes(targetNorm) || targetNorm.includes(notesNorm))) ||
            (contactNorm && (contactNorm.includes(targetNorm) || targetNorm.includes(contactNorm)));
   });
-  if(inNotes) return inNotes;
+  if(inNotes){ inNotes._matchType='exact'; return inNotes; }
   
   // 4. Token-based match (σπάει σε λέξεις και βλέπει αν ταιριάζουν >=70%)
   const targetTokens = targetNorm.split(' ').filter(t => t.length >= 3);
@@ -18742,7 +18757,7 @@ function _findSupplierSmart(supplierName, supplierVat){
       }
     }
   }
-  if(bestRatio >= 0.7) return best;
+  if(bestRatio >= 0.7){ best._matchType='fuzzy'; return best; }
   return null;
 }
 
@@ -18751,14 +18766,18 @@ async function _autoCreateSupplier(inv){
   if(!inv.supplierName) return null;
   const ct = inv.invoiceType === 'intraeu' ? 'EU' : (inv.invoiceType === 'import' ? 'NON_EU' : 'GR');
   try{
-    const { data: newSup, error } = await sb.from('suppliers').insert({
+    const insertData = {
       shop_id: SHOP_ID,
       name: inv.supplierName,
       vies_number: inv.supplierVat || null,
       country_type: ct,
       country_code: inv.supplierCountry || (ct==='GR'?'GR':''),
       notes: '🤖 Δημιουργήθηκε αυτόματα από Invoice Scanner'
-    }).select().single();
+    };
+    if(inv.supplierPhone) insertData.phone = inv.supplierPhone;
+    if(inv.supplierEmail) insertData.email = inv.supplierEmail;
+    if(inv.supplierAddress) insertData.address = inv.supplierAddress;
+    const { data: newSup, error } = await sb.from('suppliers').insert(insertData).select().single();
     if(!error && newSup){
       SUPPLIERS.push(newSup);
       return newSup;
@@ -18769,8 +18788,28 @@ async function _autoCreateSupplier(inv){
   }
   return null;
 }
+// Εμπλουτίζει τα ΚΕΝΑ πεδία υπάρχοντος προμηθευτή από τα δεδομένα τιμολογίου
+async function _enrichSupplierFields(supplier, inv){
+  var updates = {};
+  if(!supplier.phone && inv.supplierPhone) updates.phone = inv.supplierPhone;
+  if(!supplier.email && inv.supplierEmail) updates.email = inv.supplierEmail;
+  if(!supplier.address && inv.supplierAddress) updates.address = inv.supplierAddress;
+  if(!supplier.vies_number && !supplier.vat_number && inv.supplierVat) updates.vies_number = inv.supplierVat;
+  if(Object.keys(updates).length === 0) return;
+  try{
+    var { error } = await sb.from('suppliers').update(updates).eq('id', supplier.id);
+    if(!error){
+      Object.assign(supplier, updates);
+      var cached = SUPPLIERS.find(function(x){ return x.id === supplier.id; });
+      if(cached) Object.assign(cached, updates);
+    }
+  }catch(e){
+    console.warn('[EnrichSupplier]', e.message);
+  }
+}
 window._findSupplierSmart = _findSupplierSmart;
 window._autoCreateSupplier = _autoCreateSupplier;
+window._enrichSupplierFields = _enrichSupplierFields;
 
 // Helper: αναγνωρίζει αν μια γραμμή τιμολογίου είναι ΕΞΟΔΟ (μεταφορικά, αμοιβή
 // τρόπου πληρωμής, αντικαταβολή κλπ.) και ΟΧΙ προϊόν. Τέτοιες γραμμές μπαίνουν
@@ -18982,6 +19021,15 @@ async function importInvoiceToPurchases(inv, efkAmount) {
 
     // 2. Smart supplier matching (όχι μόνο σε όνομα/ΑΦΜ — και σε notes/aliases)
     let supplier = _findSupplierSmart(inv.supplierName, inv.supplierVat);
+
+    // Fuzzy match — επιβεβαίωση χρήστη
+    if(supplier && supplier._matchType === 'fuzzy'){
+      const useFuzzy = confirm('Βρέθηκε παρόμοιος προμηθευτής: "' + supplier.name + '". Να χρησιμοποιηθεί αυτός;');
+      if(!useFuzzy) supplier = null;
+    }
+
+    // Εμπλουτισμός κενών πεδίων υπάρχοντος προμηθευτή
+    if(supplier) await _enrichSupplierFields(supplier, inv);
 
     // Auto-create supplier αν δεν υπάρχει
     if(!supplier && inv.supplierName){

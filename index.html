@@ -3224,11 +3224,19 @@ var HELP_CONTENT = {
   suppliers: {
     el: {title:'Οδηγός: Προμηθευτές', sections:[
       {icon:'🚚', title:'Διαχείριση Προμηθευτών', body:`<p>Προσθέτεις προμηθευτές με όνομα, χώρα (GR/ΕΕ/εκτός ΕΕ), ΑΦΜ, VIES αριθμό αν είναι ΕΕ.</p>`},
+      {icon:'🔍', title:'Αναζήτηση', body:`<p>Πάνω από τη λίστα υπάρχει πεδίο αναζήτησης που φιλτράρει ανά <b>όνομα</b>, <b>ΑΦΜ</b> ή <b>τηλέφωνο</b> σε πραγματικό χρόνο — χωρίς ανανέωση σελίδας.</p>`},
+      {icon:'📂', title:'Αρχειοθέτηση αντί Διαγραφής', body:`<p>Αν ένας προμηθευτής έχει ιστορικό αγορών, δεν μπορεί να διαγραφεί — αρχειοθετείται αυτόματα και εξαφανίζεται από την κύρια λίστα. Πάτα <b>"+ αρχειοθετημένοι"</b> για να τους δεις. Επαναφορά με το κουμπί ↩ στην κάρτα.</p>`},
+      {icon:'🤖', title:'Αυτόματο Merge από Τιμολόγιο', body:`<p>Ο Invoice Scanner αναγνωρίζει αυτόματα τον προμηθευτή (βάσει ΑΦΜ ή ονόματος). Αν βρεθεί παρόμοιος αλλά όχι ακριβής ταύτιση, ρωτά: <i>"Βρέθηκε παρόμοιος: [όνομα]. Να χρησιμοποιηθεί αυτός;"</i> — Ναι=merge, Όχι=νέος.</p>`},
+      {icon:'✨', title:'Αυτόματος Εμπλουτισμός Καρτέλας', body:`<p>Ο Invoice Scanner εξάγει τηλέφωνο, email και διεύθυνση από το τιμολόγιο και συμπληρώνει αυτόματα τα <b>κενά πεδία</b> — δεν αντικαθιστά ποτέ υπάρχοντα.</p>`},
       {icon:'🇪🇺', title:'EU Reverse Charge', body:`<p>Αν ο προμηθευτής είναι από ΕΕ, το σύστημα θα εμφανίσει κάρτα για Ανακεφαλαιωτικό Πίνακα (ημερομηνία 26 κάθε μήνα) που ο λογιστής σου πρέπει να υποβάλλει.</p>`},
       {icon:'📦', title:'Σύνδεση με Προϊόντα', body:`<p>Κάθε προϊόν μπορεί να έχει κύριο + εναλλακτικό προμηθευτή. Στο "Πρόβλεψη" tab της Αποθήκης προτείνεται αυτόματα από ποιον να παραγγείλεις.</p>`}
     ]},
     en: {title:'Guide: Suppliers', sections:[
       {icon:'🚚', title:'Supplier Management', body:`<p>Add suppliers with name, country (GR/EU/Non-EU), VAT number, VIES number if EU.</p>`},
+      {icon:'🔍', title:'Search', body:`<p>Above the list a search field filters by <b>name</b>, <b>VAT</b> or <b>phone</b> in real time.</p>`},
+      {icon:'📂', title:'Archive instead of Delete', body:`<p>Suppliers with purchase history cannot be deleted — they are archived and hidden from the main list. Click <b>"+ archived"</b> to see them. Restore any with the ↩ button on the card.</p>`},
+      {icon:'🤖', title:'Auto-merge from Invoice', body:`<p>Invoice Scanner auto-matches the supplier (by VAT or name). For fuzzy matches it asks: <i>"Similar supplier found: [name]. Use this one?"</i> — Yes to merge, No to create new.</p>`},
+      {icon:'✨', title:'Auto Card Enrichment', body:`<p>Invoice Scanner extracts phone, email, address and fills <b>empty fields</b> automatically — never overwrites existing data.</p>`},
       {icon:'🇪🇺', title:'EU Reverse Charge', body:`<p>For EU suppliers, a card appears reminding you about VIES Summary Report (due 26th of each month) that your accountant needs to file.</p>`},
       {icon:'📦', title:'Link to Products', body:`<p>Each product can have primary + alternative supplier. Inventory "Prediction" tab suggests which supplier to reorder from.</p>`}
     ]}
@@ -22276,6 +22284,9 @@ function downloadTemplate(){
 /* ============================================================
    SUPPLIERS
    ============================================================ */
+var _suppliersShowArchived = false;
+var _suppliersSearch = '';
+
 function renderSuppliers(){
   // Υπολογισμός τζίρου ανά προμηθευτή
   const supplierRevenue = {};
@@ -22289,10 +22300,26 @@ function renderSuppliers(){
 
   const totalRevenue = Object.values(supplierRevenue).reduce((a,b)=>a+b,0);
 
-  // Ομαδοποίηση
+  // Μέτρηση ενεργών / αρχειοθετημένων
+  var activeCount = SUPPLIERS.filter(function(s){ return !s.is_archived; }).length;
+  var archivedCount = SUPPLIERS.filter(function(s){ return !!s.is_archived; }).length;
+
+  // Φίλτρο αρχειοθέτησης + αναζήτησης
+  var baseList = SUPPLIERS.filter(function(s){ return _suppliersShowArchived ? true : !s.is_archived; });
+  if(_suppliersSearch){
+    var q = _suppliersSearch.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    baseList = baseList.filter(function(s){
+      return (s.name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').includes(q)
+          || (s.vies_number||'').toLowerCase().includes(q)
+          || (s.vat_number||'').toLowerCase().includes(q)
+          || (s.phone||'').toLowerCase().includes(q);
+    });
+  }
+
+  // Ομαδοποίηση από φιλτραρισμένη λίστα
   const groups = {GR:[], EU:[], NON_EU:[]};
-  SUPPLIERS.forEach(s=>{
-    const ct = s.country_type || 'GR'; // default Ελλάδα για existing
+  baseList.forEach(s=>{
+    const ct = s.country_type || 'GR';
     (groups[ct]||groups.GR).push(s);
   });
 
@@ -22321,16 +22348,19 @@ function renderSuppliers(){
     const units = supplierUnits[s.id]||0;
     const totalValue = prods.reduce((a,b)=>a+(b.cost*b.stock),0);
 
-    return `<div class="card">
+    return `<div class="card"${s.is_archived?' style="opacity:0.6;border:1px dashed var(--muted)"':''}>
       <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
         <div style="flex:1;min-width:0">
           <div class="fw-800 text-lg" style="word-break:break-word;display:flex;align-items:center;gap:8px">${supplierFlag(s)} <span>${(s.name||'').replace(/</g,'&lt;')}</span></div>
           <div class="muted text-sm">${s.city||'—'}</div>
           ${s.vies_number?`<div class="text-xs mt-1"><span class="chip chip-neutral" style="font-size:10px">VAT: ${s.vies_number}</span></div>`:''}
+          ${s.is_archived?'<div class="text-xs mt-1"><span class="chip chip-neutral" style="font-size:10px;opacity:0.8">📂 Αρχειοθετημένος</span></div>':''}
         </div>
         <div class="flex gap-2" style="flex-shrink:0">
           <button class="icon-btn" onclick="openSupplierModal(${s.id})" title="Επεξεργασία"><i data-lucide="edit-2" size="14"></i></button>
-          <button class="icon-btn" onclick="deleteSupplier(${s.id})" style="color:var(--danger)" title="Διαγραφή"><i data-lucide="trash-2" size="14"></i></button>
+          ${s.is_archived
+            ?`<button class="icon-btn" onclick="unarchiveSupplier(${s.id})" title="Επαναφορά" style="color:var(--accent)"><i data-lucide="archive-restore" size="14"></i></button>`
+            :`<button class="icon-btn" onclick="deleteSupplier(${s.id})" style="color:var(--danger)" title="Διαγραφή"><i data-lucide="trash-2" size="14"></i></button>`}
         </div>
       </div>
 
@@ -22367,7 +22397,7 @@ function renderSuppliers(){
         <span class="chip chip-warn">${needsReorder}</span>
       </div>`:''}
 
-      <button class="btn btn-primary w-full mt-3" onclick="openSupplierReorder(${s.id})"><i data-lucide="truck" size="14"></i> Νέα Παραγγελία</button>
+      ${!s.is_archived?`<button class="btn btn-primary w-full mt-3" onclick="openSupplierReorder(${s.id})"><i data-lucide="truck" size="14"></i> Νέα Παραγγελία</button>`:''}
     </div>`;
   };
 
@@ -22386,24 +22416,38 @@ function renderSuppliers(){
     `;
   };
 
+  var subText = activeCount + ' ενεργοί';
+  if(archivedCount > 0) subText += ' · ' + archivedCount + ' αρχειοθετημένοι';
+  subText += ' • Τζίρος: ' + eur(totalRevenue);
+
   const html=`
   <div class="page-head">
-    <div><div class="page-title">Προμηθευτές</div><div class="page-sub">${SUPPLIERS.length} ενεργοί • Συνολικός τζίρος: ${eur(totalRevenue)}</div></div>
+    <div><div class="page-title">Προμηθευτές</div><div class="page-sub">${subText}</div></div>
     <button class="btn btn-primary" onclick="openSupplierModal()"><i data-lucide="plus" size="18"></i> Νέος Προμηθευτής</button>
   </div>
 
   ${znGuideBox('suppliers')}
 
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+    <input type="search" id="suppliersSearchInput" placeholder="🔍 Αναζήτηση ονόματος / ΑΦΜ / τηλ..." value="${(_suppliersSearch||'').replace(/"/g,'&quot;')}" oninput="_suppliersSearch=this.value;renderSuppliers()" style="flex:1;min-width:180px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px">
+    ${archivedCount>0?`<button class="btn ${_suppliersShowArchived?'btn-primary':'btn-outline'}" onclick="_suppliersShowArchived=!_suppliersShowArchived;renderSuppliers()" style="white-space:nowrap;flex-shrink:0">${_suppliersShowArchived?'✅ Με αρχειοθετημένους':'📂 +'+archivedCount+' αρχειοθετημένοι'}</button>`:''}
+  </div>
+
   ${renderSuppliersVATCard()}
 
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
-    ${SUPPLIERS.length === 0 ? `<div class="card" style="grid-column:1/-1;text-align:center;padding:40px">
+    ${baseList.length === 0 ? `<div class="card" style="grid-column:1/-1;text-align:center;padding:40px">
       <i data-lucide="truck" size="48" style="color:var(--muted);margin:0 auto;display:block"></i>
-      <div class="fw-700 text-lg mt-3">Δεν υπάρχουν προμηθευτές</div>
-      <div class="muted text-sm mt-2">Πάτα "Νέος Προμηθευτής" για να ξεκινήσεις</div>
+      <div class="fw-700 text-lg mt-3">${_suppliersSearch?'Δεν βρέθηκαν αποτελέσματα':'Δεν υπάρχουν προμηθευτές'}</div>
+      <div class="muted text-sm mt-2">${_suppliersSearch?'Δοκίμασε διαφορετική αναζήτηση':'Πάτα "Νέος Προμηθευτής" για να ξεκινήσεις'}</div>
     </div>` : renderGroup('GR') + renderGroup('EU') + renderGroup('NON_EU')}
   </div>`;
-  document.getElementById('content').innerHTML=html;lucide.createIcons();
+  document.getElementById('content').innerHTML=html;
+  lucide.createIcons();
+  if(_suppliersSearch){
+    var si=document.getElementById('suppliersSearchInput');
+    if(si){si.focus();var l=si.value.length;si.setSelectionRange(l,l);}
+  }
 }
 
 // ΦΠΑ εισροών card — υπολογίζεται από αξία αποθέματος για GR & EU προμηθευτές
@@ -23041,16 +23085,60 @@ async function deleteSupplier(id){
   const s = SUPPLIERS.find(x=>x.id===id);
   if(!s) return;
   const prodsLinked = PRODUCTS.filter(p=>p.supplier===id).length;
-  const msg = prodsLinked > 0
-    ? `Ο προμηθευτής "${s.name}" είναι συνδεδεμένος με ${prodsLinked} προϊόντα. Διαγραφή; (τα προϊόντα δεν θα διαγραφούν)`
-    : `Διαγραφή προμηθευτή "${s.name}";`;
-  showConfirm(msg, async ()=>{
+
+  // Έλεγχος αν έχει αγορές — archive αντί delete
+  var purchCount = 0;
+  try{
+    const { count } = await sb.from('purchases').select('id',{count:'exact',head:true}).eq('supplier_id',id);
+    purchCount = count || 0;
+  }catch(e){ purchCount = 0; }
+
+  if(purchCount > 0){
+    showConfirm(`Ο προμηθευτής "${s.name}" έχει ${purchCount} αγορές — αρχειοθέτηση αντί διαγραφής;`, async ()=>{
+      try{
+        const {error} = await sb.from('suppliers').update({is_archived:true}).eq('id',id);
+        if(error && /column.*not.*exist|Could not find/i.test(error.message||'')){
+          toast('⚠️ Η στήλη is_archived δεν υπάρχει στη βάση. Χρειάζεται migration.','danger',6000);
+          return;
+        }
+        if(error) throw error;
+        const idx = SUPPLIERS.findIndex(x=>x.id===id);
+        if(idx>=0) SUPPLIERS[idx].is_archived = true;
+        toast(`Ο προμηθευτής έχει ${purchCount} αγορές — αρχειοθετήθηκε αντί να διαγραφεί`,'info');
+        renderSuppliers();
+      }catch(err){
+        toast('Σφάλμα: '+err.message,'danger');
+      }
+    });
+  } else {
+    const msg = prodsLinked > 0
+      ? `Ο προμηθευτής "${s.name}" είναι συνδεδεμένος με ${prodsLinked} προϊόντα. Διαγραφή; (τα προϊόντα δεν θα διαγραφούν)`
+      : `Διαγραφή προμηθευτή "${s.name}";`;
+    showConfirm(msg, async ()=>{
+      try{
+        const {error} = await sb.from('suppliers').delete().eq('id',id);
+        if(error) throw error;
+        const idx = SUPPLIERS.findIndex(x=>x.id===id);
+        if(idx>=0) SUPPLIERS.splice(idx,1);
+        toast('Ο προμηθευτής διαγράφηκε','success');
+        renderSuppliers();
+      }catch(err){
+        toast('Σφάλμα: '+err.message,'danger');
+      }
+    });
+  }
+}
+
+async function unarchiveSupplier(id){
+  const s = SUPPLIERS.find(x=>x.id===id);
+  if(!s) return;
+  showConfirm(`Επαναφορά προμηθευτή "${s.name}" στη λίστα;`, async ()=>{
     try{
-      const {error} = await sb.from('suppliers').delete().eq('id',id);
+      const {error} = await sb.from('suppliers').update({is_archived:false}).eq('id',id);
       if(error) throw error;
       const idx = SUPPLIERS.findIndex(x=>x.id===id);
-      if(idx>=0) SUPPLIERS.splice(idx,1);
-      toast('Ο προμηθευτής διαγράφηκε','success');
+      if(idx>=0) SUPPLIERS[idx].is_archived = false;
+      toast('Ο προμηθευτής επαναφέρθηκε','success');
       renderSuppliers();
     }catch(err){
       toast('Σφάλμα: '+err.message,'danger');
@@ -35392,7 +35480,7 @@ window.HELP_KB = {
 "04-suppliers-purchases/invoice-scanner.md": "# 📸 Smart Invoice Scanner\n\n> Σκανάρεις τη φωτογραφία ενός τιμολογίου και το AI διαβάζει προϊόντα, ποσότητες, τιμές και ΦΠΑ — χωρίς myDATA QR.\n\n## Τι είναι\n\nΌταν φτάνει τιμολόγιο που **δεν έχει QR code** (χειρόγραφο, ξένος προμηθευτής, PDF), τραβάς μια φωτογραφία ή ανεβάζεις PDF, και το Claude AI διαβάζει όλα τα στοιχεία. Διαφέρει από το [Σκανάρισμα myDATA](mydata-scanning.md) που χρειάζεται QR.\n\n## Πώς δουλεύει\n\n1. **Αποθήκη ή Παραλαβές → \"📄 Σκάναρε Τιμολόγιο\"**\n2. Βγάζεις φωτογραφία ή ανεβάζεις PDF/εικόνα\n3. Το AI αναλύει: προμηθευτής, ΑΦΜ, αρ. τιμολογίου, ημερομηνία, γραμμές προϊόντων, ΦΠΑ, ΕΦΚ\n4. **Smart matching** με τη βάση σου (barcode / SKU / όνομα)\n5. Προεπισκόπηση → επιβεβαίωση → καταχώρηση\n\n## 🔎 Έλεγχος Τιμών (plugin)\n\nΑν είναι ενεργό το plugin **Έλεγχος Τιμολογίου**, κάθε προϊόν συγκρίνεται με το **προηγούμενο κόστος** του. Βλέπεις:\n- 🔴 Αυξήσεις τιμών (ο προμηθευτής σε χρέωσε παραπάνω)\n- ⚠️ Λάθη χρέωσης (ποσότητα × τιμή ≠ σύνολο)\n- Συνολικό επιπλέον κόστος\n\n> 💡 Σχέση με το **Margin Erosion**: το Έλεγχος Τιμολογίου σε πιάνει στην παραλαβή (input cost). Το [Margin Erosion](../07-ai-smart/margin-erosion.md) σε πιάνει μετά αν ξέχασες να ανεβάσεις τη λιανική (output price).\n\n## Παράδειγμα\n\nΦωτογραφίζεις τιμολόγιο με 10 γραμμές. Το AI διαβάζει:\n```\nΠρομηθευτής: VAPE HELLAS ΑΕ (ΑΦΜ 800123456)\nΤιμολόγιο: Α-4521 · 03/06/2026\n• Mango Ice 20mg × 24 = 4.80€/τμχ  🔴 (ήταν 4.00€, +20%)\n• Cola Pod × 12 = 5.00€/τμχ  🟢 (ίδιο)\n• Coil 0.8ohm × 50 = 1.20€/τμχ  ⚪ νέο προϊόν\nΚαθαρή: 175.20€ · ΦΠΑ: 42.05€ · Σύνολο: 217.25€\n```\nΤο Mango Ice επισημαίνεται 🔴 — σε προειδοποιεί ότι ανέβηκε 20%.\n\n## Tips\n\n✅ Καλό φως + ίσια φωτογραφία = καλύτερη ανάγνωση\n✅ Το PDF αρχειοθετείται αυτόματα στο Storage\n✅ Ελέγχει τα 🟡 fuzzy matches πριν καταχωρήσεις\n\n## Συχνά Λάθη\n\n❌ \"Δεν διάβασε σωστά\" → Θολή φωτογραφία. Ξανατράβα με καλύτερο φως.\n❌ \"Διπλό τιμολόγιο\" → Το σύστημα σε προειδοποιεί αν υπάρχει ίδιος αρ.τιμολογίου + ΑΦΜ.\n\n## Δες επίσης\n\n- [Σκανάρισμα myDATA](mydata-scanning.md)\n- [Παραλαβές](purchases.md)\n- [Margin Erosion](../07-ai-smart/margin-erosion.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v46*\n",
 "04-suppliers-purchases/local-invoice-reader.md": "# 📄 Τοπική Ανάγνωση Τιμολογίων\n\n> Εξαγωγή δεδομένων από PDF τιμολόγια **χωρίς internet** και **χωρίς χρέωση AI** — διαθέσιμο σε όλα τα πλάνα (Basic+).\n\n## Τι είναι\n\nΤο ZyroNex διαβάζει τοπικά (στη συσκευή σου) PDF τιμολόγια που περιέχουν κείμενο, χρησιμοποιώντας τη βιβλιοθήκη **pdf.js**. Εξάγει:\n\n- Αριθμό & ημερομηνία τιμολογίου\n- ΑΦΜ & επωνυμία προμηθευτή\n- Καθαρή αξία, ΦΠΑ, σύνολο\n- Γραμμές προϊόντων (περιγραφή, ποσότητα, τιμή)\n\n## Πώς δουλεύει\n\n1. Ανεβάζεις PDF στο Scanner\n2. Το ZyroNex εξάγει τοπικά το κείμενο\n3. Αν confidence ≥ 50% → «📄 Διαβάστηκε τοπικά — χωρίς cloud»\n4. Αν confidence < 50% → αυτόματη μετάβαση στο cloud AI (Pro+)\n\n## Διαθεσιμότητα ανά πλάνο\n\n| Πλάνο | Τοπική Ανάγνωση | Cloud AI |\n|-------|-----------------|----------|\n| Basic | ✅ | ❌ |\n| Pro | ✅ | ✅ |\n| Enterprise | ✅ | ✅ |\n\n## Πότε λειτουργεί καλά\n\n✅ PDF από λογιστικό (Atlantis, ERP Pylon, Singular, SoftOne)\n✅ PDF με επιλέξιμο κείμενο (copy-paste δουλεύει)\n✅ Τιμολόγια Ελληνικών/EU προμηθευτών\n\n## Πότε πέφτει στο cloud\n\n❌ Σαρωμένα PDF (εικόνα μέσα σε PDF)\n❌ Προστατευμένα PDF (password, no-copy)\n❌ Χαμηλή ποιότητα κειμένου\n\n## Tips\n\n💡 Ζήτα από τον προμηθευτή PDF από το λογισμικό του — διαβάζεται αμέσως, χωρίς κόστος.\n💡 Σε Basic πλάνο: τοπική ανάγνωση για PDF, χειροκίνητη καταχώρηση για εικόνες.\n\n## Δες επίσης\n\n- [Smart Invoice Scanner](invoice-scanner.md)\n- [Παραλαβές](purchases.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
 "04-suppliers-purchases/supplier-scorecard.md": "# 🏆 Βαθμολογία Προμηθευτών\n\n> Ποιος προμηθευτής σου αποδίδει πραγματικά — όχι μόνο ποιος έχει τη χαμηλότερη τιμή. **Admin only.**\n\n## Τι κάνει\n\nΒαθμολογεί κάθε προμηθευτή **0-100** (γράμμα A/B/C/D) συνδυάζοντας τέσσερις άξονες.\n\n## Οι 4 άξονες\n\n| Άξονας | Βάρος | Τι μετράει |\n|---|---|---|\n| 💰 Περιθώριο | 30% | Μέσο margin των προϊόντων του |\n| 🤝 Chemistry | 30% | Πόσα προϊόντα του πουλάνε & γίνονται best-sellers |\n| 📉 Σταθερότητα | 25% | Penalty αν έχει cost erosion/shrinkflation |\n| 📦 Εύρος | 15% | Πλήθος προϊόντων & κατηγοριών |\n\n## Τι είναι το Chemistry Score\n\nΔείχνει πόσο \"ταιριάζει\" ένας προμηθευτής στο **δικό σου** πελατολόγιο. Ένας προμηθευτής μπορεί να έχει φθηνά προϊόντα που όμως **δεν πουλάνε στο μαγαζί σου** — χαμηλό chemistry. Άλλος έχει προϊόντα που γίνονται best-sellers — υψηλό chemistry.\n\n## Παράδειγμα\n\n- **Προμηθευτής Α**: margin 48%, τα μισά προϊόντα best-sellers → **Score 88 (A)** 👑\n- **Προμηθευτής Β**: margin 35%, λίγα πουλάνε, 3 προϊόντα με shrinkflation → **Score 52 (D)**\n\nΞέρεις πού να ρίξεις βάρος και ποιον να διαπραγματευτείς.\n\n## Προϋπόθεση\n\nΤα προϊόντα πρέπει να είναι αντιστοιχισμένα σε προμηθευτή (στην Αποθήκη). Όσο περισσότερο ιστορικό πωλήσεων, τόσο ακριβέστερο το chemistry.\n\n## Δες επίσης\n\n- [Προμηθευτές](suppliers.md)\n- [Margin Erosion](../07-ai-smart/margin-erosion.md)\n- [Shrinkflation](../07-ai-smart/shrinkflation.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v46*\n",
-"04-suppliers-purchases/suppliers.md": "# 🏭 Προμηθευτές\n\n> Διαχείριση προμηθευτών, στοιχεία επικοινωνίας, ιστορικό παραλαβών.\n\n## Επισκόπηση\n\nΗ σελίδα **Προμηθευτές** δείχνει όλους τους προμηθευτές ως cards με:\n- Logo / αρχικά\n- Επωνυμία + ΑΦΜ\n- Τηλέφωνο / Email / Site\n- Σύνολο παραλαβών (lifetime)\n- Τελευταία παραλαβή\n- Status (active / inactive)\n\n## Προσθήκη Προμηθευτή\n\n### Manual\n\n1. **Προμηθευτές → \"+ Νέος Προμηθευτής\"**\n2. Συμπλήρωσε:\n   - **Επωνυμία** (υποχρεωτικό)\n   - **ΑΦΜ** (για myDATA matching)\n   - **ΔΟΥ**\n   - **Διεύθυνση**\n   - **Τηλέφωνο / Email / Website**\n   - **Υπεύθυνος επικοινωνίας**\n   - **Πληρωμή Όροι** (π.χ. 30 ημέρες, on-receipt)\n   - **Πιστωτικό Όριο**\n   - **Notes**\n3. Logo (upload ή initials)\n4. **Αποθήκευση**\n\n### Auto από myDATA\n\nΌταν σκανάρεις τιμολόγιο, ο προμηθευτής **δημιουργείται αυτόματα** αν δεν υπάρχει ΑΦΜ match.\n\n### Auto από CSV Import\n\nΑν εισάγεις προϊόντα από CSV με στήλη \"Supplier\", δημιουργούνται οι προμηθευτές που δεν υπάρχουν.\n\n## Επεξεργασία\n\nTap card → modal με tabs:\n- **Στοιχεία**\n- **Ιστορικό Παραλαβών**\n- **Προϊόντα τους** (όλα όσα έχουν παραδώσει)\n- **Πληρωμές** (oφειλές + history)\n- **Notes**\n\n## Ιστορικό Παραλαβών\n\nΔείχνει όλες τις παραλαβές chronologically:\n- Ημερομηνία\n- Αρ. Τιμολογίου\n- Αξία (καθαρή / ΦΠΑ / σύνολο)\n- Status (Pending / Received / Paid)\n- Προϊόντα\n\nClick παραλαβή → πάει σε [Παραλαβές](purchases.md).\n\n## Πληρωμές\n\n### Open Balance\nΦαίνεται **οφειλές προς προμηθευτή** = Σύνολο παραλαβών - Σύνολο πληρωμών\n\n### Καταχώρηση Πληρωμής\n1. Tap **\"+ Πληρωμή\"**\n2. Συμπλήρωσε:\n   - Ποσό\n   - Ημερομηνία\n   - Method (Cash / Bank Transfer / Card)\n   - Reference (αρ. τιμολογίου ή batch)\n   - Notes\n3. **Αποθήκευση**\n\nAuto-syncs με Banking module αν έχει επιλεγεί λογαριασμός.\n\n## Reports\n\n### Top Suppliers\nSort by lifetime value → ποιος σε εξυπηρετεί περισσότερο\n\n### Outstanding Balances\nΌλοι οι προμηθευτές με positive balance + due date warning\n\n### Supplier Performance\n- Average delivery time\n- Order accuracy (παραγγελίες με όλα σωστά)\n- Price stability (αλλαγές τιμών στο χρόνο)\n\n## Tags & Categorization\n\nDefault tags:\n- 🥇 **Primary** — main supplier για κατηγορία\n- 🆕 **New** — < 60 ημέρες\n- ⭐ **Preferred**\n- ⚠️ **Issues** — με προβλήματα\n- 💤 **Inactive** — > 6 μήνες\n\n## Bulk Actions\n\nΕπιλογή πολλών → toolbar:\n- Add tag\n- Bulk email\n- Export CSV\n- Archive\n\n## Tips\n\n✅ **Συμπλήρωσε ΑΦΜ** — auto-matching με myDATA\n✅ **Πληρωμή όροι** καταγραφή = better cash flow planning\n✅ **Πιστωτικό όριο** προστασία από overcommit\n✅ **Tag \"Primary\"** σε 1 supplier ανά κατηγορία = γρήγορη επιλογή στις παραγγελίες\n\n## Συχνά Λάθη\n\n❌ **\"Διπλοί προμηθευτές με ίδιο ΑΦΜ\"** → Inspector → Merge\n❌ **\"ΑΦΜ format wrong\"** → Πρέπει να είναι 9-ψήφιος\n❌ **\"Δεν εμφανίζεται στις Παραλαβές dropdown\"** → Status = Inactive\n\n## Δες επίσης\n\n- [Παραλαβές / Αγορές](purchases.md)\n- [myDATA Scanning](mydata-scanning.md)\n- [Banking](../05-financials/banking.md)\n\n---\n*Τελευταία ενημέρωση: 29 Απριλίου 2026 — v43*\n",
+"04-suppliers-purchases/suppliers.md": "# 🏭 Προμηθευτές\n\n> Διαχείριση προμηθευτών, αρχειοθέτηση, merge, αναζήτηση, εμπλουτισμός καρτέλας.\n\n## Επισκόπηση\n\nΗ σελίδα **Προμηθευτές** δείχνει όλους τους ενεργούς προμηθευτές ως cards με:\n- Επωνυμία + ΑΦΜ\n- Τηλέφωνο / Email / Site\n- Τζίρος & αξία αποθέματος\n- Σύνδεσμος για Νέα Παραγγελία\n\n## Αναζήτηση\n\nΠάνω από τη λίστα υπάρχει πεδίο αναζήτησης που φιλτράρει **σε πραγματικό χρόνο** ανά:\n- Όνομα\n- ΑΦΜ / VIES\n- Τηλέφωνο\n\nΗ αναζήτηση είναι client-side (χωρίς νέο αίτημα στη βάση).\n\n## Προσθήκη Προμηθευτή\n\n1. **Προμηθευτές → \"+ Νέος Προμηθευτής\"**\n2. Συμπλήρωσε:\n   - **Επωνυμία** (υποχρεωτικό)\n   - **ΑΦΜ** (για auto-matching με Invoice Scanner)\n   - **Χώρα** (GR / ΕΕ / Εκτός ΕΕ)\n   - **Τηλέφωνο / Email / Διεύθυνση**\n   - **VIES** (αν ΕΕ)\n3. **Αποθήκευση**\n\n## Αρχειοθέτηση αντί Διαγραφής\n\nΑν ο προμηθευτής έχει **ιστορικό αγορών** στη βάση, δεν μπορεί να διαγραφεί — αρχειοθετείται αυτόματα:\n\n1. Πάτα **🗑️ Διαγραφή** στην κάρτα προμηθευτή.\n2. Το σύστημα ελέγχει τον αριθμό αγορών.\n3. Αν υπάρχουν αγορές → ρωτά για αρχειοθέτηση.\n4. Αν επιβεβαιώσεις → ο προμηθευτής εξαφανίζεται από τη βασική λίστα.\n\n### Εμφάνιση Αρχειοθετημένων\n\nΠάτα **📂 + N αρχειοθετημένοι** (εμφανίζεται μόνο αν υπάρχουν) για να τους δεις. Τα cards τους έχουν μειωμένη διαφάνεια και badge \"📂 Αρχειοθετημένος\".\n\n### Επαναφορά\n\nΣτην κάρτα αρχειοθετημένου προμηθευτή, πάτα **↩** (archive-restore) → επαναφορά στη βασική λίστα.\n\n> **Σημείωση DB:** Απαιτείται στήλη `is_archived boolean default false` στον πίνακα `suppliers`. Αν λείπει, εμφανίζεται ειδοποίηση migration.\n\n## Auto-merge από Invoice Scanner\n\nΌταν εισάγεις τιμολόγιο μέσω Invoice Scanner, το σύστημα ψάχνει αυτόματα για υπάρχοντα προμηθευτή:\n\n| Επίπεδο | Κριτήριο | Αποτέλεσμα |\n|---------|----------|------------|\n| 1 | ΑΦΜ/VIES ακριβής ταύτιση | Χρήση χωρίς ερώτηση |\n| 2 | Όνομα ακριβής (μετά normalization) | Χρήση χωρίς ερώτηση |\n| 3 | Εμπορική ονομασία σε notes/contact | Χρήση χωρίς ερώτηση |\n| 4 | Token-based ≥70% | **Ερώτηση χρήστη** |\n| — | Καμία ταύτιση | Δημιουργία νέου |\n\nΓια fuzzy match (επίπεδο 4): εμφανίζεται dialog **\"Βρέθηκε παρόμοιος προμηθευτής: [όνομα]. Να χρησιμοποιηθεί αυτός;\"**\n- **Ναι** → merge με υπάρχοντα\n- **Όχι** → δημιουργία νέου\n\n## Αυτόματος Εμπλουτισμός Καρτέλας\n\nΟ Invoice Scanner εξάγει από το κείμενο του τιμολογίου:\n- **Τηλέφωνο** (pattern: ΤΗΛ., Greek 10-digit)\n- **Email**\n- **Διεύθυνση** (ΤΚ pattern ή αριθμός οδού)\n\nΣυμπληρώνει **μόνο τα κενά πεδία** του υπάρχοντος προμηθευτή — δεν αντικαθιστά ποτέ υπάρχοντα δεδομένα.\n\n## Ομαδοποίηση\n\nΟι προμηθευτές ομαδοποιούνται αυτόματα:\n- 🇬🇷 **Εντός Ελλάδας** — ΦΠΑ 24%\n- 🇪🇺 **Εντός ΕΕ** — Reverse Charge (0% στο τιμολόγιο, 24% υποχρέωσή σου)\n- 🌍 **Εκτός ΕΕ** — ΦΠΑ εισαγωγής στο τελωνείο\n\n## EU Reverse Charge\n\nΓια ΕΕ προμηθευτές εμφανίζεται κάρτα υπενθύμισης Ανακεφαλαιωτικού Πίνακα (26 κάθε μήνα).\n\n## Συχνά Λάθη\n\n❌ **\"Δεν εμφανίζεται στη λίστα\"** → Ίσως έχει αρχειοθετηθεί — πάτα \"📂 αρχειοθετημένοι\"\n❌ **\"Διπλός προμηθευτής\"** → Invoice Scanner έδωσε 'Όχι' στο merge dialog — μπορείς να συγχωνεύσεις χειροκίνητα\n❌ **\"ΑΦΜ format wrong\"** → Πρέπει να είναι 9-ψήφιος\n\n## Δες επίσης\n\n- [Αγορές](purchases.md)\n- [Smart Invoice Scanner](invoice-scanner.md)\n- [myDATA Scanning](mydata-scanning.md)\n\n---\n*Τελευταία ενημέρωση: 17 Ιουνίου 2026 — v44*\n",
 "05-financials/energy-tracker.md": "# ⚡ Ενέργεια & Λογαριασμοί\n\n> Παρακολούθηση κόστους ενέργειας vs τζίρο + αρχείο λογαριασμών ΔΕΚΟ. **Admin only.**\n\n## Τρεις καρτέλες\n\n| Καρτέλα | Τι δείχνει |\n|---|---|\n| 📊 Πίνακας | kWh vs τζίρο, €/kWh, κόστος/πώληση |\n| 🧾 Λογαριασμοί | Φωτό/scan → AI → Vault |\n| 🔌 Συσκευές | Live ενδείξεις (ενδεικτικά) |\n\n## 🟢🟡🔵 Τρία επίπεδα αξιοπιστίας\n\n- 🟢 **Χειροκίνητη / λογαριασμός** (ΔΕΗ κλπ): η ΜΟΝΗ αξιόπιστη — μπαίνει στα έξοδα\n- 🟡 **Smart plug (TAPO/Shelly)**: μετράει ΜΟΝΟ ό,τι έχει πάνω — ενδεικτικό, ΔΕΝ μπαίνει στα έξοδα\n- 🔵 **Μετρητής ράγας**: μετράει όλο τον πίνακα — πιο κοντά στην πραγματικότητα, αλλά πάλι ενδεικτικό για live\n\n## Πώς υπολογίζεται\n\nΟ Πίνακας παίρνει τους καταχωρημένους λογαριασμούς ρεύματος (σύνολο €, kWh) και τον τζίρο της αντίστοιχης περιόδου. Υπολογίζει: μέσο €/kWh, ποσοστό ενέργειας στον τζίρο, κόστος ανά πώληση.\n\n## ⚠️ Δήλωση μη-ευθύνης\n\nΟι ενδείξεις συσκευών είναι **ενδεικτικές**. Το ZyroNex **δεν φέρει καμία ευθύνη** για λάθη/αποκλίσεις στις μετρήσεις. Αξιόπιστη πηγή = ο πραγματικός λογαριασμός.\n\n## Setup συσκευής\n\nΟ browser δεν μιλάει απευθείας στις πρίζες. Χρειάζεται ένας μικρός poller (σε Pi/VPS) που διαβάζει τη συσκευή και γράφει στο Supabase `energy_readings`. Το app τα διαβάζει αυτόματα.\n\n## Δες επίσης\n\n- [Λογαριασμοί ΔΕΚΟ](utility-bills.md)\n- [Νεκρό Σημείο](breakeven.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v46*\n",
 "05-financials/utility-bills.md": "# 🧾 Λογαριασμοί ΔΕΚΟ\n\n> Φωτογράφισε λογαριασμούς (ρεύμα/ύδρευση/τηλεφωνία) — το AI τους διαβάζει και τους αρχειοθετεί. **Admin only.**\n\n## Πώς δουλεύει\n\nΊδιος τρόπος όπως ο Σαρωτής Τιμολογίων:\n\n1. Πάτα **📸 Φωτό Λογαριασμού**\n2. Τράβα φωτό ή ανέβασε PDF\n3. Το AI εξάγει: είδος, πάροχο, περίοδο, ποσό, kWh, λήξη\n4. Ελέγχεις & αποθηκεύεις → το αρχείο πάει στο **Vault → Λογαριασμοί ΔΕΚΟ** ανά είδος & έτος\n\n## Είδη λογαριασμών\n\n⚡ Ρεύμα · 💧 Ύδρευση · 📞 Τηλεφωνία · 🔥 Αέριο · 🌐 Internet · 📄 Λοιπά\n\nΤο AI αναγνωρίζει τον πάροχο (ΔΕΗ, Protergia, ΕΥΔΑΠ, Cosmote κλπ) και βάζει αυτόματα το σωστό είδος.\n\n## Αρχειοθέτηση\n\nΌλοι οι λογαριασμοί κρατιούνται όπως τα τιμολόγια, στο [ZyroNex Vault](../08-administration/settings.md) στην κατηγορία \"Λογαριασμοί ΔΕΚΟ\", οργανωμένοι ανά είδος και έτος.\n\n## Δες επίσης\n\n- [Ενέργεια & Λογαριασμοί](energy-tracker.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v46*\n",
 "05-financials/breakeven.md": "# ⚖️ Νεκρό Σημείο (Break-even)\n\n> Πόσο τζίρο πρέπει να κάνεις για να βγεις ίσα — πριν αρχίσεις να βγάζεις κέρδος. **Admin only.**\n\n## Τι κάνει\n\nΥπολογίζει το **νεκρό σημείο**: τον τζίρο που χρειάζεσαι ώστε τα έσοδα να καλύψουν τα πάγια έξοδά σου. Κάθε ευρώ πάνω από αυτό είναι κέρδος.\n\n## Τύπος\n\n```\nΝεκρό σημείο (τζίρος) = Πάγια έξοδα / Μέσο περιθώριο (%)\n```\n\n## Παράδειγμα\n\nΈστω πάγια έξοδα (ενοίκιο + μισθοί + ΤΕΗ + ΕΦΚΑ κ.λπ.) = **3.000€/μήνα** και μέσο περιθώριο κέρδους **40%**:\n\n- Νεκρό σημείο = 3.000 / 0,40 = **7.500€ τζίρο/μήνα**\n- Αν είσαι ανοιχτά 26 μέρες → χρειάζεσαι **≈288€/μέρα**\n- Κάθε ευρώ τζίρου πάνω από 7.500€ → 40 λεπτά καθαρό κέρδος\n\n## Αυτόματα δεδομένα\n\n- Τα **πάγια έξοδα** αντλούνται αυτόματα από το [Ημερολόγιο Εξόδων](../08-administration/settings.md) (επαναλαμβανόμενα)\n- Το **μέσο περιθώριο** υπολογίζεται από τις τιμές/κόστη των προϊόντων\n- Μπορείς να κάνεις **override** και τα δύο χειροκίνητα\n\n## Live Meter στο Dashboard\n\nΌταν ορίσεις πάγια, εμφανίζεται μπάρα στην Αρχική που δείχνει πόσο κοντά είσαι στο νεκρό σημείο αυτόν τον μήνα. Πράσινη = το πέρασες, βγάζεις κέρδος.\n\n## Tips\n\n✅ Κράτα το Ημερολόγιο Εξόδων ενημερωμένο για σωστό νεκρό σημείο\n✅ Αν το νεκρό σημείο είναι πολύ ψηλό → ή αύξησε περιθώριο ή μείωσε πάγια\n\n## Δες επίσης\n\n- [The Godfather](../06-analytics/godfather.md)\n- [Προφίλ Καταστήματος / Reports](reports.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v46*\n",
