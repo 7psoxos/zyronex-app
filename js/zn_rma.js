@@ -187,7 +187,14 @@ function openNewRMA() {
           '<option value="0">Χωρίς</option><option value="3">3 μήνες</option><option value="6">6 μήνες</option>' +
           '<option value="12" selected>12 μήνες</option><option value="24">24 μήνες</option>' +
         '</select></div>' +
-      '<div class="form-row"><label class="form-label">Προμηθευτής</label><input class="form-input" id="rma_supplier" placeholder="π.χ. Voopoo Hellas" style="min-height:44px"></div>' +
+      '<div class="form-row"><label class="form-label">Προμηθευτής</label>' +
+        ((typeof SUPPLIERS !== 'undefined' && SUPPLIERS && SUPPLIERS.length)
+          ? ('<select class="form-select" id="rma_supplier_sel" onchange="rmaSupplierPick(this)" style="min-height:44px;margin-bottom:6px">' +
+              '<option value="">— Επιλογή προμηθευτή —</option>' +
+              SUPPLIERS.map(function (sp) { return '<option value="' + _rmaEsc(sp.id) + '" data-email="' + _rmaEsc(sp.email || '') + '">' + _rmaEsc(sp.name || ('#' + sp.id)) + '</option>'; }).join('') +
+            '</select>')
+          : '') +
+        '<input class="form-input" id="rma_supplier" placeholder="π.χ. Voopoo Hellas" style="min-height:44px"></div>' +
     '</div>' +
     '<div class="form-grid">' +
       '<div class="form-row"><label class="form-label">Πελάτης (όνομα)</label><input class="form-input" id="rma_cust" placeholder="Ονοματεπώνυμο" style="min-height:44px"></div>' +
@@ -202,6 +209,22 @@ function openNewRMA() {
   '</div>');
   if (typeof lucide !== 'undefined' && lucide.createIcons) { lucide.createIcons(); }
   setTimeout(function () { var el = document.getElementById('rma_code'); if (el) { el.focus(); } }, 100);
+}
+
+/* Επιλογή προμηθευτή στο Νέο RMA → κρατά supplier_id + email + γεμίζει το όνομα */
+function rmaSupplierPick(sel) {
+  if (!sel) { return; }
+  _RMA_LOOKUP = _RMA_LOOKUP || {};
+  var nameInput = document.getElementById('rma_supplier');
+  if (sel.value) {
+    var opt = sel.options[sel.selectedIndex];
+    _RMA_LOOKUP.supplierId = (+sel.value || sel.value);
+    _RMA_LOOKUP.supplierEmail = opt ? (opt.getAttribute('data-email') || '') : '';
+    if (nameInput) { nameInput.value = opt ? (opt.textContent || '') : ''; }
+  } else {
+    _RMA_LOOKUP.supplierId = null;
+    _RMA_LOOKUP.supplierEmail = '';
+  }
 }
 
 async function rmaLookup() {
@@ -458,14 +481,21 @@ async function rmaSupplierClaim(id) {
   var supplierId = _rf(r, ['supplier_id']);
   if (!supplierName && !supplierId) { toast('Δεν έχει οριστεί προμηθευτής σε αυτό το RMA', 'warning'); return; }
 
-  // 2/3) Ανάλυση email (prefill) — αν δεν υπάρχει, ζήτα το χειροκίνητα
+  // 2/3) Ανάλυση email προμηθευτή (suppliers.email via supplier_id)
   var prefill = await _rmaResolveSupplierEmail(r);
-  var label = 'Email προμηθευτή' + (supplierName ? (' (' + supplierName + ')') : '') + ':';
-  var to = prompt(label, prefill || '');
-  if (to === null) { return; } // άκυρο
+  var to = '';
+  if (_rmaIsEmail(prefill)) {
+    // Υπάρχει έγκυρο email → στείλε χωρίς prompt
+    to = String(prefill).trim();
+  } else {
+    // Δεν υπάρχει → ζήτα το χειροκίνητα και validάρισε ΤΗΝ ΤΙΜΗ ΤΟΥ PROMPT
+    var label = 'Email προμηθευτή' + (supplierName ? (' (' + supplierName + ')') : '') + ':';
+    var entered = prompt(label, prefill || '');
+    if (entered === null) { return; } // άκυρο
+    to = (typeof entered === 'string') ? entered.trim() : '';
+  }
 
   // 4) Το to πρέπει να είναι πάντα έγκυρο string
-  to = (typeof to === 'string') ? to.trim() : '';
   if (!_rmaIsEmail(to)) { toast('Λείπει έγκυρο email προμηθευτή', 'warning'); return; }
 
   var num = _rmaNumber(r);
@@ -496,5 +526,6 @@ if (typeof window !== 'undefined') {
   window.openRMADetail = openRMADetail;
   window.rmaSetStatus = rmaSetStatus;
   window.rmaSupplierClaim = rmaSupplierClaim;
+  window.rmaSupplierPick = rmaSupplierPick;
   window._renderRMAPage = _renderRMAPage;
 }
