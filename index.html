@@ -15606,16 +15606,7 @@ function _inspShowCronInstructions(){
 }
 window._inspShowCronInstructions = _inspShowCronInstructions;
 
-// Υπολογισμός ημερών μέχρι εξάντλησης αποθέματος βάσει ρυθμού πωλήσεων 30 ημερών
-function predictDaysLeft(p){
-  if(p.stock===0) return 0;
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
-  const recentSales = SALES.filter(s=>s.productId===p.id && new Date(s.date)>=cutoff);
-  const totalQty = recentSales.reduce((a,s)=>a+(s.qty||1),0);
-  if(totalQty===0) return null; // δεν έχει πωληθεί — δεν ξέρουμε
-  const dailyRate = totalQty / 30;
-  return Math.round(p.stock / dailyRate);
-}
+/* predictDaysLeft extracted to /js/zn-leaves.js */
 function todaySales(){
   const t=addDays(0);return SALES.filter(s=>s.date===t);
 }

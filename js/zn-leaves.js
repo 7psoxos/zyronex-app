@@ -31645,3 +31645,15 @@ async function renderAICost(){
   }
 }
 window.renderAICost = renderAICost;
+
+// Phase 1c: stock-depletion predictor (consumers already live in this file).
+// Διαβάζει το global SALES μόνο σε call-time — ασφαλές ως function declaration (hoisted).
+function predictDaysLeft(p){
+  if(p.stock===0) return 0;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+  const recentSales = SALES.filter(s=>s.productId===p.id && new Date(s.date)>=cutoff);
+  const totalQty = recentSales.reduce((a,s)=>a+(s.qty||1),0);
+  if(totalQty===0) return null; // δεν έχει πωληθεί — δεν ξέρουμε
+  const dailyRate = totalQty / 30;
+  return Math.round(p.stock / dailyRate);
+}
