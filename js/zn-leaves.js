@@ -26972,81 +26972,14 @@ async function _doCheckout(){
     const saleId = saleData.id;
     toast('Ολοκληρώθηκε! Σύνολο: '+eur(subtotal),'success');
     
-    // 🖨️ Auto-print on Sunmi V3 Mix-D (no dialog needed)
-    if (SUNMI.available) {
-      const customer = customerId ? CUSTOMERS.find(x=>x.id===customerId) : null;
-      const total = subtotal;
-      const efkAmount = items.reduce((sum, it) => sum + (parseFloat(it.efk_amount) || 0), 0);
-      
-      const printed = await SUNMI.print({
-        saleId,
-        items,
-        subtotal,
-        vat,
-        total,
-        efk: efkAmount,
-        customer: customer?.name,
-        cashier: CURRENT_USER?.name,
-        shopName: getAppSettings().shopName || 'ZYRONEX',
-        shopAfm: getAppSettings().afm,
-        shopAddress: getAppSettings().address || getAppSettings().addr,
-        shopPhone: getAppSettings().phone,
-        shopDoy: getAppSettings().doy,
-        paymentMethod: saleData.payment_method || 'Μετρητά',
-        markNumber: saleData.mark_number,
-        footerText: getAppSettings().receiptFooter || 'Ευχαριστούμε για την προτίμηση!'
-      });
-      
-      if (printed) {
-        toast('🖨️ Εκτύπωση επιτυχής', 'success');
-        // Auto-open cash drawer for cash payments
-        if (saleData.payment_method === 'cash' || saleData.payment_method === 'Μετρητά') {
-          SUNMI.openCashDrawer().catch(()=>{});
-        }
-      } else {
-        toast('⚠️ Σφάλμα εκτύπωσης Sunmi — δοκίμασε ξανά', 'warning');
-        // Fallback: show PDF option
-        setTimeout(()=>{
-          showConfirm('Θέλεις να κατεβάσεις απόδειξη σε PDF;', ()=>generateReceipt(saleId, items, subtotal, vat, customerId));
-        },300);
-      }
+    // 🖨️ Ενοποιημένη εκτύπωση μέσω znPrintReceipt hub
+    if (typeof znPrintReceipt === 'function') {
+      await znPrintReceipt({ saleData: saleData, items: items, subtotal: subtotal, vat: vat, customerId: customerId });
     } else {
-      // Non-Sunmi device → WebUSB ESC/POS αν είναι ρυθμισμένο + auto-print ON, αλλιώς Browser Print
-      var _aps = (typeof getAppSettings==='function') ? getAppSettings() : {};
-      var _escposDone = false;
-      if(_aps.autoPrint && typeof ZN_ESCPOS!=='undefined' && ZN_ESCPOS.available()
-         && ZN_ESCPOS.currentProfile().protocol !== 'browser'){
-        try{
-          var _rec = {
-            shopName: _aps.shopName || 'ZyroNex',
-            address: _aps.address || _aps.addr || '',
-            phone: _aps.phone || '',
-            afm: _aps.afm || '',
-            title: 'ΑΠΟΔΕΙΞΗ',
-            saleId: saleId,
-            datetime: new Date().toLocaleString('el-GR'),
-            items: items.map(function(it){ return { name: it.product_name, qty: it.quantity, price: it.unit_price }; }),
-            total: subtotal,
-            footer: _aps.receiptFooter || 'Ευχαριστούμε για την προτίμηση!'
-          };
-          var _printed = await ZN_ESCPOS.printReceipt(_rec);
-          if(_printed){
-            _escposDone = true;
-            var _pm = saleData.payment_method;
-            if(_pm === 'cash' || _pm === 'Μετρητά'){ ZN_ESCPOS.openDrawer().catch(function(){}); }
-            toast('🖨️ Απόδειξη εκτυπώθηκε (ESC/POS)','success');
-          }
-        }catch(_escErr){
-          // ΠΟΤΕ block της πώλησης — πτώση σε Browser Print
-          toast('Σφάλμα WebUSB — Browser Print','warning');
-        }
-      }
-      if(!_escposDone){
-        // Browser Print (window.print μέσω generateReceipt)
-        setTimeout(()=>{
-          showConfirm('Θέλεις να κατεβάσεις απόδειξη σε PDF;', ()=>generateReceipt(saleId, items, subtotal, vat, customerId));
-        },300);
-      }
+      // Fallback αν το hub δεν έχει φορτωθεί ακόμα
+      setTimeout(function() {
+        showConfirm('Θέλεις να κατεβάσεις απόδειξη σε PDF;', function() { generateReceipt(saleId, items, subtotal, vat, customerId); });
+      }, 300);
     }
   }catch(err){
     console.error('[checkout] Error:', err);
@@ -28994,6 +28927,7 @@ function saveSettings(){
     autoReorder: $chk('s_autoReorder'),
     notifyEmail: $val('s_notifyEmail'),
     printer: $val('s_printer'),
+    printMethod: $val('s_printMethod'),
     scanner: $val('s_scanner'),
     autoPrint: $chk('s_autoPrint'),
     // Daily reports

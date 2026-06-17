@@ -2976,6 +2976,7 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="/js/zn_atomic_checkout.js"></script>
 <script src="/js/zn_blind_audit.js"></script>
 <script src="/js/zn_escpos.js"></script>
+<script src="/js/zn_print_hub.js"></script>
 <script src="/js/zn_product_picker.js"></script>
 <script src="/js/zn_promo_engine.js"></script>
 <script src="/js/zn_promos_ui.js"></script>
@@ -4171,24 +4172,22 @@ var HELP_CONTENT = {
   },
 
   printer: {
-    el: { title: '🖨️ Εκτυπωτής Αποδείξεων (WebUSB ESC/POS)',
+    el: { title: '🖨️ Εκτυπωτής & Απόδειξη',
       sections: [
-        {icon:'🖨️', title:'Τι υποστηρίζεται', body:'<p>Πέρα από το <b>Browser Print</b> (πάντα διαθέσιμο), το ZyroNex τυπώνει απευθείας σε θερμικούς εκτυπωτές μέσω <b>WebUSB</b> (πραγματική ESC/POS εκτύπωση + άνοιγμα συρταριού). Επίλεξε μοντέλο από τη λίστα στις Ρυθμίσεις → Hardware.</p><p>Λίστα: Generic 80/58mm, EPSON TM-T20III, TM-T88VI/VII, TM-m30/m30II, Xprinter XP-80/XP-58, Rongta RP80/RP58, Bixolon SRP-350III, Citizen CT-E351, Star TSP143, Star TSP654II/mC-Print3.</p>'},
-        {icon:'🌐', title:'Πού δουλεύει το WebUSB', body:'<p>Το WebUSB υποστηρίζεται μόνο σε <b>Chrome σε υπολογιστή (Windows/Mac/Linux)</b> και <b>Chrome σε Android</b>. Σε <b>iPhone/iPad (Safari)</b> δεν υπάρχει WebUSB — η εφαρμογή πέφτει αυτόματα σε <b>Browser Print</b>. Τα κουμπιά WebUSB κρύβονται όταν δεν υποστηρίζεται.</p>'},
-        {icon:'🔌', title:'Σύνδεση', body:'<p>Στις Ρυθμίσεις → Hardware, διάλεξε μοντέλο και πάτα <b>«🔌 Σύνδεση εκτυπωτή»</b>. Την πρώτη φορά ο browser ζητά άδεια για τη συσκευή USB. Μετά πάτα <b>«🧾 Δοκιμαστική εκτύπωση»</b> για δοκιμαστική απόδειξη + άνοιγμα συρταριού. Η κατάσταση δείχνει «Συνδεδεμένος: &lt;όνομα&gt;».</p>'},
-        {icon:'🧾', title:'Αυτόματη εκτύπωση μετά την πώληση', body:'<p>Με ενεργό το checkbox «Αυτόματη εκτύπωση απόδειξης μετά από πώληση» και επιλεγμένο εκτυπωτή ESC/POS, κάθε πώληση τυπώνεται αυτόματα μέσω WebUSB και ανοίγει το συρτάρι σε πληρωμή με μετρητά. Αλλιώς χρησιμοποιείται το Browser Print.</p>'},
-        {icon:'⭐', title:'Εξαίρεση: Star TSP143', body:'<p>Ο <b>Star TSP143</b> χρησιμοποιεί raster πρωτόκολλο και <b>όχι</b> ESC/POS — προς το παρόν πέφτει αυτόματα σε <b>Browser Print</b>. Οι Star TSP654II / mC-Print3 δοκιμάζουν ESC/POS emulation.</p>'},
-        {icon:'🛟', title:'Fallback', body:'<p>Κάθε σφάλμα WebUSB εμφανίζει ειδοποίηση και πέφτει σε Browser Print — <b>η πώληση δεν μπλοκάρεται ποτέ</b>.</p>'}
+        {icon:'🔄', title:'Μέθοδοι εκτύπωσης', body:'<p>Το ZyroNex υποστηρίζει τρεις μεθόδους: <b>Sunmi</b> (ενσωματωμένος εκτυπωτής V3 Mix-D), <b>WebUSB ESC/POS</b> (θερμικοί εκτυπωτές μέσω USB) και <b>Browser Print</b> (πάντα διαθέσιμο). Στις Ρυθμίσεις → Εκτυπωτής & Απόδειξη, επίλεξε <b>Αυτόματη</b> (Sunmi → WebUSB → Browser) ή override σε συγκεκριμένη μέθοδο.</p>'},
+        {icon:'📟', title:'Sunmi V3 Mix-D', body:'<p>Σε Sunmi συσκευή, ο εκτυπωτής ανιχνεύεται αυτόματα — εκτυπώνει στο checkout χωρίς επιπλέον ρύθμιση. Κουμπί <b>Test Sunmi</b> για δοκιμή, <b>Άνοιγμα Συρταριού</b> για συρτάρι.</p>'},
+        {icon:'🖨️', title:'WebUSB ESC/POS', body:'<p>Επίλεξε μοντέλο: Generic 80/58mm, EPSON TM-T20III/T88/m30, Xprinter XP-80/58, Rongta RP80/58, Bixolon SRP-350III, Citizen CT-E351, Star TSP143/654II. Πάτα <b>«🔌 Σύνδεση εκτυπωτή»</b> — ο browser ζητά άδεια USB (μία φορά). Μετά <b>«🧾 Δοκιμαστική»</b> για δοκιμή. WebUSB: Chrome desktop + Android. iOS → Browser Print.</p>'},
+        {icon:'🧾', title:'Αυτόματη εκτύπωση', body:'<p>Με ενεργό το checkbox <b>«Αυτόματη εκτύπωση μετά από πώληση»</b>, κάθε checkout τυπώνει αυτόματα με την τρέχουσα μέθοδο. Σε πληρωμή με μετρητά ανοίγει και το συρτάρι.</p>'},
+        {icon:'🛟', title:'Fallback (μη διαπραγματεύσιμο)', body:'<p>Κάθε σφάλμα → ειδοποίηση + πτώση στην επόμενη μέθοδο. <b>Η πώληση δεν μπλοκάρεται ποτέ.</b></p>'}
       ]
     },
-    en: { title: '🖨️ Receipt Printer (WebUSB ESC/POS)',
+    en: { title: '🖨️ Printer & Receipt',
       sections: [
-        {icon:'🖨️', title:'What is supported', body:'<p>Beyond <b>Browser Print</b> (always available), ZyroNex prints directly to thermal printers via <b>WebUSB</b> (real ESC/POS printing + cash drawer kick). Pick a model in Settings → Hardware.</p><p>List: Generic 80/58mm, EPSON TM-T20III, TM-T88VI/VII, TM-m30/m30II, Xprinter XP-80/XP-58, Rongta RP80/RP58, Bixolon SRP-350III, Citizen CT-E351, Star TSP143, Star TSP654II/mC-Print3.</p>'},
-        {icon:'🌐', title:'Where WebUSB works', body:'<p>WebUSB is supported only on <b>Chrome desktop (Windows/Mac/Linux)</b> and <b>Chrome on Android</b>. On <b>iPhone/iPad (Safari)</b> there is no WebUSB — the app automatically falls back to <b>Browser Print</b>. WebUSB buttons are hidden when unsupported.</p>'},
-        {icon:'🔌', title:'Connecting', body:'<p>In Settings → Hardware, choose a model and tap <b>"🔌 Connect printer"</b>. The first time, the browser asks for USB device permission. Then tap <b>"🧾 Test print"</b> for a test receipt + drawer kick. Status shows "Connected: &lt;name&gt;".</p>'},
-        {icon:'🧾', title:'Auto-print after sale', body:'<p>With "Auto-print receipt after sale" enabled and an ESC/POS printer selected, every sale prints automatically via WebUSB and opens the drawer on cash payments. Otherwise Browser Print is used.</p>'},
-        {icon:'⭐', title:'Exception: Star TSP143', body:'<p>The <b>Star TSP143</b> uses a raster protocol, <b>not</b> ESC/POS — for now it falls back to <b>Browser Print</b>. Star TSP654II / mC-Print3 attempt ESC/POS emulation.</p>'},
-        {icon:'🛟', title:'Fallback', body:'<p>Any WebUSB error shows a notification and falls back to Browser Print — <b>the sale is never blocked</b>.</p>'}
+        {icon:'🔄', title:'Print methods', body:'<p>ZyroNex supports three methods: <b>Sunmi</b> (built-in V3 Mix-D printer), <b>WebUSB ESC/POS</b> (thermal printers via USB) and <b>Browser Print</b> (always available). In Settings → Printer & Receipt, choose <b>Auto</b> (Sunmi → WebUSB → Browser) or override to a specific method.</p>'},
+        {icon:'📟', title:'Sunmi V3 Mix-D', body:'<p>On a Sunmi device, the printer is auto-detected — prints at checkout with no extra setup. Use the <b>Test Sunmi</b> button to verify, <b>Open Drawer</b> for the cash drawer.</p>'},
+        {icon:'🖨️', title:'WebUSB ESC/POS', body:'<p>Select model: Generic 80/58mm, EPSON TM-T20III/T88/m30, Xprinter XP-80/58, Rongta RP80/58, Bixolon SRP-350III, Citizen CT-E351, Star TSP143/654II. Tap <b>"🔌 Connect printer"</b> — browser asks for USB permission once. Then <b>"🧾 Test print"</b>. WebUSB: Chrome desktop + Android. iOS → Browser Print.</p>'},
+        {icon:'🧾', title:'Auto-print', body:'<p>With <b>"Auto-print receipt after sale"</b> enabled, every checkout prints automatically using the current method. Cash payments also open the drawer.</p>'},
+        {icon:'🛟', title:'Fallback (non-negotiable)', body:'<p>Any error → notification + drop to next method. <b>The sale is never blocked.</b></p>'}
       ]
     }
   },
@@ -26783,48 +26782,69 @@ function renderSettings(){
     </div>
   </div>
 
-  <!-- 🖨️ Sunmi Printer Configuration -->
-  <div class="card" style="margin-bottom:16px;border-color:${SUNMI.available ? 'rgba(0,212,168,0.4)' : 'rgba(255,165,0,0.3)'};background:linear-gradient(135deg,${SUNMI.available ? 'rgba(0,212,168,0.06)' : 'rgba(255,165,0,0.04)'},transparent)">
-    <div class="section-title">🖨️ Εκτυπωτής & Προεπισκόπηση Απόδειξης</div>
-    <div class="mt-3">
+  <!-- 🖨️ Print Hub — Ενοποιημένος εκτυπωτής & απόδειξη -->
+  <div class="card" style="margin-bottom:16px;border-color:rgba(0,212,168,0.3);background:linear-gradient(135deg,rgba(0,212,168,0.04),transparent)">
+    <div class="section-title">🖨️ Εκτυπωτής & Απόδειξη</div>
+
+    <!-- Μέθοδος εκτύπωσης -->
+    <div class="form-row mt-3">
+      <label class="form-label">Μέθοδος εκτύπωσης</label>
+      <select class="form-select" id="s_printMethod" onchange="_znPrintHubMethodChange()">
+        <option value="auto" ${(s.printMethod||'auto')==='auto'?'selected':''}>🔄 Αυτόματη (Sunmi → WebUSB → Browser)</option>
+        <option value="sunmi" ${s.printMethod==='sunmi'?'selected':''}>📟 Sunmi V3 Mix-D</option>
+        <option value="escpos" ${s.printMethod==='escpos'?'selected':''}>🖨️ WebUSB ESC/POS</option>
+        <option value="browser" ${s.printMethod==='browser'?'selected':''}>🌐 Browser Print</option>
+      </select>
+    </div>
+
+    <!-- Sunmi status — κρύβεται αν method=escpos ή browser -->
+    <div id="znPrintHubSunmi" style="display:${(s.printMethod==='escpos'||s.printMethod==='browser')?'none':''}">
       ${SUNMI.available ? `
-        <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(0,212,168,0.1);border-radius:10px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(0,212,168,0.1);border-radius:10px;margin-top:10px">
           <div style="width:10px;height:10px;border-radius:50%;background:#00d4a8;box-shadow:0 0 12px rgba(0,212,168,0.6)"></div>
           <div>
             <div style="font-weight:700;color:var(--text-0)">✅ Sunmi συνδεδεμένος</div>
-            <div class="text-sm muted">API: ${SUNMI.method} • 58mm thermal printer</div>
+            <div class="text-sm muted">API: ${SUNMI.method} · 58mm thermal</div>
           </div>
         </div>
+        <div class="flex gap-2 mt-2" style="flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="SUNMI.testPrint().then(ok=>toast(ok?'🖨️ Test OK':'❌ Αποτυχία',ok?'success':'danger'))"><i data-lucide="printer" size="16"></i> Test Sunmi</button>
+          <button class="btn btn-ghost" onclick="SUNMI.openCashDrawer().then(ok=>toast(ok?'💰 Συρτάρι ανοίχτηκε':'❌ Αποτυχία',ok?'success':'warning'))"><i data-lucide="dollar-sign" size="16"></i> Άνοιγμα Συρταριού</button>
+        </div>
       ` : `
-        <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,165,0,0.1);border-radius:10px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(255,165,0,0.08);border-radius:10px;margin-top:10px">
           <div style="width:10px;height:10px;border-radius:50%;background:#ffa500"></div>
           <div>
-            <div style="font-weight:700;color:var(--text-0)">⚠️ Δεν εντοπίστηκε Sunmi printer</div>
-            <div class="text-sm muted">${SUNMI.method === 'plugin-needed' 
-              ? 'Sunmi συσκευή εντοπίστηκε αλλά λείπει το print plugin. Κατέβασε το "Sunmi Browser" από το Sunmi App Market.' 
-              : 'Δοκιμάζεις το app εκτός Sunmi συσκευής. Σε Sunmi V3 Mix-D η εκτύπωση γίνεται αυτόματα. Χρησιμοποίησε την Προεπισκόπηση για να δεις πώς θα φαίνεται.'}</div>
+            <div style="font-weight:700;color:var(--text-0)">⚠️ Sunmi δεν εντοπίστηκε</div>
+            <div class="text-sm muted">${SUNMI.method === 'plugin-needed' ? 'Λείπει το Sunmi Browser plugin.' : 'Όχι Sunmi συσκευή — αυτόματα WebUSB ή Browser Print.'}</div>
           </div>
         </div>
       `}
-      
-      <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="previewReceiptSample()">
-          <i data-lucide="eye" size="16"></i> 👁️ Προεπισκόπηση Απόδειξης
-        </button>
-        ${SUNMI.available ? `
-          <button class="btn btn-ghost" onclick="SUNMI.testPrint().then(ok=>toast(ok?'🖨️ Test print OK':'❌ Test print failed', ok?'success':'danger'))">
-            <i data-lucide="printer" size="16"></i> Test Εκτύπωση Sunmi
-          </button>
-          <button class="btn btn-ghost" onclick="SUNMI.openCashDrawer().then(ok=>toast(ok?'💰 Συρτάρι ανοίχτηκε':'❌ Αποτυχία', ok?'success':'warning'))">
-            <i data-lucide="dollar-sign" size="16"></i> Άνοιγμα Συρταριού
-          </button>
-        ` : ''}
-      </div>
-      <div class="text-xs muted mt-2">💡 Η Προεπισκόπηση δείχνει την απόδειξη με δείγμα προϊόντων χρησιμοποιώντας τα τρέχοντα στοιχεία της επιχείρησης και το logo σου.</div>
     </div>
-    
+
+    <!-- ESC/POS model + WebUSB — κρύβεται αν method=sunmi ή browser -->
+    <div id="znPrintHubEscpos" style="display:${(s.printMethod==='sunmi'||s.printMethod==='browser')?'none':''}">
+      <div class="form-row mt-3">
+        <label class="form-label">Μοντέλο εκτυπωτή (WebUSB ESC/POS)</label>
+        <select class="form-select" id="s_printer" onchange="if(window.ZN_ESCPOS)ZN_ESCPOS.syncControls()">
+          ${(typeof ZN_ESCPOS!=='undefined' && ZN_ESCPOS.optionsHTML) ? ZN_ESCPOS.optionsHTML(s.printer) : `
+          <option ${s.printer==='browser'?'selected':''} value="browser">Browser Print (default)</option>
+          <option ${s.printer==='generic80'?'selected':''} value="generic80">Generic 80mm</option>
+          <option ${s.printer==='generic58'?'selected':''} value="generic58">Generic 58mm</option>`}
+        </select>
+      </div>
+      <div class="form-row" id="znEscposRow">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost" id="znEscposConnect" style="min-height:44px;display:none" onclick="ZN_ESCPOS.connectUI()"><i data-lucide="plug" size="16"></i> 🔌 Σύνδεση εκτυπωτή</button>
+          <button type="button" class="btn btn-ghost" id="znEscposTest" style="min-height:44px;display:none" onclick="ZN_ESCPOS.testPrintUI()"><i data-lucide="receipt" size="16"></i> 🧾 Δοκιμαστική εκτύπωση</button>
+        </div>
+        <div id="znEscposStatus" class="text-xs muted" style="margin-top:8px;word-break:break-word;min-width:0"></div>
+      </div>
+    </div>
+
+    <!-- Header/Footer κοινό για όλες τις μεθόδους -->
     <div class="mt-4">
-      <div class="text-sm fw-700 mb-2">📝 Header απόδειξης</div>
+      <div class="text-sm fw-700 mb-2">📝 Header/Footer απόδειξης</div>
       <div class="grid grid-2" style="gap:10px">
         <div>
           <label class="text-sm muted">Όνομα καταστήματος</label>
@@ -26843,6 +26863,18 @@ function renderSettings(){
           <input type="text" id="s_receiptFooter" value="${(s.receiptFooter||'Ευχαριστούμε για την προτίμηση!').replace(/"/g,'&quot;')}" class="input" placeholder="Ευχαριστούμε!">
         </div>
       </div>
+    </div>
+
+    <!-- Preview + auto-print -->
+    <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="previewReceiptSample()"><i data-lucide="eye" size="16"></i> 👁️ Προεπισκόπηση Απόδειξης</button>
+    </div>
+    <div class="text-xs muted mt-2">💡 Προεπισκόπηση με δείγμα δεδομένων και τρέχοντα στοιχεία επιχείρησης.</div>
+
+    <div class="form-row mt-3">
+      <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="s_autoPrint" ${s.autoPrint?'checked':''}> <span>Αυτόματη εκτύπωση απόδειξης μετά από πώληση</span>
+      </label>
     </div>
   </div>
 
@@ -27012,26 +27044,12 @@ function renderSettings(){
     </div>
     </div>
 
-    <div class="card"><div class="section-title">🖨️ Barcode / Εκτυπωτής</div>
-    <div class="form-row mt-3"><label class="form-label">Εκτυπωτής αποδείξεων</label><select class="form-select" id="s_printer" onchange="if(window.ZN_ESCPOS)ZN_ESCPOS.syncControls()">
-      ${(typeof ZN_ESCPOS!=='undefined' && ZN_ESCPOS.optionsHTML) ? ZN_ESCPOS.optionsHTML(s.printer) : `
-      <option ${s.printer==='browser'?'selected':''} value="browser">Browser Print (default)</option>
-      <option ${s.printer==='epson'?'selected':''} value="epson">EPSON TM-T20III</option>
-      <option ${s.printer==='star'?'selected':''} value="star">Star TSP143</option>`}
-    </select></div>
-    <div class="form-row" id="znEscposRow">
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-ghost" id="znEscposConnect" style="min-height:44px;display:none" onclick="ZN_ESCPOS.connectUI()"><i data-lucide="plug" size="16"></i> 🔌 Σύνδεση εκτυπωτή</button>
-        <button type="button" class="btn btn-ghost" id="znEscposTest" style="min-height:44px;display:none" onclick="ZN_ESCPOS.testPrintUI()"><i data-lucide="receipt" size="16"></i> 🧾 Δοκιμαστική εκτύπωση</button>
-      </div>
-      <div id="znEscposStatus" class="text-xs muted" style="margin-top:8px;word-break:break-word;min-width:0"></div>
-    </div>
-    <div class="form-row"><label class="form-label">Barcode scanner</label><select class="form-select" id="s_scanner">
+    <div class="card"><div class="section-title">📷 Barcode Scanner</div>
+    <div class="form-row mt-3"><label class="form-label">Τύπος barcode scanner</label><select class="form-select" id="s_scanner">
       <option ${s.scanner==='camera'?'selected':''} value="camera">Κάμερα κινητού/webcam</option>
       <option ${s.scanner==='usb'?'selected':''} value="usb">USB HID scanner</option>
       <option ${s.scanner==='bluetooth'?'selected':''} value="bluetooth">Bluetooth scanner</option>
     </select></div>
-    <div class="form-row"><label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" id="s_autoPrint" ${s.autoPrint?'checked':''}> <span>Αυτόματη εκτύπωση απόδειξης μετά από πώληση</span></label></div>
     </div>
 
     <div class="card" style="grid-column:1/-1">
@@ -27091,6 +27109,7 @@ function renderSettings(){
   document.getElementById('content').innerHTML=html+'<div style="height:100px"></div>';
   lucide.createIcons();
   if(typeof ZN_ESCPOS !== 'undefined' && ZN_ESCPOS.syncControls) ZN_ESCPOS.syncControls();
+  if(typeof _znPrintHubMethodChange === 'function') _znPrintHubMethodChange();
   if(typeof renderQuickCatsList === 'function') renderQuickCatsList();
   if(typeof renderCategoriesManager === 'function') renderCategoriesManager();
 
@@ -35651,8 +35670,8 @@ window.HELP_KB = {
       body: '# Πακέτα / Bundles\n\nΟι προσφορές τύπου «Πακέτο (Bundle)» επιτρέπουν έκπτωση όταν ο πελάτης αγοράζει έναν προκαθορισμένο συνδυασμό ειδών.\n\n## Πώς λειτουργεί\n\n1. Ορίζεις τουλάχιστον 2 είδη (rows) στο πακέτο.\n2. Κάθε row έχει: **Είδος** (Προϊόν ή Κατηγορία), **Επιλογή** (ποιο προϊόν/κατηγορία) και **Ποσότητα** (ελάχιστη στο καλάθι).\n3. Αν ΟΛΑ τα είδη υπάρχουν στο καλάθι με την ελάχιστη ποσότητα, η έκπτωση εφαρμόζεται.\n4. Η έκπτωση υπολογίζεται μόνο στα προϊόντα που ανήκουν στο πακέτο.\n\n## Τύπος έκπτωσης\n\n- **Ποσοστό (%)**: Έκπτωση % επί του συνόλου των ειδών του πακέτου στο καλάθι.\n- **Σταθερό ποσό (€)**: Αφαιρείται σταθερό ποσό ανεξάρτητα από τις τιμές.\n\n## Παράδειγμα\n\nΠακέτο: «1× Συσκευή + 1× Υγρό → −10%». Αν ο πελάτης έχει και τα δύο στο καλάθι, παίρνει 10% έκπτωση στη συνολική αξία τους.\n\n## Σημειώσεις\n\n- Τα bundles είναι προσθετικά: μπορούν να συνδυαστούν με άλλους κανόνες.\n- Η προτεραιότητα καθορίζει τη σειρά εφαρμογής.\n- Μπορείς να χρησιμοποιήσεις κατηγορία αντί για συγκεκριμένο προϊόν για πιο ευέλικτα πακέτα.' },
     { id: 'kb_blind_audit', category: '02-inventory', title: 'Τυφλή Απογραφή (Blind Audit)',
       body: '# Τυφλή Απογραφή (Blind Audit)\n\n> Καταμέτρηση φυσικού αποθέματος χωρίς να φαίνεται το θεωρητικό stock — για αντικειμενικά αποτελέσματα. **Admin only.**\n\n## Τι είναι\n\nΗ Τυφλή Απογραφή (**Blind Audit**) επιτρέπει σε υπαλλήλους να μετρούν φυσικά τα ράφια χωρίς να γνωρίζουν το αναμενόμενο απόθεμα — εξαλείφοντας τη διαστρέβλωση (confirmation bias).\n\n## AUDIT LOCK — Τι κλειδώνει και τι επιτρέπεται\n\nΌσο η απογραφή είναι ανοιχτή:\n\n- 🔴 **Κλειδώνουν** οι χειροκίνητες αλλαγές stock (manual adjustments, import CSV, bulk update)\n- ✅ **Επιτρέπονται** οι πωλήσεις POS (μειώνουν stock κανονικά — λαμβάνονται υπόψη στη συμφιλίωση)\n- ✅ **Επιτρέπονται** οι παραλαβές από προμηθευτές\n\nΚάθε αποκλεισμένη ενέργεια επιστρέφει σφάλμα **«AUDIT_LOCK»**.\n\n## Πώς ξεκινά\n\nΗ απογραφή **δεν ξεκινά αυτόματα** όταν ανοίξει η σελίδα. Απαιτείται ρητό πάτημα **«📦 Έναρξη Απογραφής»**.\n\n1. Sidebar → **📦 Τυφλή Απογραφή**\n2. Πάτα **«📦 Έναρξη Απογραφής»**\n3. Το σύστημα καλεί `create_audit_snapshot` → δημιουργείται εγγραφή `inventory_audits` με `status = open`\n4. Το AUDIT LOCK τίθεται αυτόματα\n\n## Ροή Καταμέτρησης\n\n1. Σκάναρε barcode (φορητός σαρωτής ή κάμερα)\n2. Σε ακριβές match: εμφανίζεται **μόνο** το όνομα (χωρίς θεωρητικό stock)\n3. Γράψε πόσα μέτρησες → Enter ή «Καταγραφή»\n4. Αποθηκεύεται τοπικά (IndexedDB) · συγχρονίζεται στο background\n5. Επαναλάμβανε για κάθε προϊόν\n\n## Πώς ακυρώνεται\n\nΑν ανοίχτηκε κατά λάθος ή χρειάζεται διακοπή:\n\n1. Πάτα **«🛑 Ακύρωση Απογραφής»** (banner στην κορυφή)\n2. Καλείται `cancel_audit({ p_audit: <id> })`\n3. Εγγραφή → `status = cancelled` · AUDIT LOCK αίρεται αμέσως\n4. Χειροκίνητες αλλαγές stock επιτρέπονται ξανά\n\n## Συμφιλίωση & Ολοκλήρωση\n\nΠάτα «🏁 Ολοκλήρωση & Συμφιλίωση»:\n\n- **Πραγματικό = Καταμετρημένο − Πωλήσεις κατά τη διάρκεια**\n- Αποκλίσεις > 50 μονάδες → δεύτερη μέτρηση από άλλον υπάλληλο\n- Manager εγκρίνει → `commit_audit` → νέο stock εγγράφεται · ιστορικό σφραγίζεται (immutable)\n\n## Offline & Multi-device\n\n- Counts αποθηκεύονται στο **IndexedDB** αν κοπεί το δίκτυο · synced αυτόματα όταν επιστρέψει\n- Πολλές συσκευές ταυτόχρονα: κάθε συσκευή «κλειδώνει» προσωρινά το ράφι που μετράει (Realtime Presence)\n\n## Συχνά Λάθη\n\n❌ **«AUDIT_LOCK κατά manual αλλαγή»** → Υπάρχει ανοιχτή απογραφή. Ολοκλήρωσε ή ακύρωσέ την.\n❌ **«Ξέχασα ανοιχτή απογραφή»** → Αποθήκη → Τυφλή Απογραφή → banner ⚠️ → 🛑 Ακύρωση.\n❌ **«Η σελίδα ξεκίνησε απογραφή μόνη της»** → Αδύνατο. Απαιτείται ρητό κουμπί Έναρξης.\n\n## Δες επίσης\n\n- [Διαχείριση Stock](02-inventory/stock-management.md)\n- [Κινήσεις Αποθέματος](02-inventory/stock-movements.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v47*\n' },
-    { id: 'kb_escpos_printer', category: '08-administration', title: 'Εκτυπωτής Αποδείξεων (WebUSB ESC/POS)',
-      body: '# 🖨️ Εκτυπωτής Αποδείξεων (WebUSB ESC/POS)\n\n> Πραγματική εκτύπωση απόδειξης + άνοιγμα συρταριού σε θερμικούς εκτυπωτές, με αυτόματο fallback σε **Browser Print**.\n\n## Υποστηριζόμενοι εκτυπωτές\n\nΕπίλεξε μοντέλο στις **Ρυθμίσεις → Hardware → Εκτυπωτής αποδείξεων**:\n\n- **Generic 80mm** / **Generic 58mm**\n- **EPSON**: TM-T20III, TM-T88VI/VII, TM-m30/m30II\n- **Xprinter**: XP-80 (80mm), XP-58 (58mm)\n- **Rongta**: RP80 (80mm), RP58 (58mm)\n- **Bixolon** SRP-350III (80mm)\n- **Citizen** CT-E351 (80mm)\n- **Star** TSP143 (80mm), TSP654II / mC-Print3 (80mm)\n\nΚάθε profile ορίζει πλάτος (58/80mm) και χαρακτήρες ανά γραμμή (32/48).\n\n## WebUSB — πού δουλεύει\n\nΤο WebUSB υποστηρίζεται **μόνο**:\n\n- ✅ **Chrome σε υπολογιστή** (Windows / Mac / Linux)\n- ✅ **Chrome σε Android**\n- ❌ **iPhone / iPad (Safari)** → δεν υπάρχει WebUSB · αυτόματο **Browser Print**\n\nΌταν το WebUSB δεν υποστηρίζεται, τα κουμπιά WebUSB κρύβονται και μένει το Browser Print.\n\n## Σύνδεση\n\n1. Διάλεξε μοντέλο από τη λίστα.\n2. Πάτα **«🔌 Σύνδεση εκτυπωτή»** — ο browser ζητά άδεια USB (πρώτη φορά). Το σύστημα δοκιμάζει πρώτα ήδη granted συσκευές (`getDevices`), αλλιώς ανοίγει επιλογέα (`requestDevice`).\n3. Πάτα **«🧾 Δοκιμαστική εκτύπωση»** — τυπώνει δοκιμαστική απόδειξη και ανοίγει το συρτάρι.\n4. Η κατάσταση δείχνει **«Συνδεδεμένος: &lt;όνομα&gt;»**.\n\n## Αυτόματη εκτύπωση μετά την πώληση\n\nΜε ενεργό το checkbox **«Αυτόματη εκτύπωση απόδειξης μετά από πώληση»** και επιλεγμένο εκτυπωτή ESC/POS:\n\n- Μετά το checkout → ESC/POS εκτύπωση + άνοιγμα συρταριού (σε μετρητά)\n- Αν ο εκτυπωτής είναι «Browser Print» ή το WebUSB δεν είναι διαθέσιμο → `window.print` (Browser Print)\n\n## Εξαίρεση: Star TSP143\n\nΟ **Star TSP143** χρησιμοποιεί **raster** πρωτόκολλο (όχι ESC/POS) — προς το παρόν πέφτει αυτόματα σε **Browser Print**. Οι **Star TSP654II / mC-Print3** δοκιμάζουν ESC/POS emulation (star_line).\n\n## ESC/POS εντολές\n\nΑρχικοποίηση `1B 40`, code page Ελληνικών PC737 `1B 74 0E`, κεντράρισμα `1B 61 01`, bold `1B 45 01`, διπλό μέγεθος `1D 21 11`, κοπή `1D 56 42 00`, άνοιγμα συρταριού `1B 70 00 19 FA`.\n\n## Fallback (μη διαπραγματεύσιμο)\n\nΚάθε σφάλμα WebUSB → ειδοποίηση + πτώση σε Browser Print. **Η πώληση δεν μπλοκάρεται ποτέ.**\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v47*\n' },
+    { id: 'kb_print_hub', category: '08-administration', title: 'Εκτυπωτής & Απόδειξη',
+      body: '# 🖨️ Εκτυπωτής & Απόδειξη\n\n> Ενοποιημένο hub εκτύπωσης: **Sunmi → WebUSB ESC/POS → Browser Print**. Αυτόματη ανίχνευση με δυνατότητα manual override. Η πώληση δεν μπλοκάρεται ποτέ.\n\n## Μέθοδοι εκτύπωσης\n\nΡυθμίσεις → **🖨️ Εκτυπωτής & Απόδειξη** → Μέθοδος εκτύπωσης:\n\n| Επιλογή | Συμπεριφορά |\n|---------|-------------|\n| 🔄 Αυτόματη | Προσπαθεί Sunmi, μετά WebUSB ESC/POS (αν autoPrint ON), μετά Browser Print |\n| 📟 Sunmi | Force Sunmi · fallback Browser Print |\n| 🖨️ WebUSB ESC/POS | Force WebUSB · fallback Browser Print |\n| 🌐 Browser Print | Πάντα Browser Print |\n\n## Sunmi V3 Mix-D\n\nΑνιχνεύεται αυτόματα σε Sunmi συσκευή. Εκτυπώνει 58mm thermal χωρίς ρύθμιση. Κουμπί **Test Sunmi** για δοκιμή, **Άνοιγμα Συρταριού** για cash drawer.\n\n## WebUSB ESC/POS\n\nΘερμικοί εκτυπωτές μέσω USB:\n\n- **Generic** 80mm / 58mm\n- **EPSON**: TM-T20III, TM-T88VI/VII, TM-m30/m30II\n- **Xprinter**: XP-80 (80mm), XP-58 (58mm)\n- **Rongta**: RP80 (80mm), RP58 (58mm)\n- **Bixolon** SRP-350III (80mm) · **Citizen** CT-E351 (80mm)\n- **Star** TSP143 (raster → Browser Print) · TSP654II / mC-Print3 (ESC/POS emulation)\n\n**Πού δουλεύει WebUSB:** Chrome desktop (Windows/Mac/Linux) + Chrome Android. Σε iPhone/iPad (Safari) → αυτόματο Browser Print.\n\n### Σύνδεση\n\n1. Επίλεξε μοντέλο από τη λίστα.\n2. Πάτα **«🔌 Σύνδεση εκτυπωτή»** — ο browser ζητά άδεια USB (μία φορά).\n3. Πάτα **«🧾 Δοκιμαστική εκτύπωση»** για δοκιμαστική απόδειξη + άνοιγμα συρταριού.\n4. Status → **«Συνδεδεμένος: &lt;όνομα&gt;»**.\n\n## Header / Footer απόδειξης\n\nΌλες οι μέθοδοι χρησιμοποιούν τα ίδια πεδία:\n- **Όνομα καταστήματος**, **ΑΦΜ**, **Διεύθυνση** (από το card Εκτυπωτής & Απόδειξη)\n- **Κείμενο footer** (π.χ. «Ευχαριστούμε για την προτίμηση!»)\n\n## Αυτόματη εκτύπωση μετά πώληση\n\nCheckbox **«Αυτόματη εκτύπωση απόδειξης μετά από πώληση»**:\n- ON: εκτυπώνει αυτόματα (με τη ρυθμισμένη μέθοδο)\n- OFF: εμφανίζει «Θέλεις να κατεβάσεις απόδειξη σε PDF;» (Browser Print)\n\nΣε πληρωμή **μετρητά** → ανοίγει αυτόματα το συρτάρι (αν υποστηρίζεται).\n\n## Προεπισκόπηση\n\nΠάτα **«👁️ Προεπισκόπηση Απόδειξης»** για δείγμα με τρέχοντα στοιχεία επιχείρησης.\n\n## Fallback (μη διαπραγματεύσιμο)\n\nΚάθε σφάλμα σε οποιαδήποτε μέθοδο → ειδοποίηση + αυτόματη πτώση στην επόμενη. **Η πώληση δεν μπλοκάρεται ποτέ.**\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v48*\n' },
     { id: 'kb_promo_engine', category: '01-pos', title: 'Μηχανή Σύνθετων Προσφορών',
       body: '# Μηχανή Σύνθετων Προσφορών\n\nΟι κανόνες προσφορών ζουν στη βάση και διαβάζονται από το ταμείο. Σε κάθε αλλαγή του καλαθιού υπολογίζεται live η βέλτιστη έκπτωση — τοπικά, χωρίς καθυστέρηση.\n\n## Τύποι κανόνων\n\n- **% επί ποσότητας**: Για συγκεκριμένο προϊόν αν η ποσότητα ≥ ελάχιστο.\n- **Combo κατηγορίας**: Για κατηγορία αν η ποσότητα ≥ ελάχιστο.\n- **Έκπτωση n-οστού**: Το φθηνότερο τεμάχιο ανά n παίρνει έκπτωση (υπέρ πελάτη).\n- **Λήξη / Αδρανές stock**: Αυτόματη έκπτωση σε είδη κοντά στη λήξη ή χωρίς πωλήσεις.\n- **Πακέτο (Bundle)**: Συνδυασμός ειδών — αν όλα υπάρχουν στο καλάθι, εφαρμόζεται έκπτωση.\n\n## Πολιτική συνδυασμού\n\nΡυθμίζεται στις **Ρυθμίσεις → Πολιτική Προσφορών**:\n\n- **Μόνο η καλύτερη (default)**: Από όλους τους κανόνες που ενεργοποιούνται, εφαρμόζεται μόνο αυτός με τον μεγαλύτερο αριθμό Προτεραιότητας (μεγαλύτερος = υψηλότερη). Σε ισοπαλία, νικά αυτός με το μεγαλύτερο ποσό έκπτωσης.\n- **Συνδυασμός (stack)**: Όλοι οι κανόνες αθροίζονται.\n\n## Cap ασφαλείας\n\nΗ συνολική έκπτωση δεν ξεπερνά ποτέ την αξία του καλαθιού — το τελικό σύνολο είναι πάντα ≥ 0. Αν η έκπτωση θα ξεπερνούσε, κλιμακώνεται αναλογικά ώστε να αθροίζει ακριβώς στην αξία του καλαθιού.' },
     { id: 'kb_anomaly', category: '11-security', title: 'Ανίχνευση Ανωμαλιών (Anti-fraud)',
