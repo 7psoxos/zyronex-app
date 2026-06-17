@@ -3127,6 +3127,29 @@ var HELP_CONTENT = {
     }
   },
 
+  'stock-movements': {
+    el: {
+      title: 'Οδηγός: Κινήσεις Αποθέματος',
+      sections: [
+        {icon:'📦', title:'Τι είναι', body:`<p>Read-only προβολή που δείχνει το ιστορικό κάθε μεταβολής αποθέματος (ροή κινήσεων), με τις <b>νεότερες πρώτα</b>. Δεν αλλάζει τίποτα — μόνο εμφανίζει.</p>`},
+        {icon:'🧭', title:'Πού τη βρίσκεις', body:`<p>Δύο σημεία:</p><ul><li><b>Αποθήκη → Εργαλεία → 📦 Κινήσεις Αποθέματος</b> — global ροή για όλα τα προϊόντα.</li><li>Στο modal επεξεργασίας προϊόντος, κουμπί <b>📦 Κινήσεις</b> — bottom-sheet με τις κινήσεις του συγκεκριμένου προϊόντος.</li></ul>`},
+        {icon:'🏷️', title:'Τι δείχνει κάθε κάρτα', body:`<p>Για κάθε κίνηση: ημερομηνία/ώρα, <b>badge αιτίας</b>, η μεταβολή <b>±delta</b> (πράσινο για θετικό, κόκκινο για αρνητικό) και το <b>υπόλοιπο μετά</b>.</p>`},
+        {icon:'🔖', title:'Αιτίες', body:`<ul><li><b>Πώληση</b> (sale)</li><li><b>Παραλαβή</b> (purchase)</li><li><b>Διόρθωση</b> (adjustment)</li><li><b>Φθορά</b> (damage)</li><li><b>Επιστροφή</b> (return)</li><li><b>Απογραφή</b> (audit)</li><li><b>Αρχικό</b> (init)</li><li><b>Μεταφορά</b> (transfer)</li></ul>`},
+        {icon:'🔍', title:'Αναζήτηση', body:`<p>Στη σελίδα (global feed) το πεδίο αναζήτησης φιλτράρει τις κινήσεις ανά όνομα προϊόντος, άμεσα (client-side).</p>`}
+      ]
+    },
+    en: {
+      title: 'Guide: Stock Movements',
+      sections: [
+        {icon:'📦', title:'What it is', body:`<p>A read-only view showing the history of every stock change (movement feed), <b>newest first</b>. It changes nothing — it only displays.</p>`},
+        {icon:'🧭', title:'Where to find it', body:`<p>Two places:</p><ul><li><b>Inventory → Tools → 📦 Stock Movements</b> — global feed for all products.</li><li>In the product edit modal, a <b>📦 Movements</b> button — a bottom-sheet with that product's movements.</li></ul>`},
+        {icon:'🏷️', title:'What each card shows', body:`<p>Per movement: date/time, a <b>reason badge</b>, the <b>±delta</b> change (green for positive, red for negative) and the <b>stock after</b>.</p>`},
+        {icon:'🔖', title:'Reasons', body:`<ul><li><b>Sale</b></li><li><b>Purchase</b></li><li><b>Adjustment</b></li><li><b>Damage</b></li><li><b>Return</b></li><li><b>Audit</b></li><li><b>Init</b></li><li><b>Transfer</b></li></ul>`},
+        {icon:'🔍', title:'Search', body:`<p>On the page (global feed) the search box filters movements by product name instantly (client-side).</p>`}
+      ]
+    }
+  },
+
   customers: {
     el: {
       title: 'Οδηγός: Πελάτες',
@@ -16753,6 +16776,7 @@ function _showPageInternal(p){
     'shop-changelog':renderShopChangelog,
     'age-log':renderAgeVerifyLog,
     'dead-stock':renderDeadStockRecovery,
+    'stock-movements':renderStockMovements,
     'expense-calendar':renderExpenseCalendar,
     'compliance-calendar':renderComplianceCalendar,
     breakeven:renderBreakeven,
@@ -35148,7 +35172,8 @@ window.HELP_KB = {
 "02-inventory/stock-management.md",
 "02-inventory/tpd-compliance.md",
 "02-inventory/waste-deletions.md",
-"02-inventory/kb_burn_rate_reorder.md"
+"02-inventory/kb_burn_rate_reorder.md",
+"02-inventory/stock-movements.md"
 ]
 },
 {
@@ -35289,6 +35314,7 @@ window.HELP_KB = {
 }
 ],
 "docs": {
+"02-inventory/stock-movements.md": "# 📦 Κινήσεις Αποθέματος\n\n> **Read-only** προβολή του ιστορικού μεταβολών αποθέματος. Δεν αλλάζει τίποτα — μόνο εμφανίζει. Δεδομένα από το RPC `zn_stock_history`.\n\n## Πού τη βρίσκεις\n\n- **Αποθήκη → Εργαλεία → 📦 Κινήσεις Αποθέματος** — global ροή για όλα τα προϊόντα (νεότερες πρώτα), με πεδίο αναζήτησης ανά προϊόν.\n- **Modal επεξεργασίας προϊόντος → κουμπί 📦 Κινήσεις** — bottom-sheet με τις κινήσεις του συγκεκριμένου προϊόντος.\n\n## Τι δείχνει κάθε κάρτα\n\n- **Ημερομηνία/ώρα** της κίνησης\n- **Badge αιτίας** (χρωματιστό)\n- **±delta** — η μεταβολή (πράσινο = θετικό, κόκκινο = αρνητικό)\n- **Υπόλοιπο μετά** (`stock_after`)\n\n## Αιτίες\n\n| Reason | Ετικέτα |\n|---|---|\n| sale | Πώληση |\n| purchase | Παραλαβή |\n| adjustment | Διόρθωση |\n| damage | Φθορά |\n| return | Επιστροφή |\n| audit | Απογραφή |\n| init | Αρχικό |\n| transfer | Μεταφορά |\n\nΆγνωστη τιμή εμφανίζεται αυτούσια.\n\n## Άδειο state\n\nΌταν δεν υπάρχουν κινήσεις: «Καμία κίνηση ακόμη».\n\n## Δες επίσης\n\n- [Διαχείριση Stock](stock-management.md)\n- [Παρτίδες & Λήξη](batches-expiry.md)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
 "02-inventory/kb_burn_rate_reorder.md": "# 🛒 Έξυπνη Παραγγελία (Burn Rate)\n\nΤο εργαλείο τρέχει μια συνάρτηση στον server (zn_burn_rate_reorder) που μετρά πόσες μονάδες κάθε προϊόντος πουλήθηκαν τις τελευταίες 30 ημέρες, υπολογίζει τον μέσο ημερήσιο ρυθμό και το πόσες ημέρες απόθεμα απομένει. Ένα προϊόν σημειώνεται για παραγγελία όταν το απόθεμα πέσει κάτω από το ελάχιστο ή κάτω από την κάλυψη του χρόνου παράδοσης. Η προτεινόμενη ποσότητα καλύπτει 30+7 ημέρες, προσαρμοσμένη στην εποχική τάση. Τα δεδομένα μένουν στον server· ο browser δέχεται μόνο την τελική λίστα.\n\n## Ενεργοποίηση\n\nΑπαιτεί plugin **reorder_assistant** ενεργό από το Plugin Market. Το κουμπί 🛒 «Παραγγελία ✨» εμφανίζεται στα **Εργαλεία** της Αποθήκης.\n\n## Αποτέλεσμα\n\nΛίστα παραγγελίας ανά προμηθευτή, με κουμπί «Αντιγραφή παραγγελίας» για αποστολή.\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
 "11-security/kb_rls_hardening.md": "# 🛡️ Απομόνωση Δεδομένων (RLS) & Ρόλοι\n\nΚάθε κατάστημα βλέπει μόνο τα δικά του δεδομένα μέσω Row-Level Security. Οι πολιτικές κλείνουν τρία κενά: (1) διαρροή συνδρομών άλλου καταστήματος, (2) πρόσβαση σε αρχεία Vault εκτός καταστήματος/ρόλου, (3) πείραγμα βαρδιών άλλων υπαλλήλων.\n\n## Ρόλοι\n\nΟ ρόλος «Ταμίας» βλέπει και αλλάζει μόνο τις δικές του βάρδιες· δημιουργία/διαγραφή βαρδιών και διαγραφή αρχείων Vault γίνονται μόνο από managers. Οι έλεγχοι βασίζονται στα στοιχεία σύνδεσης (shop_id, user_id, role).\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
 "08-administration/kb_lazy_loading.md": "# ⚡ On-demand Φόρτωση Εργαλείων\n\nΓια να ανοίγει γρήγορα το Ταμείο, τα πιο βαριά εργαλεία δεν φορτώνουν στην αρχή. Φορτώνουν την πρώτη φορά που τα ανοίγεις και μετά μένουν έτοιμα. Αν κάποια φόρτωση αποτύχει (π.χ. κακό δίκτυο), εμφανίζεται κουμπί «Επανάληψη». Η πλοήγηση και το κουμπί «Πίσω» δεν επηρεάζονται.\n\n## Ποια εργαλεία φορτώνουν on-demand\n\n- 👥 Customer Intelligence\n- 📧 Καμπάνιες (Email Marketing)\n- 🎨 Site Builder\n- ✨ Pulse (Creative Studio)\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026*\n",
@@ -35379,6 +35405,7 @@ window.HELP_KB = {
 "titles": {
 "13-sitebuilder/eshop-builder.md": "🎨 Site Builder \u0026 Eshop",
 "07-ai-smart/plugin-market.md": "🧩 Plugin Market — Πρόσθετα",
+"02-inventory/stock-movements.md": "📦 Κινήσεις Αποθέματος",
 "07-ai-smart/tax-agent-nikolas.md": "👨‍💼 Λογιστήριο AI — Νικόλας",
 "00-getting-started/installation.md": "🛠️ Εγκατάσταση & Setup",
 "00-getting-started/first-login.md": "🔐 Πρώτη Είσοδος",
@@ -35495,6 +35522,7 @@ window.HELP_KB = {
 "08-administration/permissions.md__en": "# 🔐 Permissions\n\n> Control exactly what each employee can see and do.\n\n## How Permissions Work\n\n- **Admin:** full access to everything (cannot be restricted)\n- **Cashier:** preset permissions for POS role\n- **Warehouse:** preset permissions for inventory role  \n- **Employee:** fully custom — you select each permission\n\n## Custom Employee Permissions\n\nSystem → Users → user → Edit → Permissions:\n\nCheck/uncheck each module:\n- POS / Sales\n- Inventory\n- Customers\n- Suppliers\n- Reports (view only)\n- Shifts (own shifts only)\n\n## Permission Levels\n\n| Level | What they can do |\n|---|---|\n| 👁️ View | Read-only access |\n| ✏️ Edit | Can create/modify |\n| 🗑️ Delete | Can delete (rare) |\n\n## Security Best Practices\n\n✅ Give minimum permissions needed for role\n✅ Review permissions when employees change roles\n✅ Admin PIN should be changed regularly\n✅ Deactivate immediately when employee leaves\n\n---\n*Last updated: May 2026 — v45*\n",
 },
 "perms": {
+"02-inventory/stock-movements.md": "inventory",
 "13-sitebuilder/eshop-builder.md": "*",
 "07-ai-smart/plugin-market.md": "plugins",
 "07-ai-smart/tax-agent-nikolas.md": "ai",

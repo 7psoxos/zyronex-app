@@ -342,6 +342,7 @@ var PAGE_PERMS = {
   batches: '*',     // Μόνο Διαχειριστής (παρτίδες)
   competitors: '*', // Μόνο Διαχειριστής (ανταγωνισμός)
   hardware: 'inventory',
+  'stock-movements': 'inventory', // 📦 Κινήσεις Αποθέματος (read-only)
   oracle: '*',      // The Oracle — μόνο Διαχειριστής
   brain: '*',       // The Brain — μόνο Διαχειριστής
   'seasonal-intel': '*', // Εποχική Νοημοσύνη — μόνο Διαχειριστής
@@ -11751,7 +11752,7 @@ function renderInventory(preserveSelection){
   <!-- Collapsible Tools Card -->
   <div class="inv-tools-card ${toolsOpen?'open':''}" id="invToolsCard" style="margin-bottom:14px;background:var(--bg-1);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:all 0.25s">
     <button class="inv-tools-toggle" onclick="toggleInventoryTools()" style="width:100%;background:transparent;border:none;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:var(--text-0);font-family:inherit;font-weight:700;font-size:14px;-webkit-tap-highlight-color:transparent">
-      <span style="display:inline-flex;align-items:center;gap:8px"><i data-lucide="wrench" size="16"></i> Εργαλεία <span class="text-xs muted" style="font-weight:500">(${10} ενέργειες)</span></span>
+      <span style="display:inline-flex;align-items:center;gap:8px"><i data-lucide="wrench" size="16"></i> Εργαλεία <span class="text-xs muted" style="font-weight:500">(${11} ενέργειες)</span></span>
       <i data-lucide="chevron-down" size="18" id="invToolsChevron" style="transition:transform 0.25s;transform:rotate(${toolsOpen?180:0}deg)"></i>
     </button>
     <div class="inv-tools-body" id="invToolsBody" style="${toolsOpen?'':'display:none'};padding:0 14px 14px;border-top:1px solid var(--border)">
@@ -11788,6 +11789,11 @@ function renderInventory(preserveSelection){
         <button class="inv-tool-btn ai" onclick="autoDetectBaseTypes()" title="Ανίχνευση VG/PG βάσεων από ονόματα">
           <i data-lucide="droplet" size="20"></i>
           <span>ZyroNex Βάσεις VG/PG ✨</span>
+        </button>
+        <!-- Stock movements (read-only) -->
+        <button class="inv-tool-btn" onclick="showPage('stock-movements')" title="Read-only ροή κινήσεων αποθέματος όλων των προϊόντων">
+          <i data-lucide="history" size="20"></i>
+          <span>📦 Κινήσεις Αποθέματος</span>
         </button>
         <!-- Import group -->
         <button class="inv-tool-btn warn" onclick="openPriceListImporter()" title="Import τιμοκαταλόγων από PDF/Excel">
@@ -12437,6 +12443,230 @@ function _invObserveSentinel(){
   } catch(_){}
 }
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║ 📦 ΚΙΝΗΣΕΙΣ ΑΠΟΘΕΜΑΤΟΣ (read-only) — RPC zn_stock_history          ║
+// ║ Καθαρά additive· καμία αλλαγή σε υπάρχουσα λογική αποθέματος.      ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// Ετικέτες αιτίας (GR badge) + χρώμα. Άγνωστη τιμή → δείξε αυτούσια.
+function _znStockReasonBadge(reason){
+  var map = {
+    sale:       {label:'Πώληση',    color:'#4aa3ff'},
+    purchase:   {label:'Παραλαβή',  color:'#22c55e'},
+    adjustment: {label:'Διόρθωση',  color:'#eab308'},
+    damage:     {label:'Φθορά',     color:'#ef4444'},
+    'return':   {label:'Επιστροφή', color:'#9d4edd'},
+    audit:      {label:'Απογραφή',  color:'#14b8a6'},
+    init:       {label:'Αρχικό',    color:'#64748b'},
+    transfer:   {label:'Μεταφορά',  color:'#f97316'}
+  };
+  var key = (reason === null || reason === undefined) ? '' : String(reason).trim().toLowerCase();
+  var m = map[key];
+  if(m) return m;
+  return {label: (reason === null || reason === undefined || reason === '') ? '—' : String(reason), color:'var(--text-2)'};
+}
+
+// Ημερομηνία/ώρα el-GR από διάφορα πιθανά πεδία timestamp.
+function _znStockFmtDateTime(val){
+  if(!val) return '';
+  try{
+    var d = new Date(val);
+    if(isNaN(d.getTime())) return String(val);
+    return d.toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' +
+           d.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'});
+  }catch(_){ return String(val); }
+}
+
+// Ανάγνωση πεδίων με ανοχή σε διαφορετικά ονόματα στηλών του RPC.
+function _znStockDelta(row){
+  if(row.delta !== undefined && row.delta !== null) return Number(row.delta);
+  if(row.qty_change !== undefined && row.qty_change !== null) return Number(row.qty_change);
+  if(row.change !== undefined && row.change !== null) return Number(row.change);
+  if(row.quantity !== undefined && row.quantity !== null) return Number(row.quantity);
+  return null;
+}
+function _znStockAfter(row){
+  if(row.stock_after !== undefined && row.stock_after !== null) return Number(row.stock_after);
+  if(row.balance_after !== undefined && row.balance_after !== null) return Number(row.balance_after);
+  if(row.stock !== undefined && row.stock !== null) return Number(row.stock);
+  return null;
+}
+function _znStockWhen(row){
+  return row.created_at || row.moved_at || row.occurred_at || row.ts || row.date || row.timestamp || '';
+}
+
+// HTML μιας κάρτας κίνησης (stacked card, mobile-first). showProduct=true στο global feed.
+function _znStockMoveCardHTML(row, showProduct){
+  var badge = _znStockReasonBadge(row.reason);
+  var dt = _znStockFmtDateTime(_znStockWhen(row));
+  var delta = _znStockDelta(row);
+  var after = _znStockAfter(row);
+  var deltaTxt, deltaColor;
+  if(delta === null || isNaN(delta)){ deltaTxt = '—'; deltaColor = 'var(--text-2)'; }
+  else if(delta > 0){ deltaTxt = '+' + delta; deltaColor = '#22c55e'; }
+  else if(delta < 0){ deltaTxt = String(delta); deltaColor = '#ef4444'; }
+  else { deltaTxt = '0'; deltaColor = 'var(--text-2)'; }
+  var pname = row.product_name || row.name || '';
+  return '<div class="card" style="padding:13px 15px;margin-bottom:9px;border-left:3px solid ' + badge.color + ';min-width:0;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">' +
+        '<span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:6px;background:' + badge.color + ';color:#fff;white-space:nowrap">' + escapeHtml(badge.label) + '</span>' +
+        (showProduct && pname ? '<span style="font-weight:700;font-size:14px;word-break:break-word;min-width:0;flex:1">' + escapeHtml(pname) + '</span>' : '<span style="flex:1;min-width:0"></span>') +
+        '<span style="font-size:17px;font-weight:800;color:' + deltaColor + ';white-space:nowrap">' + deltaTxt + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-2)">' +
+        '<span style="display:inline-flex;align-items:center;gap:5px;word-break:break-word;min-width:0"><i data-lucide="clock" size="12"></i> ' + escapeHtml(dt) + '</span>' +
+        (after !== null && !isNaN(after) ? '<span style="white-space:nowrap">Υπόλοιπο μετά: <b style="color:var(--text-0)">' + after + '</b></span>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function _znStockEmptyHTML(){
+  return '<div class="card" style="padding:32px;text-align:center;color:var(--text-2)">' +
+    '<div style="font-size:34px;margin-bottom:8px">📦</div>Καμία κίνηση ακόμη.</div>';
+}
+
+// ── Bottom-sheet: κινήσεις ΕΝΟΣ προϊόντος (από το modal επεξεργασίας) ──
+function _znCloseStockSheet(){
+  if(window.ZNNav && typeof window.ZNNav.remove === 'function') window.ZNNav.remove('znStockSheet');
+  var el = document.getElementById('znStockSheet');
+  if(!el) return;
+  var sheet = el.querySelector('.zn-sheet');
+  if(sheet){ sheet.style.transform = 'translateY(100%)'; }
+  el.style.opacity = '0';
+  setTimeout(function(){ if(el.parentNode) el.remove(); }, 220);
+}
+
+async function openProductStockHistory(productId){
+  if(productId) productId = +productId || productId;
+  var prod = (typeof PRODUCTS !== 'undefined' && PRODUCTS) ? PRODUCTS.find(function(x){ return x.id === productId; }) : null;
+  var title = prod && prod.name ? prod.name : 'Προϊόν';
+
+  // Καθάρισε τυχόν προηγούμενο sheet
+  var prev = document.getElementById('znStockSheet');
+  if(prev && prev.parentNode) prev.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'znStockSheet';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,0.5);display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity 0.2s';
+  overlay.innerHTML =
+    '<div class="zn-sheet" style="width:100%;max-width:640px;max-height:85dvh;background:var(--bg-1);border:1px solid var(--border);border-bottom:none;border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden;transform:translateY(100%);transition:transform 0.25s cubic-bezier(0.22,1,0.36,1);padding-bottom:env(safe-area-inset-bottom)">' +
+      '<div style="flex:0 0 auto;padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">' +
+        '<div style="width:36px;height:5px;border-radius:99px;background:var(--border);position:absolute;left:50%;transform:translateX(-50%);top:7px"></div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:800;font-size:16px;word-break:break-word;min-width:0">📦 Κινήσεις Αποθέματος</div>' +
+          '<div style="font-size:12px;color:var(--text-2);word-break:break-word;min-width:0">' + escapeHtml(title) + '</div>' +
+        '</div>' +
+        '<button onclick="_znCloseStockSheet()" aria-label="Κλείσιμο" style="flex:0 0 auto;width:44px;height:44px;border:none;background:transparent;color:var(--text-1);cursor:pointer;border-radius:10px;display:flex;align-items:center;justify-content:center"><i data-lucide="x" size="20"></i></button>' +
+      '</div>' +
+      '<div id="znStockSheetBody" style="flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:14px 16px;min-height:0">' +
+        '<div class="muted" style="padding:40px;text-align:center"><div style="width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Φόρτωση...</div>' +
+      '</div>' +
+    '</div>';
+  overlay.addEventListener('click', function(e){ if(e.target === overlay) _znCloseStockSheet(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('.zn-sheet').style.setProperty('-webkit-overflow-scrolling','touch');
+
+  // Register στο ZNNav → back-button / swipe-back σέβεται το history
+  if(window.ZNNav && typeof window.ZNNav.push === 'function') window.ZNNav.push('znStockSheet', _znCloseStockSheet);
+
+  // Slide-up + icons
+  requestAnimationFrame(function(){
+    overlay.style.opacity = '1';
+    var s = overlay.querySelector('.zn-sheet');
+    if(s) s.style.transform = 'translateY(0)';
+    if(typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons({el: overlay});
+  });
+
+  var body = document.getElementById('znStockSheetBody');
+  try{
+    if(typeof sb === 'undefined' || !sb.rpc) throw new Error('Μη διαθέσιμη σύνδεση');
+    var res = await sb.rpc('zn_stock_history', { p_product_id: productId, p_limit: 100 });
+    if(!document.getElementById('znStockSheet')) return; // έκλεισε στο μεταξύ
+    if(res && res.error) throw new Error(res.error.message || 'RPC error');
+    var rows = (res && res.data) ? res.data : [];
+    if(!Array.isArray(rows)){ try{ rows = JSON.parse(rows); }catch(_){ rows = []; } }
+    if(!rows.length){ body.innerHTML = _znStockEmptyHTML(); return; }
+    body.innerHTML = rows.map(function(r){ return _znStockMoveCardHTML(r, false); }).join('');
+    if(typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons({el: body});
+  }catch(e){
+    if(!document.getElementById('znStockSheet')) return;
+    body.innerHTML = '<div class="card" style="padding:24px;text-align:center;color:var(--text-2)">Δεν ήταν δυνατή η φόρτωση: ' + escapeHtml(e.message || String(e)) + '</div>';
+  }
+}
+
+// ── Σελίδα: global feed κινήσεων όλων των προϊόντων (Αποθήκη → Εργαλεία) ──
+var _ZN_STOCK_MOVES = [];
+var _ZN_STOCK_MOVES_SEARCH = '';
+
+async function renderStockMovements(){
+  var content = document.getElementById('content');
+  if(!content) return;
+  content.innerHTML = '<div class="page-head"><div class="page-title">📦 Κινήσεις Αποθέματος</div></div>' +
+    '<div class="muted" style="padding:40px;text-align:center"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Φόρτωση...</div>';
+  try{
+    if(typeof sb === 'undefined' || !sb.rpc) throw new Error('Μη διαθέσιμη σύνδεση');
+    var res = await sb.rpc('zn_stock_history', { p_product_id: null, p_limit: 100 });
+    if(window.CURRENT_PAGE_ID && window.CURRENT_PAGE_ID !== 'stock-movements') return; // ο χρήστης έφυγε
+    if(res && res.error) throw new Error(res.error.message || 'RPC error');
+    var rows = (res && res.data) ? res.data : [];
+    if(!Array.isArray(rows)){ try{ rows = JSON.parse(rows); }catch(_){ rows = []; } }
+    _ZN_STOCK_MOVES = rows;
+  }catch(e){
+    _ZN_STOCK_MOVES = [];
+    content.innerHTML = '<div class="page-head"><div class="page-title">📦 Κινήσεις Αποθέματος</div></div>' +
+      '<div class="card" style="padding:24px;text-align:center;color:var(--text-2)">Δεν ήταν δυνατή η φόρτωση: ' + escapeHtml(e.message || String(e)) + '</div>';
+    return;
+  }
+  _znRenderStockMovesPage();
+}
+
+function _znRenderStockMovesPage(){
+  var content = document.getElementById('content');
+  if(!content) return;
+  content.innerHTML =
+    '<div class="page-head">' +
+      '<div>' +
+        '<div class="page-title">📦 Κινήσεις Αποθέματος</div>' +
+        '<div class="page-sub">' + _ZN_STOCK_MOVES.length + ' πρόσφατες κινήσεις · νεότερες πρώτα</div>' +
+      '</div>' +
+      '<div class="flex gap-2" style="flex-wrap:wrap">' +
+        '<button class="btn btn-ghost" style="min-height:44px" onclick="renderStockMovements()"><i data-lucide="refresh-cw" size="16"></i> Ανανέωση</button>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px;position:relative">' +
+      '<input id="znStockSearch" type="search" inputmode="search" placeholder="🔍 Αναζήτηση ανά προϊόν..." value="' + escapeHtml(_ZN_STOCK_MOVES_SEARCH) + '" oninput="znStockMovesSearch(this.value)" autocomplete="off" ' +
+        'style="width:100%;font-size:16px;min-height:44px;padding:0 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-1);color:var(--text-0);box-sizing:border-box;-webkit-appearance:none">' +
+    '</div>' +
+    '<div id="znStockMovesList"></div>';
+  _znRenderStockMovesList();
+}
+
+function _znRenderStockMovesList(){
+  var listEl = document.getElementById('znStockMovesList');
+  if(!listEl) return;
+  var q = (_ZN_STOCK_MOVES_SEARCH || '').trim().toLowerCase();
+  var rows = _ZN_STOCK_MOVES;
+  if(q){
+    rows = rows.filter(function(r){
+      var n = (r.product_name || r.name || '').toLowerCase();
+      return n.indexOf(q) !== -1;
+    });
+  }
+  if(!rows.length){
+    listEl.innerHTML = q
+      ? '<div class="card" style="padding:32px;text-align:center;color:var(--text-2)"><div style="font-size:34px;margin-bottom:8px">🔍</div>Κανένα αποτέλεσμα για «' + escapeHtml(_ZN_STOCK_MOVES_SEARCH) + '».</div>'
+      : _znStockEmptyHTML();
+  } else {
+    listEl.innerHTML = rows.map(function(r){ return _znStockMoveCardHTML(r, true); }).join('');
+  }
+  if(typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons({el: listEl});
+}
+
+function znStockMovesSearch(val){
+  _ZN_STOCK_MOVES_SEARCH = val || '';
+  _znRenderStockMovesList();
+}
+
 function openProductModal(id){
   if(id) id = +id || id;  // string→number για περιπτώσεις που έρχεται ως string
   const p=(id?PRODUCTS.find(x=>x.id===id):null)||{name:'',barcode:'',category:'Υγρά Αναπλήρωσης',price:0,cost:0,stock:0,minStock:10,supplier:null,altSupplier:null,expiry:'',hasNicotine:false,volumeMl:null,image_url:null,imageUrl:null};
@@ -12676,6 +12906,7 @@ function openProductModal(id){
     <div class="flex gap-2 mt-4" style="flex-wrap:wrap">
       <button class="btn btn-primary btn-lg" onclick="saveProduct('${id||''}')"><i data-lucide="save" size="16"></i> Αποθήκευση</button>
       <button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>
+      ${id?`<button class="btn btn-ghost" onclick="openProductStockHistory(${id})"><i data-lucide="history" size="16"></i> 📦 Κινήσεις</button>`:''}
       ${id && p.barcode?`<button class="btn btn-ghost" onclick="showProductQR(${id})"><i data-lucide="qr-code" size="16"></i> QR Code</button>`:''}
       ${id?'<button class="btn btn-danger" style="margin-left:auto" onclick="deleteProduct('+id+')"><i data-lucide="trash-2" size="16"></i> Διαγραφή</button>':''}
     </div>
