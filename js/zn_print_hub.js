@@ -127,6 +127,7 @@ var _ZN_BRAND_SVG =
 /* Default μορφή ανά τύπο: απόδειξη → 80mm, τιμολόγιο/δελτίο → A4. */
 function _znDefaultFmt(R) {
   if (R && (R.kind === 'document')) { return 'A4'; }
+  if (R && (R.kind === 'rma')) { return '80'; }
   var s = {};
   try { s = JSON.parse(localStorage.getItem('katastimaSettings') || '{}'); } catch (e) {}
   return (s.receiptFormat === '58' || s.receiptFormat === 'A4') ? s.receiptFormat : '80';
@@ -293,10 +294,41 @@ function _znBuildPrintDoc(R) {
 '      (R.footerText?("<div class=\\"foot\\">"+esc(R.footerText)+"</div>"):"")+\n' +
 '      znFooter()+"</div>";\n' +
 '  }\n' +
+'  function rmaBarcode(){ return R.barcodeUrl ? ("<div style=\\"text-align:center;margin:8px 0\\"><img src=\\""+R.barcodeUrl+"\\" alt=\\"barcode\\" style=\\"max-width:90%;height:auto\\"><div style=\\"font-family:monospace;font-weight:bold;font-size:1.05em;letter-spacing:1px\\">"+esc(R.number)+"</div></div>") : ("<div style=\\"text-align:center;font-family:monospace;font-weight:bold;font-size:1.2em;margin:8px 0\\">"+esc(R.number)+"</div>"); }\n' +
+'  function rmaRow(k,v){ return v ? ("<div class=\\"row\\"><span>"+k+":</span><span>"+esc(v)+"</span></div>") : ""; }\n' +
+'  function renderRmaThermal(w){\n' +
+'    var logo = R.logo ? "<div class=\\"logo\\"><img src=\\""+R.logo+"\\" alt=\\"logo\\"></div>" : "";\n' +
+'    return "<div class=\\"thermal "+(w==="58"?"w58":"w80")+"\\">"+logo+\n' +
+'      "<div class=\\"shop\\">"+esc(R.shopName||"ZyroNex")+"</div>"+\n' +
+'      "<div class=\\"title\\">"+esc(R.title)+"</div>"+ rmaBarcode()+\n' +
+'      rmaRow("Ημ/νία", R.date)+ rmaRow("Προϊόν", R.product)+ rmaRow("Serial", R.serial)+\n' +
+'      ((R.client&&R.client.name)?rmaRow("Πελάτης", R.client.name):"")+\n' +
+'      ((R.client&&R.client.phone)?rmaRow("Τηλ", R.client.phone):"")+\n' +
+'      rmaRow("Κατάσταση", R.statusLabel)+ rmaRow("Εγγύηση", R.warrantyText)+\n' +
+'      (R.fault?("<div class=\\"dash\\"></div><div style=\\"font-size:.92em\\"><b>Βλάβη:</b> "+esc(R.fault)+"</div>"):"")+\n' +
+'      znFooter()+"</div>";\n' +
+'  }\n' +
+'  function renderRmaA4(){\n' +
+'    var logo = R.logo ? "<img src=\\""+R.logo+"\\" alt=\\"logo\\">" : "";\n' +
+'    function cell(k,v){ return v ? ("<div style=\\"margin-bottom:8px\\"><div style=\\"font-size:9.5pt;color:#888;text-transform:uppercase;letter-spacing:.6px\\">"+k+"</div><div style=\\"font-size:12pt;font-weight:600\\">"+esc(v)+"</div></div>") : ""; }\n' +
+'    return "<div class=\\"a4\\"><div class=\\"head\\">"+logo+\n' +
+'      "<div><div class=\\"nm\\">"+esc(R.shopName||"ZyroNex")+"</div><div class=\\"meta\\">"+infoLine().join(" · ")+"</div></div>"+\n' +
+'      "<div class=\\"docbox\\"><div class=\\"dt\\">"+esc(R.title)+"</div><div class=\\"no\\">"+esc(R.number)+"</div><div class=\\"dd\\">"+esc(R.date)+"</div></div></div>"+\n' +
+'      "<div style=\\"text-align:center;margin:8px 0 18px\\">"+ (R.barcodeUrl?("<img src=\\""+R.barcodeUrl+"\\" alt=\\"barcode\\" style=\\"max-width:320px;height:auto\\">"):"") +"</div>"+\n' +
+'      "<div style=\\"display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;margin-bottom:14px\\">"+\n' +
+'      cell("Προϊόν", R.product)+ cell("Serial", R.serial)+\n' +
+'      cell("Πελάτης", (R.client&&R.client.name)?R.client.name:"")+ cell("Τηλέφωνο", (R.client&&R.client.phone)?R.client.phone:"")+\n' +
+'      cell("Κατάσταση", R.statusLabel)+ cell("Εγγύηση", R.warrantyText)+ cell("Προμηθευτής", R.supplier)+"</div>"+\n' +
+'      (R.fault?("<div class=\\"notes\\"><b>Περιγραφή βλάβης:</b> "+esc(R.fault)+"</div>"):"")+\n' +
+'      znFooter()+"</div>";\n' +
+'  }\n' +
 '  function pageCss(fmt){ if(fmt==="A4") return "@page{ size:A4; margin:12mm; }"; if(fmt==="58") return "@page{ size:58mm auto; margin:0; }"; return "@page{ size:80mm auto; margin:0; }"; }\n' +
 '  function render(fmt){\n' +
 '    document.getElementById("pageStyle").textContent = pageCss(fmt);\n' +
-'    document.getElementById("rcptRoot").innerHTML = (fmt==="A4") ? renderA4() : renderThermal(fmt);\n' +
+'    var node;\n' +
+'    if(R.kind==="rma"){ node = (fmt==="A4") ? renderRmaA4() : renderRmaThermal(fmt); }\n' +
+'    else { node = (fmt==="A4") ? renderA4() : renderThermal(fmt); }\n' +
+'    document.getElementById("rcptRoot").innerHTML = node;\n' +
 '    var bb=document.querySelectorAll(".rcpt-toolbar [data-fmt]");\n' +
 '    for(var i=0;i<bb.length;i++){ bb[i].className=(bb[i].getAttribute("data-fmt")===fmt)?"active":""; }\n' +
 '    R.fmt=fmt;\n' +

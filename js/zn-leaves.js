@@ -343,6 +343,7 @@ var PAGE_PERMS = {
   competitors: '*', // Μόνο Διαχειριστής (ανταγωνισμός)
   hardware: 'inventory',
   'stock-movements': 'inventory', // 📦 Κινήσεις Αποθέματος (read-only)
+  rma: 'inventory', // 🔧 RMA / Εγγυήσεις & Επισκευές
   oracle: '*',      // The Oracle — μόνο Διαχειριστής
   brain: '*',       // The Brain — μόνο Διαχειριστής
   'seasonal-intel': '*', // Εποχική Νοημοσύνη — μόνο Διαχειριστής
@@ -11794,6 +11795,11 @@ function renderInventory(preserveSelection){
         <button class="inv-tool-btn" onclick="showPage('stock-movements')" title="Read-only ροή κινήσεων αποθέματος όλων των προϊόντων">
           <i data-lucide="history" size="20"></i>
           <span>📦 Κινήσεις Αποθέματος</span>
+        </button>
+        <!-- RMA / Εγγυήσεις & Επισκευές -->
+        <button class="inv-tool-btn" onclick="showPage('rma')" title="Διαχείριση RMA, εγγυήσεων & επισκευών">
+          <i data-lucide="wrench" size="20"></i>
+          <span>🔧 RMA / Εγγυήσεις</span>
         </button>
         <!-- Import group -->
         <button class="inv-tool-btn warn" onclick="openPriceListImporter()" title="Import τιμοκαταλόγων από PDF/Excel">

@@ -2977,6 +2977,7 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="/js/zn_blind_audit.js"></script>
 <script src="/js/zn_escpos.js"></script>
 <script src="/js/zn_print_hub.js"></script>
+<script src="/js/zn_rma.js"></script>
 <script src="/js/zn_product_picker.js"></script>
 <script src="/js/zn_promo_engine.js"></script>
 <script src="/js/zn_promos_ui.js"></script>
@@ -3148,6 +3149,31 @@ var HELP_CONTENT = {
         {icon:'🏷️', title:'What each card shows', body:`<p>Per movement: date/time, a <b>reason badge</b>, the <b>±delta</b> change (green for positive, red for negative) and the <b>stock after</b>.</p>`},
         {icon:'🔖', title:'Reasons', body:`<ul><li><b>Sale</b></li><li><b>Purchase</b></li><li><b>Adjustment</b></li><li><b>Damage</b></li><li><b>Return</b></li><li><b>Audit</b></li><li><b>Init</b></li><li><b>Transfer</b></li></ul>`},
         {icon:'🔍', title:'Search', body:`<p>On the page (global feed) the search box filters movements by product name instantly (client-side).</p>`}
+      ]
+    }
+  },
+
+  rma: {
+    el: {
+      title: 'Οδηγός: RMA / Εγγυήσεις & Επισκευές',
+      sections: [
+        {icon:'🔧', title:'Τι είναι', body:`<p>Διαχείριση επιστροφών/επισκευών (RMA): καταγράφεις συσκευή, σειριακό, πελάτη και βλάβη, παρακολουθείς την <b>κατάσταση</b> και τυπώνεις <b>ετικέτα</b>. Συνδέεται με τις υπάρχουσες <b>Εγγυήσεις</b> (serial) — δεν τις διπλώνει.</p>`},
+        {icon:'🧭', title:'Πού τη βρίσκεις', body:`<p><b>Αποθήκη → Εργαλεία → 🔧 RMA / Εγγυήσεις</b>. Λίστα με badges κατάστασης και κουμπί <b>➕ Νέο RMA</b>.</p>`},
+        {icon:'➕', title:'Νέο RMA', body:`<p>Scan ή πληκτρολόγησε <b>barcode ή serial</b> και πάτα «Αναζήτηση»: βρίσκει προϊόν, την αρχική πώληση (αν υπάρχει) και την κατάσταση εγγύησης. Αν δεν βρεθεί πώληση, συμπλήρωσε χειροκίνητα serial + ημ/νία αγοράς + διάρκεια εγγύησης. Πεδία: πελάτης (όνομα/τηλ), βλάβη, προμηθευτής. Το trigger της βάσης βάζει <b>αριθμό RMA</b> + <b>warranty_valid</b>.</p>`},
+        {icon:'🏷️', title:'Ετικέτα', body:`<p>Από τη λίστα ή τη λεπτομέρεια, «🏷️ Ετικέτα» μέσω του κοινού print builder — <b>δύο μορφές</b>: θερμικό (58/80mm μικρή ετικέτα) και A4. Περιλαμβάνει αριθμό RMA, barcode του αριθμού, προϊόν, serial, πελάτη, ημ/νία, κατάσταση + ZyroNex footer.</p>`},
+        {icon:'🔄', title:'Κατάσταση & ιστορικό', body:`<p>Στη λεπτομέρεια, dropdown αλλαγής κατάστασης (Παρελήφθη → Διάγνωση → Προμηθευτής → Επισκευή → Επιστροφή…). Κάθε αλλαγή καταγράφεται στο ιστορικό (zn_rma_events).</p>`},
+        {icon:'📧', title:'Claim προμηθευτή', body:`<p>Αν έχει οριστεί προμηθευτής, «📧 Claim προμηθευτή» στέλνει email με τα στοιχεία του RMA μέσω του υπάρχοντος email service.</p>`}
+      ]
+    },
+    en: {
+      title: 'Guide: RMA / Warranties & Repairs',
+      sections: [
+        {icon:'🔧', title:'What it is', body:`<p>Manage returns/repairs (RMA): log device, serial, customer and fault, track <b>status</b> and print a <b>label</b>. It links to existing <b>Warranties</b> (by serial) — it doesn't duplicate them.</p>`},
+        {icon:'🧭', title:'Where to find it', body:`<p><b>Inventory → Tools → 🔧 RMA / Warranties</b>. A list with status badges and a <b>➕ New RMA</b> button.</p>`},
+        {icon:'➕', title:'New RMA', body:`<p>Scan or type a <b>barcode or serial</b> and tap "Search": it finds the product, the original sale (if any) and the warranty status. If no sale is found, fill in serial + purchase date + warranty months manually. Fields: customer (name/phone), fault, supplier. The DB trigger sets the <b>RMA number</b> + <b>warranty_valid</b>.</p>`},
+        {icon:'🏷️', title:'Label', body:`<p>From the list or detail, "🏷️ Label" via the shared print builder — <b>two formats</b>: thermal (58/80mm small label) and A4. Includes RMA number, a barcode of the number, product, serial, customer, date, status + ZyroNex footer.</p>`},
+        {icon:'🔄', title:'Status & history', body:`<p>In the detail, a status dropdown (Received → Diagnosing → Supplier → Repair → Returned…). Every change is logged to history (zn_rma_events).</p>`},
+        {icon:'📧', title:'Supplier claim', body:`<p>If a supplier is set, "📧 Supplier claim" emails the RMA details via the existing email service.</p>`}
       ]
     }
   },
@@ -16810,6 +16836,7 @@ function _showPageInternal(p){
     'age-log':renderAgeVerifyLog,
     'dead-stock':renderDeadStockRecovery,
     'stock-movements':renderStockMovements,
+    rma:(typeof renderRMA==='function'?renderRMA:function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>🔧 RMA</h2><p>Module δεν φορτώθηκε — κάνε refresh.</p></div>';}),
     'expense-calendar':renderExpenseCalendar,
     'compliance-calendar':renderComplianceCalendar,
     breakeven:renderBreakeven,
@@ -35619,7 +35646,9 @@ window.HELP_KB = {
     { id: 'kb_anomaly', category: '11-security', title: 'Ανίχνευση Ανωμαλιών (Anti-fraud)',
       body: '# Ανίχνευση Ανωμαλιών (Anti-fraud)\n\nΎποπτα μοτίβα (ακυρώσεις/επιστροφές μεγάλης αξίας, συχνό άνοιγμα συρταριού χωρίς πώληση) καταγράφονται αθόρυβα σε ένα immutable log που κανείς — ούτε ο διαχειριστής — δεν μπορεί να σβήσει. Ο manager βλέπει συγκεντρωτική αναφορά στο τέλος της ημέρας με «καμπανάκια» πάνω από συγκεκριμένα κατώφλια.' },
     { id: 'kb_atomic_stock', category: '01-pos', title: 'Ασφαλής μείωση αποθέματος',
-      body: '# Ασφαλής μείωση αποθέματος\n\nΗ μείωση αποθέματος στην πώληση γίνεται ατομικά στον server: δύο ταμεία δεν μπορούν να πουλήσουν το ίδιο τελευταίο τεμάχιο και να πάει το απόθεμα σε αρνητικό. Αν δεν επαρκεί το stock, η πώληση σταματά με σαφές μήνυμα.' }
+      body: '# Ασφαλής μείωση αποθέματος\n\nΗ μείωση αποθέματος στην πώληση γίνεται ατομικά στον server: δύο ταμεία δεν μπορούν να πουλήσουν το ίδιο τελευταίο τεμάχιο και να πάει το απόθεμα σε αρνητικό. Αν δεν επαρκεί το stock, η πώληση σταματά με σαφές μήνυμα.' },
+    { id: 'kb_rma', category: '02-inventory', title: 'RMA / Εγγυήσεις & Επισκευές',
+      body: '# 🔧 RMA / Εγγυήσεις & Επισκευές\n\n> Διαχείριση επιστροφών & επισκευών (RMA) με σύνδεση στις υπάρχουσες εγγυήσεις. Πίνακες `zn_rma` / `zn_rma_events` με RLS (auth_shop_id) — όλες οι κλήσεις μέσω `sbAuth`.\n\n## Πού βρίσκεται\n\n**Αποθήκη → Εργαλεία → 🔧 RMA / Εγγυήσεις**. Λίστα RMA με badges κατάστασης + κουμπί **➕ Νέο RMA**.\n\n## Σύνδεση με Εγγυήσεις (όχι διπλό)\n\nΗ ενότητα **δεν** αντικαθιστά τις υπάρχουσες Εγγυήσεις (Εξοπλισμός → 🛡️ Εγγυήσεις / `warranty_records`). Κατά την αναζήτηση serial, αν υπάρχει καταχωρημένη εγγύηση, προσυμπληρώνονται ημ/νία αγοράς + κατάσταση εγγύησης.\n\n## Νέο RMA\n\n1. **Scan ή πληκτρολόγηση** barcode ή serial → «Αναζήτηση».\n2. Βρίσκει **προϊόν** (από barcode), την **αρχική πώληση** (sale_items, αν υπάρχει) και την **κατάσταση εγγύησης** (ισχύει/έληξε).\n3. Αν δεν βρεθεί πώληση → χειροκίνητα **serial + ημ/νία αγοράς + διάρκεια εγγύησης**.\n4. Πεδία: **πελάτης** (όνομα/τηλ), **βλάβη**, **προμηθευτής**.\n5. Insert στο `zn_rma` → το **trigger** βάζει αυτόματα **αριθμό RMA** + **warranty_valid**.\n\n## Ετικέτα (🏷️)\n\nΜέσω του **κοινού print builder** (ίδιος με αποδείξεις/παραστατικά) — **δύο μορφές**: θερμικό (58/80mm μικρή ετικέτα) και **A4**. Περιέχει: αριθμό RMA, **barcode** του αριθμού RMA (Code128), προϊόν, serial, πελάτη, ημ/νία, κατάσταση + **ZyroNex footer**. Αν το barcode image δεν φορτώσει → εμφανίζεται ο αριθμός ως κείμενο (fallback).\n\n## Κατάσταση & Ιστορικό\n\nΣτη λεπτομέρεια, dropdown αλλαγής → `sbAuth.rpc(\'zn_rma_set_status\', {p_rma, p_status, p_note})`. Ροή: Παρελήφθη → Διάγνωση → Στάλθηκε σε προμηθευτή → Σε επισκευή → Επισκευάστηκε/Αντικαταστάθηκε → Επιστράφηκε → Έκλεισε. Κάθε αλλαγή καταγράφεται στο `zn_rma_events` (εμφανίζεται ως ιστορικό).\n\n## Claim προμηθευτή (📧)\n\nΑν έχει οριστεί προμηθευτής, στέλνει email με τα στοιχεία του RMA μέσω του υπάρχοντος email Edge Function.\n\n## Σχεδίαση\n\nMobile-first, capability-detect, fallback παντού — καμία ενέργεια δεν μπλοκάρει.\n\n---\n*Τελευταία ενημέρωση: Ιούνιος 2026 — v49*\n' }
   ];
   _adv.forEach(function(e){
     if(!window.HELP_KB) return;
