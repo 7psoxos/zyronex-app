@@ -5,7 +5,7 @@
  * batch UPSERT στη Supabase. Multi-device shelf-lock μέσω Realtime Presence.
  *
  * Server side: create_audit_snapshot / record_audit_count / reconcile_audit /
- * commit_audit (zyronex_advanced.sql).
+ * commit_audit / cancel_audit (zyronex_advanced.sql).
  *
  * Κανόνες: var, sbAuth, mobile-first (44px), iOS-safe. Καμία αισθητική.
  * ===================================================================== */
@@ -107,6 +107,26 @@ var ZN_AUDIT = (function () {
     }).catch(function (e) { toast('Σφάλμα έναρξης: ' + (e.message || e), 'danger'); });
   }
 
+  /* Ακύρωση ανοιχτής απογραφής → άρση AUDIT LOCK. */
+  function cancelAudit() {
+    if (!_auditId) { toast('Δεν υπάρχει ανοιχτή απογραφή', 'danger'); return; }
+    var idToCancel = _auditId;
+    sbAuth.rpc('cancel_audit', { p_audit: idToCancel }).then(function (res) {
+      if (res && res.error) {
+        toast('Σφάλμα ακύρωσης: ' + (res.error.message || res.error), 'danger');
+        return;
+      }
+      _auditId = null;
+      _leavePresence();
+      _recentLog = [];
+      _matchedProduct = null;
+      toast('Απογραφή ακυρώθηκε. Οι χειροκίνητες αλλαγές stock ξεκλειδώθηκαν.', 'info');
+      render();
+    }).catch(function (e) {
+      toast('Σφάλμα ακύρωσης: ' + (e.message || e), 'danger');
+    });
+  }
+
   /* Καταγραφή ενός count — buffer τοπικά, sync στο background. */
   function recordCount(productId, qty) {
     if (!_auditId) { toast('Δεν υπάρχει ενεργή απογραφή', 'danger'); return; }
@@ -156,8 +176,9 @@ var ZN_AUDIT = (function () {
     }
     return sbAuth.rpc('commit_audit', { p_audit: _auditId }).then(function (res) {
       if (res.error) { throw res.error; }
-      toast('Απογραφή οριστικοποιήθηκε', 'success');
+      _auditId = null;
       _leavePresence();
+      toast('Απογραφή οριστικοποιήθηκε', 'success');
       return res.data;
     }).catch(function (e) { toast('Σφάλμα commit: ' + (e.message || e), 'danger'); });
   }
@@ -245,29 +266,82 @@ var ZN_AUDIT = (function () {
     if (bcEl)    { bcEl.focus(); }
   }
 
+  /* ---------- Shared header HTML ---------- */
+  function _headerHTML() {
+    return '<div class="page-head">' +
+      '<div>' +
+        '<h2 style="margin:0 0 6px">📦 Τυφλή Απογραφή</h2>' +
+        '<p style="margin:0;font-size:13px;color:var(--text-2);line-height:1.5;word-break:break-word;min-width:0">' +
+          'Καταμέτρηση αποθέματος χωρίς να φαίνεται το θεωρητικό stock — για αντικειμενικά αποτελέσματα. ' +
+          '<strong>Όσο η απογραφή είναι ανοιχτή, οι χειροκίνητες αλλαγές stock κλειδώνονται (AUDIT LOCK) — ' +
+          'οι πωλήσεις POS επιτρέπονται κανονικά.</strong>' +
+        '</p>' +
+      '</div>' +
+    '</div>';
+  }
+
   /* ---------- UI ---------- */
-  function render() {
+  async function render() {
     var content = document.getElementById('content');
     if (!content) { return; }
+
+    /* Φόρτωση spinner — ελέγχουμε αν υπάρχει ήδη ανοιχτή απογραφή στη βάση. */
+    content.innerHTML = _headerHTML() +
+      '<div class="muted" style="padding:40px;text-align:center">' +
+        '<div style="width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);' +
+          'border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>' +
+        'Έλεγχος...' +
+      '</div>';
+
+    /* Αν δεν έχουμε _auditId στη μνήμη, ελέγξουμε τη βάση. */
+    if (!_auditId) {
+      try {
+        var chk = await sbAuth.from('inventory_audits').select('id').eq('status', 'open').limit(1);
+        if (chk && !chk.error && chk.data && chk.data.length > 0) {
+          _auditId = chk.data[0].id;
+          _recentLog = [];
+          _matchedProduct = null;
+        }
+      } catch (e) {
+        /* Αγνοούμε — δείχνουμε pre-start screen. */
+      }
+    }
+
     var guide = (typeof znGuideBox === 'function') ? znGuideBox('blindaudit') : '';
 
     if (!_auditId) {
-      /* Pre-start: guide box + explicit start button — no auto-start. */
+      /* Pre-start: εξήγηση + κουμπί έναρξης. Καμία αυτόματη έναρξη. */
       content.innerHTML =
-        '<div class="page-head"><h2>📦 Τυφλή Απογραφή</h2>' +
-        '<p class="muted">Η απογραφή ξεκινά μόνο με το κουμπί. Οι πωλήσεις POS συνεχίζουν κανονικά.</p></div>' +
+        _headerHTML() +
         guide +
         '<div class="card" style="text-align:center;padding:32px 16px">' +
-        '<p class="text-xs muted mb-3">Πάτα «Έναρξη» για να παγώσει το απόθεμα και να αρχίσει η τυφλή καταμέτρηση.</p>' +
-        '<button class="btn btn-primary" style="min-height:44px;min-width:180px" onclick="ZN_AUDIT.start()">📦 Έναρξη Απογραφής</button>' +
+          '<p style="margin:0 0 16px;font-size:13px;color:var(--text-2)">' +
+            'Πάτα «Έναρξη» για να παγώσει το απόθεμα και να αρχίσει η τυφλή καταμέτρηση. ' +
+            'Το AUDIT LOCK θα τεθεί αυτόματα.' +
+          '</p>' +
+          '<button class="btn btn-primary" style="min-height:44px;min-width:180px" onclick="ZN_AUDIT.start()">📦 Έναρξη Απογραφής</button>' +
         '</div>';
       return;
     }
 
+    /* Ανοιχτή απογραφή — banner προειδοποίησης + κουμπί ακύρωσης. */
+    var banner =
+      '<div class="card" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);' +
+          'border-radius:12px;padding:12px 16px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+          '<span style="font-weight:800;font-size:14px;color:#ef4444;white-space:nowrap">⚠️ Απογραφή σε εξέλιξη</span>' +
+          '<span style="font-size:12px;color:var(--text-2);flex:1;min-width:0;word-break:break-word">' +
+            'AUDIT LOCK ενεργό — οι χειροκίνητες αλλαγές stock κλειδώνονται.' +
+          '</span>' +
+          '<button class="btn btn-danger" style="min-height:44px;white-space:nowrap;flex-shrink:0" ' +
+              'onclick="ZN_AUDIT.cancelAudit()">🛑 Ακύρωση Απογραφής</button>' +
+        '</div>' +
+      '</div>';
+
     /* Active audit: barcode scan UI. */
     content.innerHTML =
-      '<div class="page-head"><h2>📦 Τυφλή Απογραφή</h2>' +
-      '<p class="muted">Σκάναρε barcode → βάλε ποσότητα. Δεν φαίνεται το αναμενόμενο.</p></div>' +
+      _headerHTML() +
+      banner +
 
       /* ── Βήμα 1: Barcode ── */
       '<div class="card" style="margin-bottom:12px">' +
@@ -366,7 +440,8 @@ var ZN_AUDIT = (function () {
   }
 
   return {
-    start: start, recordCount: recordCount, sync: sync,
+    start: start, cancelAudit: cancelAudit,
+    recordCount: recordCount, sync: sync,
     reconcile: reconcile, commit: commit, render: render,
     _submit: _submit, _finish: _finish, _resetScan: _resetScan
   };
