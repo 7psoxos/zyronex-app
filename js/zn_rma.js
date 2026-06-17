@@ -11,16 +11,17 @@ var RMA_FILTER = 'all';
 var _RMA_LOOKUP = null; // { product, productId, saleDate, warrantyEnd, warrantyMonths, source }
 
 var ZN_RMA_STATUSES = [
-  { id: 'received',      label: 'Παρελήφθη',                color: '#3b82f6' },
-  { id: 'diagnosing',    label: 'Διάγνωση',                 color: '#8b5cf6' },
-  { id: 'sent_supplier', label: 'Στάλθηκε σε προμηθευτή',   color: '#f59e0b' },
-  { id: 'in_repair',     label: 'Σε επισκευή',              color: '#f59e0b' },
-  { id: 'repaired',      label: 'Επισκευάστηκε',            color: '#10b981' },
-  { id: 'replaced',      label: 'Αντικαταστάθηκε',          color: '#10b981' },
-  { id: 'returned',      label: 'Επιστράφηκε στον πελάτη',  color: '#22c55e' },
-  { id: 'rejected',      label: 'Απορρίφθηκε',              color: '#ef4444' },
-  { id: 'closed',        label: 'Έκλεισε',                  color: '#6b7280' }
+  { id: 'received',             label: 'Παρελήφθη',               color: '#3b82f6' },
+  { id: 'sent_to_supplier',     label: 'Στάλθηκε σε προμηθευτή',  color: '#f59e0b' },
+  { id: 'repaired',             label: 'Επισκευάστηκε',           color: '#10b981' },
+  { id: 'replaced',             label: 'Αντικαταστάθηκε',         color: '#10b981' },
+  { id: 'returned_to_customer', label: 'Επιστράφηκε στον πελάτη', color: '#22c55e' },
+  { id: 'rejected',             label: 'Απορρίφθηκε',             color: '#ef4444' },
+  { id: 'cancelled',            label: 'Ακυρώθηκε',               color: '#6b7280' }
 ];
+
+var _ZN_RMA_CLOSED = ['returned_to_customer', 'rejected', 'cancelled'];
+function _rmaIsClosed(status) { return _ZN_RMA_CLOSED.indexOf(status) !== -1; }
 
 /* ---------- helpers ---------- */
 function _rmaEsc(s) {
@@ -81,7 +82,7 @@ async function renderRMA() {
 function _renderRMAPage() {
   var content = document.getElementById('content');
   if (!content) { return; }
-  var open = RMA_CACHE.filter(function (r) { var s = _rf(r, ['status']); return s !== 'closed' && s !== 'returned' && s !== 'rejected'; }).length;
+  var open = RMA_CACHE.filter(function (r) { return !_rmaIsClosed(_rf(r, ['status'])); }).length;
   content.innerHTML =
     '<div class="page-head">' +
       '<div>' +
@@ -112,9 +113,9 @@ function _renderRMAList() {
   if (!listEl) { return; }
   var rows = RMA_CACHE;
   if (RMA_FILTER === 'open') {
-    rows = rows.filter(function (r) { var s = _rf(r, ['status']); return s !== 'closed' && s !== 'returned' && s !== 'rejected'; });
+    rows = rows.filter(function (r) { return !_rmaIsClosed(_rf(r, ['status'])); });
   } else if (RMA_FILTER === 'closed') {
-    rows = rows.filter(function (r) { var s = _rf(r, ['status']); return s === 'closed' || s === 'returned' || s === 'rejected'; });
+    rows = rows.filter(function (r) { return _rmaIsClosed(_rf(r, ['status'])); });
   }
   if (!rows.length) {
     listEl.innerHTML = '<div class="card" style="padding:32px;text-align:center;color:var(--text-2)">' +
@@ -229,9 +230,12 @@ async function rmaLookup() {
     try {
       var sres = await sbAuth.from('sale_items').select('sale_id, sales(created_at)').eq('product_id', prod.id).limit(50);
       if (sres && !sres.error && sres.data && sres.data.length) {
-        var dates = sres.data.map(function (x) { return x.sales && x.sales.created_at ? x.sales.created_at : null; }).filter(Boolean);
-        if (dates.length) {
-          dates.sort(); var last = dates[dates.length - 1];
+        var withDate = sres.data.filter(function (x) { return x.sales && x.sales.created_at; });
+        if (withDate.length) {
+          withDate.sort(function (a, b) { return String(a.sales.created_at).localeCompare(String(b.sales.created_at)); });
+          var lastRow = withDate[withDate.length - 1];
+          var last = lastRow.sales.created_at;
+          _RMA_LOOKUP.saleId = lastRow.sale_id;
           var sd = document.getElementById('rma_pdate'); if (sd) { sd.value = String(last).slice(0, 10); }
           msgs.push('🧾 Αρχική πώληση: ' + _rmaDate(last));
         } else { msgs.push('<span class="muted">Δεν βρέθηκε αρχική πώληση — συμπλήρωσε χειροκίνητα.</span>'); }
@@ -268,16 +272,23 @@ async function saveRMA() {
   if (!fault) { toast('Συμπλήρωσε περιγραφή βλάβης', 'danger'); return; }
 
   var pid = (prodEl && prodEl.dataset && prodEl.dataset.pid) ? +prodEl.dataset.pid : null;
+  var lk = _RMA_LOOKUP || {};
+  // Ακριβή ονόματα στηλών zn_rma — rma_number/warranty_valid/shop_id/created_by τα βάζει το trigger
   var payload = {
     product_id: pid,
     product_name: product,
     serial_number: (document.getElementById('rma_serial').value || '').trim() || null,
-    purchase_date: document.getElementById('rma_pdate').value || null,
-    warranty_months: parseInt(document.getElementById('rma_wmonths').value, 10) || 0,
+    customer_id: (lk.customerId != null) ? lk.customerId : null,
     customer_name: (document.getElementById('rma_cust').value || '').trim() || null,
     customer_phone: (document.getElementById('rma_phone').value || '').trim() || null,
-    supplier: (document.getElementById('rma_supplier').value || '').trim() || null,
-    issue: fault
+    sale_id: (lk.saleId != null) ? lk.saleId : null,
+    purchase_date: document.getElementById('rma_pdate').value || null,
+    warranty_months: parseInt(document.getElementById('rma_wmonths').value, 10) || 0,
+    supplier_id: (lk.supplierId != null) ? lk.supplierId : null,
+    supplier_name: (document.getElementById('rma_supplier').value || '').trim() || null,
+    issue_description: fault,
+    notes: null,
+    status: 'received'
   };
 
   try {
@@ -318,8 +329,8 @@ function znPrintRmaLabel(id) {
     date: _rmaDate(_rf(r, ['created_at', 'created'])),
     statusLabel: _rmaStatusMeta(_rf(r, ['status'])).label,
     warrantyText: warrantyText,
-    supplier: _rf(r, ['supplier']),
-    fault: _rf(r, ['issue', 'fault', 'description'])
+    supplier: _rf(r, ['supplier_name']),
+    fault: _rf(r, ['issue_description'])
   };
   znOpenPrintDoc(R);
 }
@@ -330,7 +341,7 @@ async function openRMADetail(id) {
   if (!r) { toast('Δεν βρέθηκε το RMA', 'warning'); return; }
   var num = _rmaNumber(r);
   var curStatus = _rf(r, ['status']);
-  var supplier = _rf(r, ['supplier']);
+  var supplier = _rf(r, ['supplier_name']);
   openModal('<div class="modal-head">' +
     '<h3 class="fw-800 text-xl">🔧 ' + _rmaEsc(num) + '</h3>' +
     '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button>' +
@@ -343,7 +354,7 @@ async function openRMADetail(id) {
         (_rf(r, ['customer_name']) ? ('👤 ' + _rmaEsc(_rf(r, ['customer_name'])) + (_rf(r, ['customer_phone']) ? (' · ' + _rmaEsc(_rf(r, ['customer_phone']))) : '') + '<br>') : '') +
         '📅 ' + _rmaDate(_rf(r, ['created_at', 'created'])) +
       '</div>' +
-      (_rf(r, ['issue', 'fault', 'description']) ? ('<div class="text-sm" style="margin-top:8px"><b>Βλάβη:</b> ' + _rmaEsc(_rf(r, ['issue', 'fault', 'description'])) + '</div>') : '') +
+      (_rf(r, ['issue_description']) ? ('<div class="text-sm" style="margin-top:8px"><b>Βλάβη:</b> ' + _rmaEsc(_rf(r, ['issue_description'])) + '</div>') : '') +
     '</div>' +
     '<div class="form-row">' +
       '<label class="form-label">Κατάσταση</label>' +
@@ -374,8 +385,8 @@ async function _loadRMAEvents(id) {
     var rows = (res && res.data) ? res.data : [];
     if (!rows.length) { el.innerHTML = '<div class="muted text-sm">Καμία καταχώρηση ακόμη.</div>'; return; }
     el.innerHTML = rows.map(function (ev) {
-      var st = _rf(ev, ['status', 'to_status', 'new_status']);
-      var note = _rf(ev, ['note', 'notes', 'comment']);
+      var st = _rf(ev, ['status']);
+      var note = _rf(ev, ['note']);
       return '<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">' +
         '<div style="flex:1;min-width:0">' + _rmaStatusBadge(st) +
           (note ? ('<div class="text-xs" style="margin-top:4px">' + _rmaEsc(note) + '</div>') : '') +
@@ -423,7 +434,7 @@ async function rmaSupplierClaim(id) {
     '<p><b>Προϊόν:</b> ' + _rmaEsc(_rf(r, ['product_name', 'device_name']) || '—') + '</p>' +
     '<p><b>Serial:</b> ' + _rmaEsc(_rf(r, ['serial_number', 'serial']) || '—') + '</p>' +
     '<p><b>Ημ/νία αγοράς:</b> ' + _rmaDate(_rf(r, ['purchase_date'])) + '</p>' +
-    '<p><b>Περιγραφή βλάβης:</b> ' + _rmaEsc(_rf(r, ['issue', 'fault', 'description']) || '—') + '</p>' +
+    '<p><b>Περιγραφή βλάβης:</b> ' + _rmaEsc(_rf(r, ['issue_description']) || '—') + '</p>' +
     '<p>Παρακαλούμε για τις ενέργειές σας.</p><p>— ' + _rmaEsc(s.shopName || 'ZyroNex') + '</p>';
   var html = (typeof buildEmailTemplate === 'function')
     ? buildEmailTemplate('RMA ' + num, bodyHtml, '')
