@@ -506,6 +506,7 @@ var PLAN_FEATURES = {
     ai:                false,
     bi:                false,
     invoice_scanner:   false,
+    local_invoice_reader: true,
     compliance:        false,
     competitors:       false,
     inspector:         false,
@@ -537,6 +538,7 @@ var PLAN_FEATURES = {
     ai:                true,
     bi:                true,
     invoice_scanner:   true,
+    local_invoice_reader: true,
     compliance:        true,
     competitors:       true,
     inspector:         true,
@@ -556,7 +558,7 @@ var PLAN_FEATURES = {
     alerts:true,support:true,help:true,settings:true,users:true,
     loyalty:true,mydata:true,ai_oracle:true,brain:true,pricewar:true,
     warroom:true,'customer-intel':true,campaigns:true,mixology:true,
-    ai:true,bi:true,invoice_scanner:true,compliance:true,competitors:true,
+    ai:true,bi:true,invoice_scanner:true,local_invoice_reader:true,compliance:true,competitors:true,
     inspector:true,'data-cleanup':true,email_marketing:true,
     auto_email_accountant:true,ergani_submission:true,
     max_users: 999,
@@ -573,7 +575,7 @@ var PLAN_FEATURES = {
     alerts:true,support:true,help:true,settings:true,users:true,
     loyalty:true,mydata:true,ai_oracle:true,brain:true,pricewar:true,
     warroom:true,'customer-intel':true,campaigns:true,mixology:true,
-    ai:true,bi:true,invoice_scanner:true,compliance:true,competitors:true,
+    ai:true,bi:true,invoice_scanner:true,local_invoice_reader:true,compliance:true,competitors:true,
     inspector:true,'data-cleanup':true,email_marketing:true,
     auto_email_accountant:true,ergani_submission:true,
     multi_location:false,api_access:false,
@@ -17904,6 +17906,189 @@ var PURCHASES_FILTER_SUP = '';
 var PURCHASES_FILTER_MONTH = '';
 
 // ═══════════════════════════════════════════════════════════
+//   ΤΟΠΙΚΗ ΑΝΑΓΝΩΣΗ ΤΙΜΟΛΟΓΙΟΥ — pdf.js (basic+)
+//   Επίπεδο 1 πριν callInvoiceOCR. Επιστρέφει ίδιο
+//   object + confidence 0-1 + method:'local', ή null.
+// ═══════════════════════════════════════════════════════════
+
+function _znParseInvoiceText(text) {
+  var inv = {
+    invoiceType:     'greek',
+    supplierName:    '',
+    supplierVat:     '',
+    supplierCountry: 'GR',
+    invoiceNumber:   '',
+    invoiceDate:     '',
+    currency:        'EUR',
+    netAmount:       0,
+    vatAmount:       0,
+    vatRate:         24,
+    grossAmount:     0,
+    isReverseCharge: false,
+    lines:           [],
+    notes:           ''
+  };
+
+  var found = 0;
+  var TOTAL_FIELDS = 7; // supplierVat, invoiceNumber, invoiceDate, grossAmount, netAmount, supplierName, lines
+
+  // Normalize whitespace
+  var t = text.replace(/\t/g, ' ').replace(/ {2,}/g, ' ');
+
+  // 1. ΑΦΜ — 9-digit Greek VAT
+  var mVat = t.match(/(?:Α\.?Φ\.?Μ\.?|ΑΦΜ|AFM|TAX\s*ID)[^:=\n]{0,8}[:\s=]+([0-9]{9})/i);
+  if (!mVat) mVat = t.match(/\b([1-9][0-9]{8})\b/);
+  if (mVat) { inv.supplierVat = mVat[1]; found++; }
+
+  // 2. Αριθμός τιμολογίου
+  var mNum = t.match(/(?:ΑΡ\.?\s*ΤΙΜ[Α-Ω]*|ΑΡΙΘΜ[Α-Ω]*\s*ΤΙΜ[Α-Ω]*|INVOICE\s*(?:No|NO|Νο|#|Number)?|Αρ\.?\s*Τιμολ)[.:\s#]{0,5}([A-ZΑ-Ω0-9][A-ZΑ-Ωα-ω0-9\-\/\.]{1,20})/i);
+  if (!mNum) mNum = t.match(/ΤΙΜΟΛΟΓΙΟ[^0-9A-ZΑ-Ω]{0,12}([A-ZΑ-Ω0-9][A-ZΑ-Ωα-ω0-9\-\/\.]{0,19})/i);
+  if (mNum) { inv.invoiceNumber = mNum[1].trim(); found++; }
+
+  // 3. Ημερομηνία (DD/MM/YYYY ή DD.MM.YYYY)
+  var mDate = t.match(/\b(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](20[0-9]{2})\b/);
+  if (mDate) {
+    inv.invoiceDate = mDate[3] + '-' + mDate[2].padStart(2, '0') + '-' + mDate[1].padStart(2, '0');
+    found++;
+  }
+
+  // 4. Σύνολο (gross)
+  var mGross = t.match(/(?:ΓΕΝΙΚΟ\s*ΣΥΝΟΛΟ|ΓΕΝ\.?\s*ΣΥΝΟΛΟ|ΠΛΗΡΩΤΕΟ\s*ΠΟΣΟ|ΠΛΗΡΩΤΕΟ|TOTAL\s*(?:AMOUNT|DUE)?)[^0-9]{0,15}([0-9]{1,7}[.,][0-9]{2})/i);
+  if (!mGross) mGross = t.match(/(?:Σύνολο\s*(?:Φορ|Παρ|Αξ)|ΣΥΝ\.?\s*ΠΑΡ)[^0-9]{0,10}([0-9]+[.,][0-9]{2})/i);
+  if (mGross) { inv.grossAmount = parseFloat(mGross[1].replace(',', '.')); found++; }
+
+  // 5. Καθαρή αξία
+  var mNet = t.match(/(?:ΚΑΘΑΡΗ\s*ΑΞΙΑ|ΚΑΘΑΡΟ\s*ΠΟΣΟ|NET\s*(?:AMOUNT|TOTAL)?|Αξία\s*(?:χωρίς|χ\.)\s*ΦΠΑ)[^0-9]{0,15}([0-9]+[.,][0-9]{2})/i);
+  if (mNet) { inv.netAmount = parseFloat(mNet[1].replace(',', '.')); found++; }
+  else if (inv.grossAmount > 0) {
+    inv.netAmount = Math.round(inv.grossAmount / 1.24 * 100) / 100;
+  }
+
+  // 6. ΦΠΑ ποσό
+  var mVatAmt = t.match(/(?:ΦΠΑ|Φ\.?Π\.?Α\.?)\s*(?:\d{1,2}\s*%)?\s*[:\s]+([0-9]+[.,][0-9]{2})/i);
+  if (mVatAmt) {
+    inv.vatAmount = parseFloat(mVatAmt[1].replace(',', '.'));
+    if (inv.grossAmount > 0 && inv.vatAmount > 0 && inv.netAmount <= 0) {
+      inv.netAmount = Math.round((inv.grossAmount - inv.vatAmount) * 100) / 100;
+    }
+  } else if (inv.grossAmount > 0 && inv.netAmount > 0) {
+    inv.vatAmount = Math.round((inv.grossAmount - inv.netAmount) * 100) / 100;
+  }
+  var mVatRate = t.match(/ΦΠΑ\s*(\d{1,2})\s*%/i);
+  if (mVatRate) inv.vatRate = parseInt(mVatRate[1]);
+
+  // Reverse charge
+  if (/reverse\s*charge|αντίστροφη\s*φορολόγηση|ΑΝΤΙΣΤΡΟΦΗ/i.test(t)) {
+    inv.isReverseCharge = true;
+    inv.invoiceType = 'intraeu';
+    inv.vatRate = 0;
+  }
+
+  // 7. Επωνυμία προμηθευτή
+  var mSup = t.match(/(?:ΕΠΩΝΥΜΙΑ|ΕΤΑΙΡΕΙΑ|Επωνυμία|ΠΩΛΗΤΗΣ|ΕΚΔΟΤΗΣ|VENDOR|SELLER|SUPPLIER)[:\s]+([^\n\r]{4,70})/i);
+  if (mSup) {
+    inv.supplierName = mSup[1].trim().replace(/\s+/g, ' ').substring(0, 60);
+    found++;
+  } else {
+    var tLines = t.split(/[\n\r]+/);
+    for (var li = 0; li < Math.min(tLines.length, 25); li++) {
+      var ll = tLines[li].trim();
+      if (ll.length >= 4 && ll.length <= 80 && /\b(Α\.?Ε\.?|ΕΠΕ|ΙΚΕ|ΟΕ|ΕΕ|ΑΕΒΕ|ΑΕΒΕΕ|ΜΟΝΟΠΡΟΣΩΠΗ|LTD\.?|GMBH|GmbH|S\.A\.?)\b/i.test(ll)) {
+        inv.supplierName = ll;
+        found++;
+        break;
+      }
+    }
+  }
+
+  // Γραμμές προϊόντων: ανά γραμμή κειμένου — περιγραφή qty τιμή σύνολο
+  var tLinesArr = t.split(/\n/);
+  for (var rli = 0; rli < tLinesArr.length; rli++) {
+    var rl = tLinesArr[rli].trim();
+    if (rl.length < 10) continue;
+    var mLine = rl.match(/^(.{3,70}?)\s+(\d+(?:[.,]\d+)?)\s+(?:τεμ\.?|ΤΕΜ\.?|τμχ\.?|pcs|ml|ML|kg|KG|τχ\.?)?\s*([0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})\s*$/);
+    if (!mLine) continue;
+    var desc  = mLine[1].trim();
+    var qty    = parseFloat(mLine[2].replace(',', '.'));
+    var uPrice = parseFloat(mLine[3].replace(',', '.'));
+    var tPrice = parseFloat(mLine[4].replace(',', '.'));
+    if (/ΠΕΡΙΓΡΑΦ|DESCRIPTION|ΠΟΣΟΤ|ΤΙΜΗ|ΑΞΙΑ|ΣΥΝΟΛΟ|ΦΟΡΟΣ|ΦΠΑ|ΕΚΠΤ/i.test(desc)) continue;
+    if (tPrice <= 0 || qty <= 0 || uPrice <= 0) continue;
+    if (Math.abs(qty * uPrice - tPrice) > tPrice * 0.12 + 0.10) continue;
+    var pLine = {
+      description: desc.replace(/\s+/g, ' ').substring(0, 120),
+      quantity:    qty,
+      unit:        'τεμ',
+      volumeMl:    null,
+      aromaMl:     null,
+      productType: 'other',
+      unitPrice:   uPrice,
+      totalPrice:  tPrice,
+      matchedProductId: null
+    };
+    var mlM = desc.match(/(\d{1,3})\s*(?:\/\s*(\d{1,3}))?\s*ml/i);
+    if (mlM) {
+      if (mlM[2]) {
+        pLine.aromaMl    = parseInt(mlM[1]);
+        pLine.volumeMl   = parseInt(mlM[2]);
+        pLine.productType = 'longfill';
+      } else {
+        pLine.volumeMl   = parseInt(mlM[1]);
+        pLine.aromaMl    = pLine.volumeMl;
+        pLine.productType = pLine.volumeMl <= 30 ? 'premix' : 'shortfill';
+      }
+      pLine.unit = 'ml';
+    }
+    inv.lines.push(pLine);
+  }
+  if (inv.lines.length > 0) found++;
+
+  // Confidence
+  var raw = found / TOTAL_FIELDS;
+  if (inv.invoiceNumber && inv.grossAmount > 0) raw = Math.min(raw + 0.1, 1);
+  if (!inv.invoiceNumber && !inv.supplierVat && inv.grossAmount === 0) raw = 0;
+  inv.confidence = Math.round(raw * 100) / 100;
+  return inv;
+}
+
+async function znLocalReadInvoice(file) {
+  if (!file || file.type !== 'application/pdf') return null;
+  if (typeof pdfjsLib === 'undefined') return null;
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  }
+  try {
+    var arrBuf = await new Promise(function(res, rej) {
+      var r = new FileReader();
+      r.onload  = function(ev) { res(ev.target.result); };
+      r.onerror = function() { rej(new Error('Σφάλμα ανάγνωσης PDF')); };
+      r.readAsArrayBuffer(file);
+    });
+    var typedArr = new Uint8Array(arrBuf);
+    var pdf = await pdfjsLib.getDocument({ data: typedArr }).promise;
+    var fullText = '';
+    for (var pg = 1; pg <= pdf.numPages; pg++) {
+      var page = await pdf.getPage(pg);
+      var content = await page.getTextContent();
+      // Ταξινόμηση items: πάνω-κάτω, αριστερά-δεξιά
+      var items = content.items.slice().sort(function(a, b) {
+        var dy = b.transform[5] - a.transform[5];
+        return Math.abs(dy) > 3 ? dy : (a.transform[4] - b.transform[4]);
+      });
+      fullText += items.map(function(it) { return it.str; }).join(' ') + '\n';
+    }
+    if (!fullText.trim()) return null; // σαρωμένο/image PDF
+    var result = _znParseInvoiceText(fullText);
+    result.method = 'local';
+    return result;
+  } catch(e) {
+    console.warn('[LocalInvoice] pdf.js:', e.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 //   SMART INVOICE SCANNER — AI-powered τιμολόγια OCR
 //   Υποστηρίζει: Ελληνικά / Ενδοκοινοτικά / Εισαγωγές
 //   Αυτόματος ΕΦΚ υπολογισμός από ml
@@ -18005,6 +18190,31 @@ async function handleInvoiceFile(file) {
   if(step3){ step3.style.display = 'none'; step3.innerHTML = ''; }
 
   try {
+    const statusEl = document.getElementById('scanStatusText');
+
+    // ── Επίπεδο 1: Τοπική ανάγνωση PDF (basic+) ─────────────────────────────
+    if (file.type === 'application/pdf' && planHas('local_invoice_reader')) {
+      if(statusEl) statusEl.textContent = '📄 Ανάγνωση PDF τοπικά...';
+      var localResult = await znLocalReadInvoice(file);
+      if (localResult && localResult.confidence >= 0.5) {
+        if(step2) step2.style.display = 'none';
+        toast('📄 Διαβάστηκε τοπικά — χωρίς cloud', 'success');
+        renderInvoiceScanResults(localResult);
+        return;
+      }
+    }
+
+    // ── Επίπεδο 2: Cloud AI (invoice_scanner / pro+) ──────────────────────────
+    if (!planHas('invoice_scanner')) {
+      if(step2) step2.style.display = 'none';
+      if(step1) step1.style.display = 'block';
+      var _noCloudMsg = (file.type === 'application/pdf')
+        ? '📄 Χαμηλό confidence PDF — απαιτείται AI scanner (Pro+)'
+        : '🤖 Ανάγνωση εικόνων απαιτεί AI scanner (Pro+)';
+      toast(_noCloudMsg, 'warn', 4000);
+      return;
+    }
+
     // Convert to base64 με robust error handling
     const base64 = await new Promise((res, rej) => {
       const reader = new FileReader();
@@ -18022,8 +18232,8 @@ async function handleInvoiceFile(file) {
       reader.readAsDataURL(file);
     });
 
-    const statusEl = document.getElementById('scanStatusText');
-    if(statusEl) statusEl.textContent = 'Αποστολή στο ZyroNex Vision...';
+    if(statusEl) statusEl.textContent = '🤖 Αποστολή στο ZyroNex Vision...';
+    toast('🤖 AI ανάγνωση...', 'info', 2000);
 
     // Call Claude Vision via Supabase Edge Function
     const result = await callInvoiceOCR(base64, file.type);
