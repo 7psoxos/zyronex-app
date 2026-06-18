@@ -45764,6 +45764,80 @@ body.light-theme{
 .zn-tab-indicator{width:28px;height:3px;border-radius:0 0 4px 4px}
 .zn-tab.active .zn-tab-icon{transform:scale(1.12)}
 </style>
+<style id="zx-skin-4">
+/* Skin slice 2c — mobile icon-rail + flyout (desktop unchanged via display:contents). */
+.zx-rail{display:none}.zx-fly-head{display:none}.zx-flyout{display:contents}
+@media(max-width:900px){
+  /* Re-enable hamburger + drawer on mobile (override TAB-NAV hide) so the rail+flyout is reachable. */
+  #sidebar,.sidebar{display:flex!important}
+  .hamburger{display:flex!important}
+  .sidebar-backdrop{display:none!important;position:fixed;inset:0;background:rgba(8,10,24,.5);z-index:350;border:0}
+  body.sidebar-open .sidebar-backdrop{display:block!important}
+  body.sidebar-open{overflow:hidden!important;position:fixed!important;width:100%;height:100%}
+  .sidebar[data-zx-rail]{flex-direction:row;align-items:stretch;padding:0;width:min(88vw,338px);left:0;transform:translateX(-106%);transition:transform .22s ease;overflow:hidden;background:var(--bg-1);z-index:400}
+  .sidebar[data-zx-rail].open{transform:translateX(0)}
+  .sidebar[data-zx-rail]::after{display:none}
+  .sidebar[data-zx-rail] .zx-rail{display:flex;flex:0 0 72px;width:72px;flex-direction:column;align-items:center;gap:4px;padding:16px 0 12px;border-right:1px dashed var(--border);overflow-y:auto;background:var(--bg-1)}
+  .sidebar[data-zx-rail] .zx-flyout{display:flex;flex-direction:column;flex:1;min-width:0;overflow-y:auto;background:var(--bg-1)}
+  .sidebar[data-zx-rail] .zx-fly-head{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 8px}
+  .sidebar[data-zx-rail] .zx-fly-head .t{font-size:19px;font-weight:800;letter-spacing:-.01em;color:var(--text-0)}
+  .sidebar[data-zx-rail] .zx-fly-head .x{color:var(--accent);width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:none;border:0;font-size:24px;line-height:1;cursor:pointer}
+  .sidebar[data-zx-rail] .logo,.sidebar[data-zx-rail] #sidebarCollapseBtn{display:none}
+  .sidebar[data-zx-rail] .nav-section{display:none}
+  .sidebar[data-zx-rail] .nav-group{display:none;padding:4px 8px 16px}
+  .sidebar[data-zx-rail] .nav-group.zx-show{display:block}
+  .sidebar[data-zx-rail] .nav-item{font-size:15px;padding:12px;margin:2px 4px;border-radius:11px}
+  .sidebar[data-zx-rail] .zx-flyout>.nav-item{margin:auto 0 0;border-top:1px dashed var(--border);border-radius:0;padding:16px 18px;font-weight:600}
+  .zx-rail .zx-brand{width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,#8b5cf6,#6d4ee6);display:grid;place-items:center;color:#fff;font-weight:800;font-size:20px;margin-bottom:10px;flex:0 0 auto}
+  .zx-rail .zx-rail-btn{width:46px;height:46px;border-radius:14px;color:var(--text-2);display:grid;place-items:center;flex:0 0 auto;border:0;background:none;cursor:pointer}
+  .zx-rail .zx-rail-btn svg{width:22px;height:22px}
+  .zx-rail .zx-rail-btn.active{background:rgba(139,92,246,.16);color:var(--accent)}
+}
+</style>
+<script id="zx-rail-boot">
+(function(){'use strict';
+ var P={grid:'M3 13h8V3H3zM13 21h8V3h-8zM3 21h8v-6H3z',wallet:'M3 7h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1zM16 13h3',sparkles:'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z',cog:'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M19 13v-2l2-1-2-3-2 1a7 7 0 0 0-2-1l-.5-2h-3L9 6a7 7 0 0 0-2 1L5 6 3 9l2 1v2l-2 1 2 3 2-1a7 7 0 0 0 2 1l.5 2h3l.5-2a7 7 0 0 0 2-1l2 1 2-3z',help:'M9 9a3 3 0 1 1 4 2.8c-1 .6-1 1.2-1 2.2M12 17h.01',dot:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8'};
+ var ICONS={leitourgia:'grid',oikonomika:'wallet',smart:'sparkles',systima:'cog',ypovtirixi:'help'};
+ function svg(k){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+(P[k]||P.dot)+'"/></svg>';}
+ function build(){
+   var sb=document.getElementById('sidebar'); if(!sb||sb.getAttribute('data-zx-rail'))return;
+   var secs=[].slice.call(sb.querySelectorAll('.nav-section[data-section]')); if(!secs.length)return;
+   var fly=document.createElement('div'); fly.className='zx-flyout';
+   while(sb.firstChild){ fly.appendChild(sb.firstChild); }
+   var head=document.createElement('div'); head.className='zx-fly-head';
+   var t=document.createElement('span'); t.className='t';
+   var x=document.createElement('button'); x.type='button'; x.className='x'; x.setAttribute('aria-label','Κλείσιμο'); x.textContent='‹';
+   x.addEventListener('click',function(){ if(typeof window.toggleSidebar==='function'){try{window.toggleSidebar();}catch(e){}} });
+   head.appendChild(t); head.appendChild(x);
+   fly.insertBefore(head, fly.firstChild);
+   var rail=document.createElement('div'); rail.className='zx-rail';
+   var brand=document.createElement('div'); brand.className='zx-brand'; brand.textContent='Z'; rail.appendChild(brand);
+   secs.forEach(function(sec){
+     var key=sec.getAttribute('data-section'); var lbl=(sec.querySelector('span')||{}).textContent||key;
+     var b=document.createElement('button'); b.type='button'; b.className='zx-rail-btn'; b.setAttribute('data-sec',key); b.title=lbl;
+     b.innerHTML=svg(ICONS[key]||'dot');
+     b.addEventListener('click',function(){activate(key);});
+     rail.appendChild(b);
+   });
+   sb.appendChild(rail); sb.appendChild(fly); sb.setAttribute('data-zx-rail','1');
+   function activate(key){
+     sb.setAttribute('data-active-sec',key);
+     [].forEach.call(rail.querySelectorAll('.zx-rail-btn'),function(b){b.classList.toggle('active',b.getAttribute('data-sec')===key);});
+     var sec=fly.querySelector('.nav-section[data-section="'+key+'"]');
+     t.textContent=sec?((sec.querySelector('span')||{}).textContent||key):key;
+     [].forEach.call(fly.querySelectorAll('.nav-group'),function(g){g.classList.remove('zx-show');});
+     var grp=fly.querySelector('#nav-'+key); if(grp) grp.classList.add('zx-show');
+   }
+   var def=secs[0].getAttribute('data-section');
+   var act=fly.querySelector('.nav-item.active[data-page]');
+   if(act){var g=act.closest('.nav-group'); if(g&&g.id&&g.id.indexOf('nav-')===0)def=g.id.slice(4);}
+   activate(def);
+   window.ZX_RAIL={activate:activate};
+ }
+ function boot(){try{build();}catch(e){if(window.console)console.warn('zx-rail',e);}}
+ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,350);});}else{setTimeout(boot,350);}
+})();
+</script>
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
