@@ -2836,7 +2836,7 @@ window.onerror = function(msg, src, line, col, err) {
 
 <main class="main">
   <div class="topbar">
-    <button class="hamburger" onclick="window.znRailToggle&&window.znRailToggle()" aria-label="Μενού"><span class="zx-burger"><span></span><span></span><span></span></span><svg class="zx-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button id="main-menu-toggle" class="zyronex-menu-btn" onclick="window.znRailToggle&&window.znRailToggle()"><svg width="36" height="24" viewBox="0 0 36 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="2" width="22" height="4" rx="2" fill="#1e1e2d"/><rect x="0" y="10" width="22" height="4" rx="2" fill="#1e1e2d"/><rect x="0" y="18" width="22" height="4" rx="2" fill="#1e1e2d"/><g class="zyronex-menu-arrow"><path d="M25 9 L35 9 L30 16 Z" fill="#8b5cf6"/></g></svg></button>
     <button id="floatingBackBtn" onclick="goBack()" title="Πίσω" style="display:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
     <!-- Logo — shown on dashboard only, replaces search -->
     <div id="topbarLogo" style="display:none;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer" onclick="showPage('dashboard')">
@@ -45919,20 +45919,15 @@ body.light-theme .card{border-color:#ece9f6}
   .main{margin-left:0!important}
   .topbar{z-index:550!important}
   .hamburger{display:inline-flex!important}
+  .zyronex-menu-btn{display:flex!important}
   #shiftTopbarBadge{display:none!important}
   .sidebar-backdrop.zx-rail-back{display:block!important;inset:0;z-index:460;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);background:rgba(6,9,18,.5)}
   body.zx-rail-lock{overflow:hidden}
 }
-/* Animated hamburger (lines + chevron) — styled like the topbar buttons */
-.hamburger{align-items:center;gap:5px;padding:7px 9px;border-radius:11px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-0);cursor:pointer}
-.hamburger:hover,.hamburger:active{border-color:rgba(139,92,246,.5);color:var(--accent)}
-.hamburger .zx-burger{display:inline-flex;flex-direction:column;gap:3.5px}
-.hamburger .zx-burger span{display:block;width:17px;height:2.4px;border-radius:2px;background:currentColor;transition:width .26s ease}
-.hamburger .zx-burger span:nth-child(3){width:11px}
-.hamburger .zx-chev{width:13px;height:13px;transition:transform .26s cubic-bezier(.22,.61,.36,1)}
-body.zx-rail-open .hamburger{border-color:rgba(139,92,246,.6);color:var(--accent);background:rgba(139,92,246,.12)}
-body.zx-rail-open .hamburger .zx-chev{transform:rotate(-90deg)}
-body.zx-rail-open .hamburger .zx-burger span:nth-child(3){width:17px}
+/* Custom SVG menu toggle button */
+.zyronex-menu-btn{display:none;background:transparent;border:none;cursor:pointer;padding:8px;align-items:center;justify-content:center;outline:none}
+.zyronex-menu-arrow{transform-origin:center;transform-box:fill-box;transition:transform .3s ease-in-out}
+body.zx-rail-open .zyronex-menu-btn .zyronex-menu-arrow{transform:rotate(-90deg)}
 </style>
 <style id="zx-notif-style">
 /* Slice B — DashTail notifications dropdown. */
