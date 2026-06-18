@@ -16729,7 +16729,8 @@ function _updatePageCloseBtn(p){
   try {
     var btn = document.getElementById('znPageClose');
     if(!btn) return;
-    if(_PRIMARY_PAGES.indexOf(p) !== -1){
+    // Page-close X shown ONLY on these pop-up-like pages; removed everywhere else (navigate via topbar back).
+    if(['vault','shifts'].indexOf(p) === -1){
       btn.style.display = 'none';
       return;
     }
