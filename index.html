@@ -2727,7 +2727,7 @@ window.onerror = function(msg, src, line, col, err) {
 
 <!-- APP -->
 <div class="app hidden" id="appWrap">
-<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 <aside class="sidebar" id="sidebar">
   <!-- Collapse toggle — desktop only, top of sidebar -->
   <button id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="Minimize / Expand sidebar"
@@ -45809,23 +45809,42 @@ body.light-theme{
      var key=sec.getAttribute('data-section'); var lbl=(sec.querySelector('span')||{}).textContent||key;
      var b=document.createElement('button'); b.type='button'; b.className='zx-rail-btn'; b.setAttribute('data-sec',key); b.title=lbl;
      b.innerHTML=svg(ICONS[key]||'dot');
-     b.addEventListener('click',function(){ if(sb.getAttribute('data-active-sec')===key){ if(typeof window.toggleSidebar==='function'){try{window.toggleSidebar();}catch(e){}} } else { activate(key); } });
+     b.addEventListener('click',function(){ if(sb.classList.contains('zx-fly-open')&&sb.getAttribute('data-active-sec')===key){ closeFly(); } else { openFly(key); } });
      rail.appendChild(b);
    });
    sb.appendChild(rail); sb.appendChild(fly); sb.setAttribute('data-zx-rail','1');
+   function setActiveIcon(key){
+     [].forEach.call(rail.querySelectorAll('.zx-rail-btn'),function(b){b.classList.toggle('active',!!key&&b.getAttribute('data-sec')===key);});
+   }
    function activate(key){
      sb.setAttribute('data-active-sec',key);
-     [].forEach.call(rail.querySelectorAll('.zx-rail-btn'),function(b){b.classList.toggle('active',b.getAttribute('data-sec')===key);});
      var sec=fly.querySelector('.nav-section[data-section="'+key+'"]');
      t.textContent=sec?((sec.querySelector('span')||{}).textContent||key):key;
      [].forEach.call(fly.querySelectorAll('.nav-group'),function(g){g.classList.remove('zx-show');});
      var grp=fly.querySelector('#nav-'+key); if(grp) grp.classList.add('zx-show');
    }
+   var _bk=document.getElementById('sidebarBackdrop');
+   function openFly(key){
+     activate(key); setActiveIcon(key);
+     sb.classList.add('zx-fly-open');
+     if(_bk) _bk.classList.add('zx-fly-back');
+     try{document.body.classList.add('zx-fly-lock');}catch(e){}
+   }
+   function closeFly(){
+     sb.classList.remove('zx-fly-open');
+     sb.removeAttribute('data-active-sec');
+     setActiveIcon(null);
+     if(_bk) _bk.classList.remove('zx-fly-back');
+     try{document.body.classList.remove('zx-fly-lock');}catch(e){}
+   }
+   if(_bk) _bk.addEventListener('click',function(e){ if(sb.classList.contains('zx-fly-open')){ e.preventDefault(); e.stopPropagation(); closeFly(); } });
+   document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&sb.classList.contains('zx-fly-open')) closeFly(); });
+   fly.addEventListener('click',function(e){ var it=e.target&&e.target.closest&&e.target.closest('.nav-item[data-page]'); if(it) setTimeout(closeFly,10); });
    var def=secs[0].getAttribute('data-section');
    var act=fly.querySelector('.nav-item.active[data-page]');
    if(act){var g=act.closest('.nav-group'); if(g&&g.id&&g.id.indexOf('nav-')===0)def=g.id.slice(4);}
-   activate(def);
-   window.ZX_RAIL={activate:activate};
+   activate(def); setActiveIcon(null); sb.classList.remove('zx-fly-open');
+   window.ZX_RAIL={activate:activate,open:openFly,close:closeFly};
  }
  function boot(){try{build();}catch(e){if(window.console)console.warn('zx-rail',e);}}
  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,350);});}else{setTimeout(boot,350);}
@@ -45893,6 +45912,19 @@ body.light-theme .card{border-color:#ece9f6}
  if(document.readyState!=='loading'){ setTimeout(up,500); }
 })();
 </script>
+<style id="zx-flyout-skin">
+/* Slice 2 — always-visible icon rail + separate sliding flyout (mobile, CSS-only shell). */
+@media(max-width:900px){
+  .sidebar[data-zx-rail]{transform:none!important;left:0!important;width:72px!important;overflow:visible!important;box-shadow:none!important;z-index:500!important;background:transparent!important}
+  .sidebar[data-zx-rail] .zx-rail{height:100%;border-right:1px solid var(--border)}
+  .sidebar[data-zx-rail] .zx-flyout{position:fixed!important;left:72px;top:0;bottom:0;width:min(76vw,290px);transform:translateX(-114%);transition:transform .26s cubic-bezier(.22,.61,.36,1);box-shadow:24px 0 60px rgba(0,0,0,.5);background:var(--bg-1);z-index:480}
+  .sidebar[data-zx-rail].zx-fly-open .zx-flyout{transform:translateX(0)}
+  .main{margin-left:72px!important}
+  .hamburger{display:none!important}
+  .sidebar-backdrop.zx-fly-back{display:block!important;z-index:460;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);background:rgba(6,9,18,.5)}
+  body.zx-fly-lock{overflow:hidden}
+}
+</style>
 <style id="zx-notif-style">
 /* Slice B — DashTail notifications dropdown. */
 #zxNotifDD{position:fixed;top:62px;right:12px;z-index:600;width:min(340px,calc(100vw - 24px));background:var(--bg-1);border:1px solid var(--border);border-radius:16px;box-shadow:0 18px 48px -12px rgba(10,8,30,.6);overflow:hidden}
