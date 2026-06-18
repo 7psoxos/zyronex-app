@@ -45756,6 +45756,14 @@ body.light-theme{
 .nav-item.active::before{content:'';position:absolute;left:-8px;top:50%;transform:translateY(-50%);width:3px;height:18px;background:var(--accent);border-radius:0 3px 3px 0;box-shadow:0 0 8px rgba(139,92,246,0.6)}
 .nav-section:hover{background:rgba(139,92,246,0.08);color:var(--text-0)}
 </style>
+<style id="zx-skin-3">
+/* Skin slice 2b — mobile bottom tab-bar DashTail restyle (CSS-only, no DOM/JS/behavior change). */
+#znTabBar{border-radius:18px 18px 0 0;box-shadow:0 -10px 30px -18px rgba(20,14,60,0.55)}
+.zn-tab[data-tab="pos"].active,.zn-tab[data-tab="inventory"].active,.zn-tab[data-tab="customers"].active,.zn-tab[data-tab="finance"].active,.zn-tab[data-tab="system"].active{color:var(--accent)}
+.zn-tab[data-tab="pos"].active .zn-tab-indicator,.zn-tab[data-tab="inventory"].active .zn-tab-indicator,.zn-tab[data-tab="customers"].active .zn-tab-indicator,.zn-tab[data-tab="finance"].active .zn-tab-indicator,.zn-tab[data-tab="system"].active .zn-tab-indicator{background:var(--accent)}
+.zn-tab-indicator{width:28px;height:3px;border-radius:0 0 4px 4px}
+.zn-tab.active .zn-tab-icon{transform:scale(1.12)}
+</style>
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
