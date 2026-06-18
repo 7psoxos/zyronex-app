@@ -45856,6 +45856,50 @@ body.light-theme .card{border-color:#ece9f6}
 .kpi-badge-teal{background:rgba(139,92,246,.18);box-shadow:0 0 20px rgba(139,92,246,.12)}
 .kpi-badge-teal i,.kpi-badge-teal [data-lucide],.kpi-badge-teal svg{color:var(--accent)}
 </style>
+<style id="zx-skin-7">
+/* Slice A — menu v2: DashTail rail icons/avatar/active, blur, remove old tab bar (mobile). */
+@media(max-width:900px){
+  #znTabBar,#znTabToggle{display:none!important}
+  .main .content{padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))!important;scroll-padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))}
+  #floatingBackBtn[style*="block"],#floatingBackBtn[style*="flex"]{display:inline-flex!important;position:static;left:auto;align-items:center;justify-content:center}
+  .sidebar-backdrop{-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+  .sidebar[data-zx-rail] .zx-rail{padding-bottom:14px}
+  .zx-rail .zx-rail-btn svg{width:23px;height:23px}
+  .zx-rail .zx-rail-btn.active{background:linear-gradient(135deg,#8b5cf6,#6d4ee6)!important;color:#fff!important;box-shadow:0 7px 16px -7px rgba(139,92,246,.65)}
+  .zx-rail .zx-rail-avatar{margin-top:auto;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6d4ee6);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:0 0 auto;border:2px solid rgba(139,92,246,.45);overflow:hidden}
+  .zx-rail .zx-rail-avatar img{width:100%;height:100%;object-fit:cover}
+}
+</style>
+<script id="zx-rail-boot-2">
+(function(){'use strict';
+ var I={
+  leitourgia:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  oikonomika:'<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
+  smart:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"/>',
+  systima:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+  ypovtirixi:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/>'
+ };
+ function up(){
+   var rail=document.querySelector('.zx-rail'); if(!rail) return false;
+   if(rail.getAttribute('data-zx-icons')) return true;
+   [].forEach.call(rail.querySelectorAll('.zx-rail-btn[data-sec]'),function(b){
+     var k=b.getAttribute('data-sec'); if(I[k]) b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+I[k]+'</svg>';
+   });
+   if(!rail.querySelector('.zx-rail-avatar')){
+     var a=document.createElement('div'); a.className='zx-rail-avatar'; a.title='Προφίλ';
+     var src=document.getElementById('topAvatar');
+     var img=src&&src.querySelector&&src.querySelector('img');
+     if(img&&img.src){ a.innerHTML='<img src="'+img.src+'" alt="">'; }
+     else { a.textContent=((src&&src.textContent)||'Z').trim().charAt(0)||'Z'; }
+     a.addEventListener('click',function(){ if(typeof window.toggleProfileMenu==='function'){try{window.toggleProfileMenu();}catch(e){}} });
+     rail.appendChild(a);
+   }
+   rail.setAttribute('data-zx-icons','1'); return true;
+ }
+ var n=0,t=setInterval(function(){ if(up()||++n>30) clearInterval(t); },150);
+ if(document.readyState!=='loading'){ setTimeout(up,500); }
+})();
+</script>
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
