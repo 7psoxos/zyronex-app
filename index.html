@@ -45917,8 +45917,8 @@ body.light-theme .card{border-color:#ece9f6}
 @media(max-width:900px){
   .sidebar[data-zx-rail]{transform:none!important;left:0!important;width:72px!important;overflow:visible!important;box-shadow:none!important;z-index:500!important;background:transparent!important}
   .sidebar[data-zx-rail] .zx-rail{height:100%;border-right:1px solid var(--border)}
-  .sidebar[data-zx-rail] .zx-flyout{position:fixed!important;left:72px;top:0;bottom:0;width:min(76vw,290px);transform:translateX(-114%);transition:transform .26s cubic-bezier(.22,.61,.36,1);box-shadow:24px 0 60px rgba(0,0,0,.5);background:var(--bg-1);z-index:480}
-  .sidebar[data-zx-rail].zx-fly-open .zx-flyout{transform:translateX(0)}
+  .sidebar[data-zx-rail] .zx-flyout{position:fixed!important;left:72px;top:0;bottom:0;width:min(76vw,290px);transform:translateX(calc(-100% - 80px));transition:transform .26s cubic-bezier(.22,.61,.36,1);box-shadow:24px 0 60px rgba(0,0,0,.5);background:var(--bg-1);z-index:480;pointer-events:none}
+  .sidebar[data-zx-rail].zx-fly-open .zx-flyout{transform:translateX(0);pointer-events:auto}
   .main{margin-left:72px!important}
   .hamburger{display:none!important}
   .sidebar-backdrop.zx-fly-back{display:block!important;z-index:460;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);background:rgba(6,9,18,.5)}
