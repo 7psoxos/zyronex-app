@@ -45722,6 +45722,25 @@ function _kioskSliderChange(idx){
 window._kioskSliderChange = _kioskSliderChange;
 window._kioskRenderSliderTicks = _kioskRenderSliderTicks;
 </script>
+<style id="zx-skin">
+/* ZyroNex x DashTail — Skin slice 1: token retune (value-level) + boot spinner accent. */
+:root{
+  --bg-0:#0a1020; --bg-1:#0f1830; --bg-2:#16203a; --bg-3:#1f2a47;
+  --border:rgba(124,140,200,0.14); --border-strong:rgba(124,140,200,0.26);
+  --text-0:#e8ecf6; --text-1:#c2c9dc; --text-2:#8893ad;
+  --accent:#8b5cf6; --accent-dim:#7c5cf0;
+  --danger:#ef4444; --warn:#e08a3c; --ok:#22c55e; --info:#3b82f6;
+  --blue-glow:rgba(59,130,246,0.14); --teal-glow:rgba(139,92,246,0.12); --purple-glow:rgba(139,92,246,0.18);
+}
+body.light-theme{
+  --bg-0:#eceaf6; --bg-1:#ffffff; --bg-2:#f4f3fb; --bg-3:#e9e7f5;
+  --border:#e6e4f1; --border-strong:#d2cfe6;
+  --text-0:#1e2433; --text-1:#3b4256; --text-2:#7b8197;
+  --accent:#8b5cf6; --accent-dim:#7c5cf0;
+  --danger:#ef4444; --warn:#e08a3c; --ok:#22c55e; --info:#3b82f6;
+}
+#blRingFill{stroke:var(--accent)}
+</style>
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
