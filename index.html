@@ -16687,16 +16687,12 @@ function znHubForPage(id){
 }
 
 // NAV CONTRACT — DO NOT BREAK:
-// znGoBack (X button on sub-pages) re-opens the hub panel for the current page's section,
-// falling back to goBack() if no hub exists. Never call showPage('dashboard') here —
-// that would push a phantom dashboard entry into _pageHistory.
+// znGoBack (X button on sub-pages) closes the page via the app's real back
+// navigation (goBack), which handles KB articles, Vault folders, settings,
+// kiosk, etc. and then pops the nav stack. It must NEVER re-open the hub /
+// bottom-sheet menu — the hub opens ONLY from an explicit tab-bar tap.
 window.znGoBack = function(){
-  var hub = (typeof znHubForPage === 'function') ? znHubForPage(window._znCurView) : null;
-  if (hub) {
-    if (typeof znHubOpen === 'function') znHubOpen(hub);
-  } else {
-    if (typeof goBack === 'function') goBack();
-  }
+  if (typeof goBack === 'function') goBack();
 };
 
 // Central page-close button wiring (click handler set once; survives #content rewrites)
