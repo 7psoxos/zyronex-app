@@ -45801,9 +45801,7 @@ body.light-theme{
    while(sb.firstChild){ fly.appendChild(sb.firstChild); }
    var head=document.createElement('div'); head.className='zx-fly-head';
    var t=document.createElement('span'); t.className='t';
-   var x=document.createElement('button'); x.type='button'; x.className='x'; x.setAttribute('aria-label','Κλείσιμο'); x.textContent='‹';
-   x.addEventListener('click',function(){ if(typeof window.toggleSidebar==='function'){try{window.toggleSidebar();}catch(e){}} });
-   head.appendChild(t); head.appendChild(x);
+   head.appendChild(t);
    fly.insertBefore(head, fly.firstChild);
    var rail=document.createElement('div'); rail.className='zx-rail';
    var brand=document.createElement('div'); brand.className='zx-brand'; brand.setAttribute('aria-label','ZyroNex'); rail.appendChild(brand);
@@ -45811,7 +45809,7 @@ body.light-theme{
      var key=sec.getAttribute('data-section'); var lbl=(sec.querySelector('span')||{}).textContent||key;
      var b=document.createElement('button'); b.type='button'; b.className='zx-rail-btn'; b.setAttribute('data-sec',key); b.title=lbl;
      b.innerHTML=svg(ICONS[key]||'dot');
-     b.addEventListener('click',function(){activate(key);});
+     b.addEventListener('click',function(){ if(sb.getAttribute('data-active-sec')===key){ if(typeof window.toggleSidebar==='function'){try{window.toggleSidebar();}catch(e){}} } else { activate(key); } });
      rail.appendChild(b);
    });
    sb.appendChild(rail); sb.appendChild(fly); sb.setAttribute('data-zx-rail','1');
