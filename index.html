@@ -45900,6 +45900,59 @@ body.light-theme .card{border-color:#ece9f6}
  if(document.readyState!=='loading'){ setTimeout(up,500); }
 })();
 </script>
+<style id="zx-notif-style">
+/* Slice B — DashTail notifications dropdown. */
+#zxNotifDD{position:fixed;top:62px;right:12px;z-index:600;width:min(340px,calc(100vw - 24px));background:var(--bg-1);border:1px solid var(--border);border-radius:16px;box-shadow:0 18px 48px -12px rgba(10,8,30,.6);overflow:hidden}
+#zxNotifDD .zxn-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;background:linear-gradient(135deg,#7c4dff,#5b34d6);color:#fff;font-weight:800;font-size:15px}
+#zxNotifDD .zxn-mark{background:rgba(255,255,255,.18);border:0;color:#fff;font-size:11px;font-weight:700;padding:5px 9px;border-radius:8px;cursor:pointer;white-space:nowrap}
+#zxNotifDD .zxn-list{max-height:320px;overflow-y:auto}
+#zxNotifDD .zxn-row{display:flex;align-items:flex-start;gap:11px;padding:12px 16px;border-bottom:1px solid var(--border)}
+#zxNotifDD .zxn-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:5px}
+#zxNotifDD .zxn-meta{min-width:0;flex:1}
+#zxNotifDD .zxn-t{font-size:13.5px;font-weight:700;color:var(--text-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#zxNotifDD .zxn-s{font-size:12px;color:var(--text-2);margin-top:2px}
+#zxNotifDD .zxn-empty{padding:30px 16px;text-align:center;color:var(--text-2);font-size:13px}
+#zxNotifDD .zxn-all{display:block;width:100%;border:0;background:var(--accent);color:#fff;font-weight:800;font-size:14px;padding:13px;cursor:pointer}
+</style>
+<script id="zx-notif-boot">
+(function(){'use strict';
+ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+ function dis(){try{return (typeof _getAlertDismissed==='function')?_getAlertDismissed():new Set();}catch(e){return new Set();}}
+ function collect(){
+   var it=[];
+   try{
+     var u=window.CURRENT_USER||null; var role=((u&&u.role)||'').toLowerCase();
+     var isAdmin=u&&(((u.perms||[]).indexOf('*')>=0)||role==='admin'||role==='διαχειριστής');
+     var hasInv=isAdmin||(u&&(u.perms||[]).indexOf('inventory')>=0);
+     var d=dis();
+     if(isAdmin||hasInv){
+       if(typeof outOfStockList==='function') outOfStockList().forEach(function(p){ if(!d.has('out_'+p.id)) it.push({t:p.name,s:'Εξαντλήθηκε',c:'#ff4757'}); });
+       if(typeof lowStockList==='function') lowStockList().forEach(function(p){ if(p.stock>0&&!d.has('low_'+p.id)) it.push({t:p.name,s:'Χαμηλό απόθεμα · '+p.stock+' τεμ.',c:'#ffa94d'}); });
+     }
+     if(isAdmin && typeof expiringList==='function') expiringList(30).forEach(function(p){ if(!d.has('exp_'+p.id+'_'+p.expiry)) it.push({t:p.name,s:'Λήγει σύντομα',c:'#4aa3ff'}); });
+   }catch(e){}
+   return it;
+ }
+ function build(){
+   var dd=document.getElementById('zxNotifDD'); if(dd) return dd;
+   dd=document.createElement('div'); dd.id='zxNotifDD'; dd.style.display='none'; document.body.appendChild(dd);
+   document.addEventListener('click',function(e){ if(dd.style.display==='none')return; var bell=document.getElementById('bellBtn'); if(!dd.contains(e.target)&&bell&&!bell.contains(e.target)) dd.style.display='none'; });
+   return dd;
+ }
+ function render(){
+   var dd=build(); var items=collect(); var n=items.length;
+   var rows=n?items.slice(0,6).map(function(a){return '<div class="zxn-row"><span class="zxn-dot" style="background:'+a.c+'"></span><div class="zxn-meta"><div class="zxn-t">'+esc(a.t)+'</div><div class="zxn-s">'+esc(a.s)+'</div></div></div>';}).join(''):'<div class="zxn-empty">Καμία νέα ειδοποίηση</div>';
+   dd.innerHTML='<div class="zxn-head"><span>Ειδοποιήσεις</span>'+(n?'<button class="zxn-mark" id="zxnMark">Όλα ως αναγνωσμένα</button>':'')+'</div><div class="zxn-list">'+rows+'</div><button class="zxn-all" id="zxnAll">Προβολή όλων'+(n>6?' ('+n+')':'')+'</button>';
+   var m=dd.querySelector('#zxnMark'); if(m) m.addEventListener('click',function(ev){ev.stopPropagation();try{if(typeof dismissAllAlerts==='function')dismissAllAlerts();}catch(e){}try{if(typeof updateNotifDot==='function')updateNotifDot();}catch(e){}render();});
+   dd.querySelector('#zxnAll').addEventListener('click',function(ev){ev.stopPropagation();dd.style.display='none';try{if(typeof showPage==='function')showPage('alerts');}catch(e){}});
+ }
+ function toggle(){var dd=build();if(dd.style.display==='none'){render();dd.style.display='block';}else{dd.style.display='none';}}
+ function wire(){var bell=document.getElementById('bellBtn');if(!bell||bell.getAttribute('data-zx-notif'))return !!bell;bell.setAttribute('data-zx-notif','1');bell.onclick=function(e){try{e.preventDefault();}catch(_){}try{toggle();}catch(err){try{if(typeof openNotifications==='function')openNotifications();}catch(_){}}};return true;}
+ var n=0,t=setInterval(function(){if(wire()||++n>30)clearInterval(t);},200);
+ if(document.readyState!=='loading') setTimeout(wire,400);
+ window.zxNotifToggle=toggle;
+})();
+</script>
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
