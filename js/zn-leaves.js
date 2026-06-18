@@ -25138,6 +25138,10 @@ function _pluginOpen(id){
 function toggleTheme(){
   const isLight = document.body.classList.toggle('light-theme');
   localStorage.setItem('katastimaTheme', isLight ? 'light' : 'dark');
+  try{
+    if(isLight){ document.documentElement.style.setProperty('--bg-0','#f5f7fa'); document.documentElement.classList.add('zn-light'); }
+    else { document.documentElement.style.removeProperty('--bg-0'); document.documentElement.classList.remove('zn-light'); }
+  }catch(e){}
   updateThemeIcon();
   toast('Θέμα: ' + (isLight ? 'Φωτεινό' : 'Σκοτεινό'), 'success');
 }
