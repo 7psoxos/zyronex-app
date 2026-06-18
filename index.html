@@ -2836,7 +2836,7 @@ window.onerror = function(msg, src, line, col, err) {
 
 <main class="main">
   <div class="topbar">
-    <button class="hamburger" onclick="toggleSidebar()"><i data-lucide="menu" size="20"></i></button>
+    <button class="hamburger" onclick="window.znRailToggle&&window.znRailToggle()" aria-label="Μενού"><span class="zx-burger"><span></span><span></span><span></span></span><svg class="zx-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
     <button id="floatingBackBtn" onclick="goBack()" title="Πίσω" style="display:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
     <!-- Logo — shown on dashboard only, replaces search -->
     <div id="topbarLogo" style="display:none;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer" onclick="showPage('dashboard')">
@@ -45824,27 +45824,22 @@ body.light-theme{
      var grp=fly.querySelector('#nav-'+key); if(grp) grp.classList.add('zx-show');
    }
    var _bk=document.getElementById('sidebarBackdrop');
-   function openFly(key){
-     activate(key); setActiveIcon(key);
-     sb.classList.add('zx-fly-open');
-     if(_bk) _bk.classList.add('zx-fly-back');
-     try{document.body.classList.add('zx-fly-lock');}catch(e){}
-   }
-   function closeFly(){
-     sb.classList.remove('zx-fly-open');
-     sb.removeAttribute('data-active-sec');
-     setActiveIcon(null);
-     if(_bk) _bk.classList.remove('zx-fly-back');
-     try{document.body.classList.remove('zx-fly-lock');}catch(e){}
-   }
-   if(_bk) _bk.addEventListener('click',function(e){ if(sb.classList.contains('zx-fly-open')){ e.preventDefault(); e.stopPropagation(); closeFly(); } });
-   document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&sb.classList.contains('zx-fly-open')) closeFly(); });
-   fly.addEventListener('click',function(e){ var it=e.target&&e.target.closest&&e.target.closest('.nav-item[data-page]'); if(it) setTimeout(closeFly,10); });
+   function _topH(){ try{ var tb=document.querySelector('.topbar'); if(tb&&tb.offsetHeight) document.documentElement.style.setProperty('--zx-topbar-h', tb.offsetHeight+'px'); }catch(e){} }
+   _topH(); window.addEventListener('resize',_topH); window.addEventListener('orientationchange',function(){setTimeout(_topH,250);});
+   function openFly(key){ activate(key); setActiveIcon(key); sb.classList.add('zx-fly-open'); }
+   function closeFly(){ sb.classList.remove('zx-fly-open'); sb.removeAttribute('data-active-sec'); setActiveIcon(null); }
+   function openRail(){ _topH(); sb.classList.add('zx-rail-open'); document.body.classList.add('zx-rail-open'); if(_bk) _bk.classList.add('zx-rail-back'); try{document.body.classList.add('zx-rail-lock');}catch(e){} }
+   function closeRail(){ closeFly(); sb.classList.remove('zx-rail-open'); document.body.classList.remove('zx-rail-open'); if(_bk) _bk.classList.remove('zx-rail-back'); try{document.body.classList.remove('zx-rail-lock');}catch(e){} }
+   function toggleRail(){ if(sb.classList.contains('zx-rail-open')) closeRail(); else openRail(); }
+   window.znRailToggle=toggleRail;
+   if(_bk) _bk.addEventListener('click',function(e){ if(sb.classList.contains('zx-rail-open')){ e.preventDefault(); e.stopPropagation(); closeRail(); } });
+   document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&sb.classList.contains('zx-rail-open')) closeRail(); });
+   fly.addEventListener('click',function(e){ var it=e.target&&e.target.closest&&e.target.closest('.nav-item[data-page]'); if(it) setTimeout(closeRail,10); });
    var def=secs[0].getAttribute('data-section');
    var act=fly.querySelector('.nav-item.active[data-page]');
    if(act){var g=act.closest('.nav-group'); if(g&&g.id&&g.id.indexOf('nav-')===0)def=g.id.slice(4);}
-   activate(def); setActiveIcon(null); sb.classList.remove('zx-fly-open');
-   window.ZX_RAIL={activate:activate,open:openFly,close:closeFly};
+   activate(def); setActiveIcon(null); sb.classList.remove('zx-fly-open'); sb.classList.remove('zx-rail-open');
+   window.ZX_RAIL={activate:activate,open:openFly,close:closeFly,toggle:toggleRail,openRail:openRail,closeRail:closeRail};
  }
  function boot(){try{build();}catch(e){if(window.console)console.warn('zx-rail',e);}}
  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,350);});}else{setTimeout(boot,350);}
@@ -45913,17 +45908,31 @@ body.light-theme .card{border-color:#ece9f6}
 })();
 </script>
 <style id="zx-flyout-skin">
-/* Slice 2 — always-visible icon rail + separate sliding flyout (mobile, CSS-only shell). */
+/* Mobile nav — hamburger-toggled icon rail + separate sliding flyout (CSS-only shell). */
 @media(max-width:900px){
-  .sidebar[data-zx-rail]{transform:none!important;left:0!important;width:72px!important;overflow:visible!important;box-shadow:none!important;z-index:500!important;background:transparent!important}
-  .sidebar[data-zx-rail] .zx-rail{height:100%;border-right:1px solid var(--border)}
-  .sidebar[data-zx-rail] .zx-flyout{position:fixed!important;left:72px;top:0;bottom:0;width:min(76vw,290px);transform:translateX(calc(-100% - 80px));transition:transform .26s cubic-bezier(.22,.61,.36,1);box-shadow:24px 0 60px rgba(0,0,0,.5);background:var(--bg-1);z-index:480;pointer-events:none}
+  .sidebar[data-zx-rail]{transform:none!important;left:0!important;width:72px!important;overflow:visible!important;box-shadow:none!important;z-index:500!important;background:transparent!important;pointer-events:none!important}
+  .sidebar[data-zx-rail] .zx-rail{height:100%;padding-top:calc(var(--zx-topbar-h,64px) + 10px);border-right:1px solid var(--border);background:var(--bg-1);transform:translateX(-110%);transition:transform .26s cubic-bezier(.22,.61,.36,1);pointer-events:auto;will-change:transform}
+  .sidebar[data-zx-rail].zx-rail-open .zx-rail{transform:none}
+  .sidebar[data-zx-rail] .zx-brand{display:none}
+  .sidebar[data-zx-rail] .zx-flyout{position:fixed!important;left:72px;top:var(--zx-topbar-h,64px);bottom:0;width:min(76vw,290px);transform:translateX(calc(-100% - 80px));transition:transform .26s cubic-bezier(.22,.61,.36,1);box-shadow:24px 0 60px rgba(0,0,0,.5);background:var(--bg-1);z-index:480;pointer-events:none}
   .sidebar[data-zx-rail].zx-fly-open .zx-flyout{transform:translateX(0);pointer-events:auto}
-  .main{margin-left:72px!important}
-  .hamburger{display:none!important}
-  .sidebar-backdrop.zx-fly-back{display:block!important;z-index:460;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);background:rgba(6,9,18,.5)}
-  body.zx-fly-lock{overflow:hidden}
+  .main{margin-left:0!important}
+  .topbar{z-index:550!important}
+  .hamburger{display:inline-flex!important}
+  #shiftTopbarBadge{display:none!important}
+  .sidebar-backdrop.zx-rail-back{display:block!important;inset:0;z-index:460;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);background:rgba(6,9,18,.5)}
+  body.zx-rail-lock{overflow:hidden}
 }
+/* Animated hamburger (lines + chevron) — styled like the topbar buttons */
+.hamburger{align-items:center;gap:5px;padding:7px 9px;border-radius:11px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-0);cursor:pointer}
+.hamburger:hover,.hamburger:active{border-color:rgba(139,92,246,.5);color:var(--accent)}
+.hamburger .zx-burger{display:inline-flex;flex-direction:column;gap:3.5px}
+.hamburger .zx-burger span{display:block;width:17px;height:2.4px;border-radius:2px;background:currentColor;transition:width .26s ease}
+.hamburger .zx-burger span:nth-child(3){width:11px}
+.hamburger .zx-chev{width:13px;height:13px;transition:transform .26s cubic-bezier(.22,.61,.36,1)}
+body.zx-rail-open .hamburger{border-color:rgba(139,92,246,.6);color:var(--accent);background:rgba(139,92,246,.12)}
+body.zx-rail-open .hamburger .zx-chev{transform:rotate(-90deg)}
+body.zx-rail-open .hamburger .zx-burger span:nth-child(3){width:17px}
 </style>
 <style id="zx-notif-style">
 /* Slice B — DashTail notifications dropdown. */
