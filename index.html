@@ -45877,6 +45877,107 @@ body.light-theme .card{border-color:#ece9f6}
   .zx-rail .zx-rail-avatar img{width:100%;height:100%;object-fit:cover}
 }
 </style>
+<style id="zx-fan-skin">
+#znFanBackdrop{position:fixed;inset:0;z-index:1399;display:none}
+#znFanBackdrop.open{display:block}
+#znFan{position:fixed;left:0;top:0;width:0;height:0;z-index:1400;pointer-events:none}
+#znFan .zn-fan-item{position:absolute;left:-23px;top:-23px;width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:linear-gradient(135deg,#8b5cf6,#6d4ee6);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(0,0,0,.4);opacity:0;transform:translate(0,0) scale(.4);transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .2s ease,background .2s ease;pointer-events:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#znFan.open .zn-fan-item{opacity:1;pointer-events:auto}
+#znFan .zn-fan-item:active{filter:brightness(1.12)}
+#znFan .zn-fan-item svg{width:21px;height:21px}
+#znFan .zn-fan-item.zn-fan-danger{background:linear-gradient(135deg,#ef4444,#dc2626)}
+#znFan .zn-fan-item.zn-fan-on{background:linear-gradient(135deg,#22c55e,#16a34a)}
+#znFan .zn-fan-item.zn-fan-light{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#3a2a00}
+.zx-rail-avatar.zn-fan-active{box-shadow:0 0 0 3px rgba(139,92,246,.5);transform:scale(1.06)}
+</style>
+<script id="zx-fan-menu">
+(function(){
+  if(window.znFanToggle) return;
+  var ICONS={
+    settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+    sun:'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+    logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'
+  };
+  function svg(n){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONS[n]+'</svg>'; }
+  var ACTS=[
+    {act:'logout',icon:'logout',title:'Αποσύνδεση',danger:true},
+    {act:'shifts',icon:'clock',title:'Βάρδιες'},
+    {act:'theme',icon:'moon',title:'Εναλλαγή Θέματος'},
+    {act:'settings',icon:'settings',title:'Ρυθμίσεις'}
+  ];
+  var R=106, fan=null, bk=null, anchorEl=null;
+  function build(){
+    if(fan) return;
+    bk=document.createElement('div'); bk.id='znFanBackdrop';
+    fan=document.createElement('div'); fan.id='znFan';
+    ACTS.forEach(function(a){
+      var b=document.createElement('button');
+      b.className='zn-fan-item'+(a.danger?' zn-fan-danger':'');
+      b.setAttribute('data-act',a.act); b.title=a.title; b.setAttribute('aria-label',a.title);
+      b.innerHTML=svg(a.icon);
+      fan.appendChild(b);
+    });
+    document.body.appendChild(bk); document.body.appendChild(fan);
+    bk.addEventListener('click',close);
+    fan.addEventListener('click',function(e){
+      var b=e.target&&e.target.closest&&e.target.closest('.zn-fan-item'); if(!b) return;
+      var act=b.getAttribute('data-act'); close();
+      setTimeout(function(){
+        try{
+          if(act==='settings'){ showPage('settings'); }
+          else if(act==='shifts'){ showPage('shifts'); }
+          else if(act==='theme'){ toggleTheme(); }
+          else if(act==='logout'){ logout(); }
+        }catch(err){}
+        if(act!=='theme'){ try{ if(window.ZX_RAIL&&window.ZX_RAIL.closeRail) window.ZX_RAIL.closeRail(); }catch(err){} }
+      },130);
+    });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
+  }
+  function updateStates(){
+    if(!fan) return;
+    var onShift=false;
+    try{ var u=window.CURRENT_USER; onShift=!!(u && (window.SHIFTS_CACHE||[]).some(function(s){return s && s.user_id===u.id && !s.ended_at;})); }catch(e){}
+    var sb=fan.querySelector('.zn-fan-item[data-act="shifts"]'); if(sb) sb.classList.toggle('zn-fan-on',onShift);
+    var light=false;
+    try{ light=document.documentElement.classList.contains('zn-light')||localStorage.getItem('katastimaTheme')==='light'; }catch(e){}
+    var tb=fan.querySelector('.zn-fan-item[data-act="theme"]'); if(tb){ tb.classList.toggle('zn-fan-light',light); tb.innerHTML=svg(light?'sun':'moon'); }
+  }
+  function place(open){
+    [].forEach.call(fan.children,function(it,i){
+      if(open){
+        var deg=(ACTS.length>1)? i*(90/(ACTS.length-1)) : 45;
+        var rad=deg*Math.PI/180;
+        var x=Math.cos(rad)*R, y=-(Math.sin(rad)*R);
+        it.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px) scale(1)';
+        it.style.transitionDelay=(i*0.04)+'s';
+      } else {
+        it.style.transform='translate(0,0) scale(.4)';
+        it.style.transitionDelay='0s';
+      }
+    });
+  }
+  function open(anchor){
+    build(); updateStates();
+    anchorEl=anchor||document.querySelector('.zx-rail-avatar');
+    var r=anchorEl?anchorEl.getBoundingClientRect():{left:48,top:(window.innerHeight-80),width:40,height:40};
+    fan.style.left=(r.left+r.width/2)+'px';
+    fan.style.top=(r.top+r.height/2)+'px';
+    fan.classList.add('open'); bk.classList.add('open');
+    if(anchorEl) anchorEl.classList.add('zn-fan-active');
+    void fan.offsetWidth; place(true);
+  }
+  function close(){
+    if(!fan) return;
+    fan.classList.remove('open'); bk.classList.remove('open'); place(false);
+    [].forEach.call(document.querySelectorAll('.zn-fan-active'),function(el){el.classList.remove('zn-fan-active');});
+  }
+  window.znFanToggle=function(anchor){ build(); if(fan.classList.contains('open')) close(); else open(anchor); };
+  window.znFanClose=close;
+})();
+</script>
 <script id="zx-rail-boot-2">
 (function(){'use strict';
  var I={
@@ -45898,7 +45999,7 @@ body.light-theme .card{border-color:#ece9f6}
      var img=src&&src.querySelector&&src.querySelector('img');
      if(img&&img.src){ a.innerHTML='<img src="'+img.src+'" alt="">'; }
      else { a.textContent=((src&&src.textContent)||'Z').trim().charAt(0)||'Z'; }
-     a.addEventListener('click',function(){ if(typeof window.toggleProfileMenu==='function'){try{window.toggleProfileMenu();}catch(e){}} });
+     a.addEventListener('click',function(ev){ if(ev&&ev.stopPropagation)ev.stopPropagation(); if(typeof window.znFanToggle==='function'){try{window.znFanToggle(a);}catch(e){}} else if(typeof window.toggleProfileMenu==='function'){try{window.toggleProfileMenu();}catch(e){}} });
      rail.appendChild(a);
    }
    rail.setAttribute('data-zx-icons','1'); return true;
