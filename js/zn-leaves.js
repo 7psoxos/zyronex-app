@@ -20511,14 +20511,16 @@ function renderPurchasesHTML(){
 
   <!-- Φίλτρα -->
   <div class="flex gap-2 mb-3" style="flex-wrap:wrap">
-    <select class="form-select" style="max-width:200px" onchange="PURCHASES_FILTER_SUP=this.value;renderPurchasesHTML()">
+    <div class="flex gap-2" style="flex:1 1 100%;max-width:440px;min-width:0">
+    <select class="form-select" style="flex:1;min-width:0" onchange="PURCHASES_FILTER_SUP=this.value;renderPurchasesHTML()">
       <option value="">Όλοι οι προμηθευτές</option>
       ${SUPPLIERS.map(s=>`<option value="${s.id}" ${PURCHASES_FILTER_SUP==s.id?'selected':''}>${supplierFlag(s)} ${s.name}</option>`).join('')}
     </select>
-    <select class="form-select" style="max-width:160px" onchange="PURCHASES_FILTER_MONTH=this.value;renderPurchasesHTML()">
+    <select class="form-select" style="flex:1;min-width:0" onchange="PURCHASES_FILTER_MONTH=this.value;renderPurchasesHTML()">
       <option value="">Όλοι οι μήνες</option>
       ${months.map(m=>`<option value="${m}" ${PURCHASES_FILTER_MONTH===m?'selected':''}>${m}</option>`).join('')}
     </select>
+    </div>
     ${(PURCHASES_FILTER_SUP||PURCHASES_FILTER_MONTH)?`<button class="btn btn-ghost" onclick="PURCHASES_FILTER_SUP='';PURCHASES_FILTER_MONTH='';renderPurchasesHTML()"><i data-lucide="x" size="14"></i> Καθαρισμός</button>`:''}
   </div>
 
