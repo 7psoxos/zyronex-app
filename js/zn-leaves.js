@@ -259,7 +259,7 @@ function showConfirm(msg, onOk, onCancel){
   const m = document.createElement('div');
   m.className = 'modal-overlay';
   m.id = id;
-  m.style.cssText = 'z-index:200';
+  m.style.cssText = 'z-index:100001';
   m.innerHTML = `<div class="modal" style="max-width:400px;padding:0">
     <div class="modal-body" style="padding:24px">
       <div class="text-sm" style="line-height:1.6;white-space:pre-wrap">${msg}</div>
