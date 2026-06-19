@@ -38364,15 +38364,19 @@ function _cartHasAgeRestricted(){
 async function _ageCheckBeforeCheckout(){
   var settings = JSON.parse(localStorage.getItem('katastimaSettings')||'{}');
   // Trigger όταν: (α) mandatory mode ON, Ή (β) το καλάθι έχει προϊόν νικοτίνης/περιορισμένο
-  var mustVerify = settings.ageVerifyMandatory || _cartHasAgeRestricted();
+  var mandatory = !!settings.ageVerifyMandatory;
+  var mustVerify = mandatory || _cartHasAgeRestricted();
   if(!mustVerify) return false; // καθαρό μη-περιορισμένο καλάθι → δεν χρειάζεται popup
 
   var custId = window.SELECTED_CUSTOMER_ID;
   var cust = custId ? (typeof CUSTOMERS!=='undefined'?CUSTOMERS:[]).find(function(x){return x.id===custId;}):null;
-  // Γνωστός πελάτης ήδη επαληθευμένος → επιτρέπεται χωρίς ξανά popup
-  if(cust && (cust.age_verified || cust.ageVerified)) return false;
-  // Ήδη επαληθεύτηκε σε αυτή τη συνεδρία (manual 🔞 button) → επιτρέπεται
-  if(window._ageVerified === true) return false;
+  // «Υποχρεωτικό σε κάθε πώληση» → ζητάμε popup ΠΑΝΤΑ (νομική καταγραφή κάθε πώλησης). Τα short-circuit ισχύουν μόνο εκτός mandatory.
+  if(!mandatory){
+    // Γνωστός πελάτης ήδη επαληθευμένος → επιτρέπεται χωρίς ξανά popup
+    if(cust && (cust.age_verified || cust.ageVerified)) return false;
+    // Ήδη επαληθεύτηκε σε αυτή τη συνεδρία (manual 🔞 button) → επιτρέπεται
+    if(window._ageVerified === true) return false;
+  }
 
   // Δείξε popup & μπλοκάρισε μέχρι απάντηση
   return new Promise(function(resolve){
@@ -38410,6 +38414,19 @@ function ageVerifyShowModal(callback){
   window._ageVerifyCallback = callback || null;
 }
 
+// Robust age-log: direct REST POST (anon) — ίδιο proven path με το read-side renderAgeVerifyLog. Awaited + ΟΡΑΤΟ error (όχι σιωπηλό .then).
+async function _ageVerifyLog(det){
+  try{
+    var url=(window.SUPABASE_URL||SUPABASE_URL)+'/rest/v1/activity_log';
+    var key=(window.SUPABASE_KEY||SUPABASE_KEY);
+    var body=JSON.stringify({shop_id:SHOP_ID,user_id:(det&&det.user_id!=null?det.user_id:null),action:'age_verified',details:JSON.stringify(det||{})});
+    var resp=await fetch(url,{method:'POST',headers:{'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json','Prefer':'return=minimal'},body:body});
+    if(!resp.ok){ var e=await resp.json().catch(function(){return {};}); throw new Error(e.message||('HTTP '+resp.status)); }
+  }catch(err){
+    console.error('[ageVerifyLog] insert failed',err);
+    if(typeof toast==='function') toast('⚠️ Η καταγραφή στο Μητρώο Ηλικίας ΑΠΕΤΥΧΕ: '+(err.message||err),'danger',6000);
+  }
+}
 function ageVerifyConfirm(confirmed){
   var overlay = document.getElementById('ageVerifyOverlay');
   if(overlay) overlay.remove();
@@ -38426,7 +38443,7 @@ function ageVerifyConfirm(confirmed){
         user_id: _u.id!=null?_u.id:null, user_name: _u.name||_u.username||'Άγνωστος',
         timestamp: new Date().toISOString()
       };
-      sb.from('activity_log').insert({shop_id:SHOP_ID,user_id:_u.id,action:'age_verified',details:JSON.stringify(_det)}).then(function(){});
+      _ageVerifyLog(_det);
     }
     if(window._ageVerifyCallback) window._ageVerifyCallback(true);
     else checkout(); // resume checkout if called standalone
@@ -38441,7 +38458,7 @@ function ageVerifyConfirm(confirmed){
         user_id: _u2.id!=null?_u2.id:null, user_name: _u2.name||_u2.username||'Άγνωστος',
         timestamp: new Date().toISOString()
       };
-      sb.from('activity_log').insert({shop_id:SHOP_ID,user_id:_u2.id,action:'age_verified',details:JSON.stringify(_det2)}).then(function(){});
+      _ageVerifyLog(_det2);
     }
     if(window._ageVerifyCallback) window._ageVerifyCallback(false);
   }
