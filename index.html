@@ -46101,6 +46101,7 @@ body.light-theme #znRoleArcWrap text,html.zn-light #znRoleArcWrap text{fill:#1e2
   window.addEventListener("resize",closeOnRotate);
   window.addEventListener("orientationchange",closeOnRotate);
   var n=0,iv=setInterval(function(){ syncRail(); hookToggle(); attachObserver(); if(++n>120) clearInterval(iv); },250);
+  setInterval(syncArc,200); /* perpetual safety: arc always matches #znFan.open even on non-toggle closes (backdrop/item/Escape/navigation) and recreated fans */
   try{ var topAv=document.getElementById("topAvatar"); if(topAv) new MutationObserver(syncRail).observe(topAv,{childList:true,subtree:true,attributes:true}); }catch(e){}
 })();
 </script>
