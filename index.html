@@ -11367,7 +11367,7 @@ async function _shiftStep3(){
       <!-- Consumables -->
       <div style="padding:12px 14px;background:var(--bg-2);border-radius:10px;margin-bottom:12px">
         <div style="display:flex;justify-content:space-between">
-          <span class="muted text-sm">🧻 Κόστος αναλωσίμων:</span>
+          <span class="muted text-sm">📦 Κόστος αναλωσίμων:</span>
           <strong style="color:#e74c3c">-${eur(d.silentCostTotal)}</strong>
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:4px">
@@ -26934,7 +26934,7 @@ function renderSettings(){
     </div>
     </div>
 
-    <div class="card"><div class="section-title">🧻 Αναλώσιμα Καταστήματος</div>
+    <div class="card"><div class="section-title">📦 Αναλώσιμα Καταστήματος</div>
     <div class="text-sm muted mt-2 mb-3">Silent cost ανά συναλλαγή — εμφανίζεται στα reports ως πραγματικό κόστος λειτουργίας.</div>
     <div id="consumablesSettingsContainer">${typeof renderConsumablesSettings==='function' ? renderConsumablesSettings() : ''}</div>
     </div>
@@ -30208,7 +30208,7 @@ async function renderWarRoom(){
       ` : ''}
       ${consumablesMonthly > 0 ? `
       <div class="card kpi" style="background:rgba(231,76,60,0.06)">
-        <div class="kpi-label">🧻 Αναλώσιμα/μήνα</div>
+        <div class="kpi-label">📦 Αναλώσιμα/μήνα</div>
         <div class="kpi-value" style="color:#e74c3c">-${eur(consumablesMonthly)}</div>
         <div class="kpi-sub muted">${eur(calcSilentCost())}/συναλλαγή</div>
       </div>

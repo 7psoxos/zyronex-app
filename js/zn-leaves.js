@@ -26697,7 +26697,7 @@ function renderCart(){
   // Silent consumables cost
   const silentCost = typeof calcSilentCost==='function' ? calcSilentCost() : 0;
   const silentRow = silentCost > 0 ? `<div class="summary-row" style="color:#e74c3c;font-size:12px">
-    <span>🧻 Αναλώσιμα</span><span>-${eur(silentCost)}</span></div>` : '';
+    <span>📦 Αναλώσιμα</span><span>-${eur(silentCost)}</span></div>` : '';
   // Promo engine discount row — ένα row ανά κανόνα που έπιασε
   var _promoBreakdown = _promoResult.breakdown || [];
   var promoRow = '';
