@@ -3460,7 +3460,7 @@ async function openCustomerDetail(id){
   // Φόρτωσε sale items για DNA tags
   await ciEnsureItems();
   const custItems = ciCustomerItems(id, CI_SALE_ITEMS_CACHE||[]);
-  const dnaTags = ciBuildDnaTags(c, custItems);
+  const dnaTags = (typeof ciBuildDnaTags==="function") ? ciBuildDnaTags(c, custItems) : [];
 
   openModal(`<div class="modal-head">
     <div class="flex gap-3 items-center">
