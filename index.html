@@ -26670,41 +26670,6 @@ function renderSettings(){
   <button class="btn btn-primary btn-lg" onclick="saveSettings()"><i data-lucide="save" size="18"></i> Αποθήκευση</button>
   </div>
 
-  <!-- 🆔 Πληροφορίες Συστήματος -->
-  <div class="card" style="margin-bottom:16px">
-    <div class="section-title">🆔 Πληροφορίες Συστήματος</div>
-    <div class="text-sm muted mt-2 mb-3">Στοιχεία αναγνώρισης του καταστήματός σας. Χρειάζονται για τεχνική υποστήριξη.</div>
-    <div style="display:grid;gap:10px">
-      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:8px">
-        <div style="font-size:11px;color:var(--text-3);font-weight:600;min-width:80px">Shop ID:</div>
-        <code style="flex:1;font-family:monospace;font-size:12px;color:var(--text-2);word-break:break-all" id="systemShopId">${SHOP_ID}</code>
-        <button class="btn btn-ghost" style="padding:6px 10px" onclick="navigator.clipboard.writeText('${SHOP_ID}').then(()=>toast('Αντιγράφηκε ✓','success'))">
-          <i data-lucide="copy" size="14"></i>
-        </button>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:8px">
-        <div style="font-size:11px;color:var(--text-3);font-weight:600;min-width:80px">User ID:</div>
-        <code style="flex:1;font-family:monospace;font-size:12px;color:var(--text-2);word-break:break-all">${CURRENT_USER?.id || 'N/A'}</code>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:8px">
-        <div style="font-size:11px;color:var(--text-3);font-weight:600;min-width:80px">Έκδοση:</div>
-        <code style="flex:1;font-family:monospace;font-size:12px;color:var(--text-2)">ZyroNex/ZYRONEX v4.7.5-INSPECTOR-HARDCODED</code>
-      </div>
-      
-      <!-- Developer Status (debug) -->
-      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-2);border-radius:8px;border:1px solid ${window.IS_DEVELOPER_OWNER === true ? 'rgba(0,212,168,0.5)' : window.IS_DEVELOPER_OWNER === false ? 'rgba(243,156,18,0.5)' : 'rgba(74,163,255,0.5)'}">
-        <div style="font-size:11px;color:var(--text-3);font-weight:600;min-width:80px">Developer:</div>
-        <div style="flex:1;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)">
-          ${window.IS_DEVELOPER_OWNER === true ? '✅ Ενεργό — βλέπεις dev features' 
-          : window.IS_DEVELOPER_OWNER === false ? '⚠️ Ανενεργό — ελέγξτε is_developer_account στο DB'
-          : '🔄 Φόρτωση από DB...'}
-        </div>
-        <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px" onclick="_recheckDeveloperFlag()">
-          <i data-lucide="refresh-cw" size="13"></i> Recheck
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- 📱 WhatsApp -->
   <div class="card" style="margin-bottom:16px;border-color:rgba(37,211,102,0.3)">
@@ -46096,7 +46061,7 @@ body.light-theme #znRoleArcWrap text,html.zn-light #znRoleArcWrap text{fill:#1e2
     wrap.id="znRoleArcWrap";
     var svg=document.createElementNS(NS,"svg");
     svg.setAttribute("viewBox","0 0 200 200");
-    svg.innerHTML='<defs><path id="znRoleArcPath" d="M 65 44 A 66 66 0 0 1 163.4 118.2" fill="none"/></defs><text font-size="15" text-anchor="middle"><textPath href="#znRoleArcPath" startOffset="50%" id="znRoleArcText"></textPath></text>';
+    svg.innerHTML='<defs><path id="znRoleArcPath" d="M 75.61 60.97 A 46 46 0 0 1 144.19 112.69" fill="none"/></defs><text font-size="15" text-anchor="middle"><textPath href="#znRoleArcPath" startOffset="50%" id="znRoleArcText"></textPath></text>';
     wrap.appendChild(svg);
     document.body.appendChild(wrap);
     return wrap;
@@ -46146,6 +46111,66 @@ body.light-theme #znRoleArcWrap text,html.zn-light #znRoleArcWrap text{fill:#1e2
 })();
 </script>
 
+<style id="zx-sysinfo-skin">
+#znSysInfo{display:none;margin:6px 10px 2px;background:var(--bg-1);border:1px solid var(--border);border-radius:14px;padding:11px 11px 12px}
+#znSysInfo.zsi-on{display:block}
+#znSysInfo .zsi-t{font-size:12px;font-weight:800;color:var(--text-1);margin-bottom:8px}
+#znSysInfo .zsi-row{display:flex;align-items:center;gap:8px;padding:8px 9px;background:var(--bg-2);border-radius:8px;margin-bottom:6px}
+#znSysInfo .zsi-k{font-size:10px;color:var(--text-3);font-weight:700;min-width:60px}
+#znSysInfo .zsi-v{flex:1;font-family:ui-monospace,monospace;font-size:11px;color:var(--text-2);word-break:break-all}
+#znSysInfo .zsi-btn{min-width:34px;min-height:34px;border:1px solid var(--border);background:transparent;color:var(--text-2);border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#znSysInfo .zsi-dev{border:1px solid rgba(16,185,129,.5)}
+#znSysInfo .zsi-dev .zsi-v{color:#10b981}
+#znSysInfo .zsi-rech{font-size:10px;color:var(--text-2);border:1px solid var(--border);background:transparent;border-radius:7px;padding:0 9px;min-height:34px;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+</style>
+<script id="zx-sysinfo-support">
+(function(){
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function isDev(){ try{ return typeof isDeveloperOwner==='function' && isDeveloperOwner()===true; }catch(e){ return false; } }
+  function build(){
+    var fly=document.querySelector('.zx-flyout'); if(!fly) return false;
+    var box=document.getElementById('znSysInfo');
+    if(!box){ box=document.createElement('div'); box.id='znSysInfo'; fly.appendChild(box); }
+    var pw=fly.querySelector('.zx-powered');
+    if(pw && box.nextSibling!==pw){ fly.insertBefore(box, pw); }
+    return true;
+  }
+  function fill(){
+    var box=document.getElementById('znSysInfo'); if(!box) return;
+    var shop=(typeof SHOP_ID!=='undefined'&&SHOP_ID)?SHOP_ID:'';
+    var uid='N/A'; try{ if(window.CURRENT_USER&&window.CURRENT_USER.id!=null) uid=window.CURRENT_USER.id; }catch(e){}
+    var h=''+
+      '<div class="zsi-t">\ud83c\udd94 \u03a0\u03bb\u03b7\u03c1\u03bf\u03c6\u03bf\u03c1\u03af\u03b5\u03c2 \u03a3\u03c5\u03c3\u03c4\u03ae\u03bc\u03b1\u03c4\u03bf\u03c2</div>'+
+      '<div class="zsi-row"><div class="zsi-k">Shop ID:</div><div class="zsi-v">'+esc(shop)+'</div>'+
+        '<button class="zsi-btn" id="zsiCopy" aria-label="Copy"><i data-lucide="copy"></i></button></div>'+
+      '<div class="zsi-row"><div class="zsi-k">User ID:</div><div class="zsi-v">'+esc(uid)+'</div></div>'+
+      '<div class="zsi-row"><div class="zsi-k">\u0388\u03ba\u03b4\u03bf\u03c3\u03b7:</div><div class="zsi-v">ZyroNex v4.7.5</div></div>';
+    if(isDev()){
+      h+='<div class="zsi-row zsi-dev"><div class="zsi-k">Developer:</div><div class="zsi-v">\u2705 \u0395\u03bd\u03b5\u03c1\u03b3\u03cc \u2014 dev features</div>'+
+         '<button class="zsi-rech" id="zsiRecheck">\u27f3 Recheck</button></div>';
+    }
+    box.innerHTML=h;
+    var cp=document.getElementById('zsiCopy');
+    if(cp) cp.addEventListener('click',function(){ try{ navigator.clipboard.writeText(shop).then(function(){ if(typeof toast==='function') toast('\u0391\u03bd\u03c4\u03b9\u03b3\u03c1\u03ac\u03c6\u03b7\u03ba\u03b5 \u2713','success'); }); }catch(e){} });
+    var rc=document.getElementById('zsiRecheck');
+    if(rc) rc.addEventListener('click',function(){ try{ if(typeof _recheckDeveloperFlag==='function') _recheckDeveloperFlag(); }catch(e){} });
+    try{ if(window.lucide&&lucide.createIcons) lucide.createIcons(); }catch(e){}
+  }
+  function onState(){
+    var sb=document.getElementById('sidebar'); var box=document.getElementById('znSysInfo'); if(!sb||!box) return;
+    if(sb.classList.contains('zx-fly-open') && sb.getAttribute('data-active-sec')==='ypovtirixi'){ fill(); box.classList.add('zsi-on'); }
+    else { box.classList.remove('zsi-on'); }
+  }
+  function attach(){
+    var sb=document.getElementById('sidebar'); if(!sb || sb.__znSysObs) return false;
+    if(!build()) return false;
+    sb.__znSysObs=true;
+    try{ new MutationObserver(onState).observe(sb,{attributes:true,attributeFilter:['class','data-active-sec']}); }catch(e){}
+    onState(); return true;
+  }
+  var n=0, iv=setInterval(function(){ build(); attach(); if(++n>120) clearInterval(iv); },250);
+})();
+</script>
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
