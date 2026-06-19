@@ -28205,6 +28205,11 @@ function _showPaymentConfirmation(method, subtotal, vat){
 
 async function _processPayment(method, subtotal, vat){
   try{
+    // 🔞 Age gate — ΚΑΘΕ πραγματική πληρωμή περνά από εδώ (το checkout() δεν καλείται από το POS UI).
+    if(typeof _ageCheckBeforeCheckout==='function'){
+      var _ageBlk = await _ageCheckBeforeCheckout();
+      if(_ageBlk){ if(typeof toast==='function') toast('🚫 Πώληση ακυρώθηκε — μη επαληθευμένη ηλικία','warn'); return; }
+    }
     closeModal();
     if(typeof toast==='function') toast('Επεξεργασία πληρωμής...','info');
     
@@ -28501,6 +28506,11 @@ function closeIrisModal(){
 
 async function _processIrisPayment(subtotal, vat){
   try{
+    // 🔞 Age gate — ΚΑΘΕ πραγματική πληρωμή περνά από εδώ (το checkout() δεν καλείται από το POS UI).
+    if(typeof _ageCheckBeforeCheckout==='function'){
+      var _ageBlk = await _ageCheckBeforeCheckout();
+      if(_ageBlk){ if(typeof toast==='function') toast('🚫 Πώληση ακυρώθηκε — μη επαληθευμένη ηλικία','warn'); return; }
+    }
     closeIrisModal();
     if(typeof toast==='function') toast('Επεξεργασία IRIS...','info');
     window._pendingPaymentMethod = 'iris';
@@ -28527,6 +28537,11 @@ async function _processIrisPayment(subtotal, vat){
 
 async function _processCashPayment(subtotal, vat){
   try{
+    // 🔞 Age gate — ΚΑΘΕ πραγματική πληρωμή περνά από εδώ (το checkout() δεν καλείται από το POS UI).
+    if(typeof _ageCheckBeforeCheckout==='function'){
+      var _ageBlk = await _ageCheckBeforeCheckout();
+      if(_ageBlk){ if(typeof toast==='function') toast('🚫 Πώληση ακυρώθηκε — μη επαληθευμένη ηλικία','warn'); return; }
+    }
     const paid = parseFloat(document.getElementById('cashAmount').value) || 0;
     const change = paid - subtotal;
     if(paid < subtotal){
@@ -29104,6 +29119,11 @@ window._spCurrentMethod = null;
 // ── FINALIZE PAYMENT ──────────────────────────────────────
 
 async function _spFinalize(){
+    // 🔞 Age gate — ΚΑΘΕ πραγματική πληρωμή περνά από εδώ (το checkout() δεν καλείται από το POS UI).
+    if(typeof _ageCheckBeforeCheckout==='function'){
+      var _ageBlk = await _ageCheckBeforeCheckout();
+      if(_ageBlk){ if(typeof toast==='function') toast('🚫 Πώληση ακυρώθηκε — μη επαληθευμένη ηλικία','warn'); return; }
+    }
   const remaining = _spRemaining();
   if(remaining > 0.005){
     if(typeof toast==='function') toast(`Υπολείπονται ${typeof eur==='function'?eur(remaining):remaining+'€'}`, 'warning');
