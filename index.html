@@ -46105,10 +46105,10 @@ try{var mo=new MutationObserver(zxPaint);mo.observe(document.documentElement,{at
 </script>
 <style id="zx-profile-role-skin">
 @media(max-width:900px){#userChip{display:none!important}}
-#znFan .zn-role-arc{position:absolute;left:-100px;top:-100px;width:200px;height:200px;overflow:visible;pointer-events:none;opacity:0;transition:opacity .25s ease .08s}
+.zn-role-arc{opacity:0;transition:opacity .25s ease .08s}
 #znFan.open .zn-role-arc{opacity:1}
-#znFan .zn-role-arc text{font-weight:800;letter-spacing:1px;fill:#fff}
-body.light-theme #znFan .zn-role-arc text,html.zn-light #znFan .zn-role-arc text{fill:#1e2233}
+.zn-role-arc text{font-weight:800;letter-spacing:1px;fill:#fff}
+body.light-theme .zn-role-arc text,html.zn-light .zn-role-arc text{fill:#1e2233}
 </style>
 <script id="zx-profile-role">
 (function(){
@@ -46137,18 +46137,21 @@ body.light-theme #znFan .zn-role-arc text,html.zn-light #znFan .zn-role-arc text
     try{
       var fan=document.getElementById("znFan"); if(!fan) return;
       var name=roleName();
-      var arc=fan.querySelector(".zn-role-arc");
-      if(!name){ if(arc) arc.style.display="none"; return; }
-      if(!arc){
-        arc=document.createElementNS(NS,"svg");
-        arc.setAttribute("class","zn-role-arc");
-        arc.setAttribute("viewBox","0 0 200 200");
-        arc.setAttribute("width","200"); arc.setAttribute("height","200");
-        arc.innerHTML='<defs><path id="znRoleArcPath" d="M 65 44 A 66 66 0 0 1 163.4 118.2" fill="none"/></defs><text font-size="15" text-anchor="middle"><textPath href="#znRoleArcPath" startOffset="50%" id="znRoleArcText"></textPath></text>';
-        if(fan.firstChild) fan.insertBefore(arc,fan.firstChild); else fan.appendChild(arc);
+      var wrap=fan.querySelector(".zn-role-arc");
+      if(!name){ if(wrap) wrap.style.display="none"; return; }
+      if(!wrap){
+        wrap=document.createElement("div");
+        wrap.className="zn-role-arc";
+        wrap.style.cssText="position:absolute;left:-100px;top:-100px;width:200px;height:200px;overflow:visible;pointer-events:none;z-index:0";
+        var svg=document.createElementNS(NS,"svg");
+        svg.setAttribute("viewBox","0 0 200 200");
+        svg.style.cssText="width:100%;height:100%;overflow:visible;display:block";
+        svg.innerHTML='<defs><path id="znRoleArcPath" d="M 65 44 A 66 66 0 0 1 163.4 118.2" fill="none"/></defs><text font-size="15" text-anchor="middle"><textPath href="#znRoleArcPath" startOffset="50%" id="znRoleArcText"></textPath></text>';
+        wrap.appendChild(svg);
+        if(fan.firstChild) fan.insertBefore(wrap,fan.firstChild); else fan.appendChild(wrap);
       }
-      arc.style.display="";
-      var t=arc.querySelector("#znRoleArcText"); if(t) t.textContent=name;
+      wrap.style.display="";
+      var t=wrap.querySelector("#znRoleArcText"); if(t) t.textContent=name;
     }catch(e){}
   }
   function hook(){
@@ -46158,13 +46161,16 @@ body.light-theme #znFan .zn-role-arc text,html.zn-light #znFan .zn-role-arc text
       window.znFanToggle=function(a){ try{orig(a);}catch(e){} setTimeout(addArc,0); };
     }
   }
+  function closeOnRotate(){
+    try{ var fan=document.getElementById("znFan"); if(fan&&fan.classList.contains("open")&&typeof window.znFanClose==="function") window.znFanClose(); }catch(e){}
+  }
+  window.addEventListener("resize",closeOnRotate);
+  window.addEventListener("orientationchange",closeOnRotate);
   var n=0,iv=setInterval(function(){ syncRail(); hook(); if(++n>80) clearInterval(iv); },300);
-  try{
-    var top=document.getElementById("topAvatar");
-    if(top) new MutationObserver(syncRail).observe(top,{childList:true,subtree:true,attributes:true});
-  }catch(e){}
+  try{ var top=document.getElementById("topAvatar"); if(top) new MutationObserver(syncRail).observe(top,{childList:true,subtree:true,attributes:true}); }catch(e){}
 })();
 </script>
+
 <script src="/js/zn_module_loader.js"></script>
 <script>
 if(typeof ZN_OFFLINE !== 'undefined') ZN_OFFLINE.init();
