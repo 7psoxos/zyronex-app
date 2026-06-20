@@ -13542,6 +13542,7 @@ function formatRoleDisplay(role){
   // For unknown roles (e.g. "Υπάλληλος"), keep first letter caps, rest as typed
   const r = String(role).trim();
   if(!r) return '';
+  if(r.includes(' ')) return r;
   return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
 }
 
@@ -26326,6 +26327,8 @@ function renderUsers(){
     if(r.includes('διαχ') || r.includes('admin')) return 'admin';
     if(r.includes('ταμ') || r.includes('cashier')) return 'cashier';
     if(r.includes('αποθ') || r.includes('warehouse') || r.includes('stock')) return 'warehouse';
+    if(r.includes('εξωτερικ') || r.includes('πωλ') || r.includes('sales')) return 'sales';
+    if(r.includes('διανομ') || r.includes('courier')) return 'courier';
     return 'employee';
   }
 
@@ -26351,6 +26354,8 @@ function renderUsers(){
       admin:     { accent:'#60a5fa', glass:'rgba(15,25,50,0.72)',    border:'rgba(96,165,250,0.45)' },
       cashier:   { accent:'#c4b5fd', glass:'rgba(20,10,50,0.72)',    border:'rgba(196,181,253,0.45)' },
       warehouse: { accent:'#4ade80', glass:'rgba(5,20,10,0.72)',     border:'rgba(74,222,128,0.45)' },
+      sales:     { accent:'#fbbf24', glass:'rgba(40,30,5,0.72)',     border:'rgba(251,191,36,0.45)' },
+      courier:   { accent:'#22d3ee', glass:'rgba(5,30,36,0.72)',     border:'rgba(34,211,238,0.45)' },
       employee:  { accent:'#00d4a8', glass:'rgba(0,20,18,0.72)',     border:'rgba(0,212,168,0.45)' }
     };
     return map[rk] || map.employee;
@@ -26362,6 +26367,8 @@ function renderUsers(){
     if(rk==='warehouse') return 'Παραλαβές';
     if(rk==='cashier')   return 'Πωλήσεις';
     if(rk==='admin')     return 'Ενέργειες';
+    if(rk==='sales')     return 'Πωλήσεις';
+    if(rk==='courier')   return 'Διανομές';
     return 'Βάρδιες';
   }
 
@@ -26540,7 +26547,9 @@ function openUserModal(id){
     'Διαχειριστής': ['*'],
     'Ταμίας':       ['pos','customers','shipments','inventory','alerts'],
     'Αποθήκη':      ['inventory','suppliers','alerts'],
-    'Υπάλληλος':    ['pos','customers']
+    'Υπάλληλος':    ['pos','customers'],
+    'Εξωτερικός Πωλητής': ['pos','customers'],
+    'Διανομέας':          ['pos','customers']
   };
   const u = id ? USERS.find(x=>x.id===id) : {name:'',role:'Ταμίας',pin:'',perms:DEFAULTS_BY_ROLE['Ταμίας']};
   if(!u){toast('Χρήστης δεν βρέθηκε','danger');return}
@@ -26575,6 +26584,8 @@ function openUserModal(id){
         <option ${u.role==='Ταμίας'?'selected':''}>Ταμίας</option>
         <option ${u.role==='Αποθήκη'?'selected':''}>Αποθήκη</option>
         <option ${u.role==='Υπάλληλος'?'selected':''}>Υπάλληλος</option>
+        <option ${u.role==='Εξωτερικός Πωλητής'?'selected':''}>Εξωτερικός Πωλητής</option>
+        <option ${u.role==='Διανομέας'?'selected':''}>Διανομέας</option>
       </select></div>
     </div>
     <div class="form-row">
@@ -26621,7 +26632,9 @@ function applyRoleDefaults(role){
     'Διαχειριστής': ['*'],
     'Ταμίας':       ['pos','customers','shipments','inventory','alerts'],
     'Αποθήκη':      ['inventory','suppliers','alerts'],
-    'Υπάλληλος':    ['pos','customers']
+    'Υπάλληλος':    ['pos','customers'],
+    'Εξωτερικός Πωλητής': ['pos','customers'],
+    'Διανομέας':          ['pos','customers']
   };
   const perms = DEFAULTS_BY_ROLE[role] || [];
   const isAdmin = perms.includes('*');
