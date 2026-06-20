@@ -393,6 +393,7 @@ function firstAllowedPage(){
   const role = (CURRENT_USER?.role||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   if(role.includes('ταμ') || role.includes('cashier')) return can(PAGE_PERMS['pos']) ? 'pos' : 'dashboard';
   if(role.includes('αποθ') || role.includes('warehouse')) return can(PAGE_PERMS['inventory']) ? 'inventory' : 'dashboard';
+  if(role.includes('πωλητ') || role.includes('sales')) return 'saleshub';
   // Generic: πρώτη allowed σελίδα
   const prefOrder = ['pos','inventory','customers','shipments','suppliers','reports','alerts','ai'];
   for(const p of prefOrder){ if(can(PAGE_PERMS[p])) return p; }
@@ -401,7 +402,7 @@ function firstAllowedPage(){
 
 function getInitialPage(){
   // Λίστα των έγκυρων pages — αν δεν είναι εδώ, fallback στο dashboard
-  const validPages = ['dashboard','pos','inventory','customers','suppliers','purchases',
+  const validPages = ['dashboard','saleshub','pos','inventory','customers','suppliers','purchases',
     'shipments','cashbook','reports','vat','bi','ai','oracle','brain','warroom','pricewar','seasonal-intel','supplier-scorecard','remember-this','dosage-tracker','energy-tracker',
     'customer-intel','mixology','campaigns','alerts','shifts','users','settings','inspector',
     'hardware','batches','waste','competitors','banking','balance','documents',

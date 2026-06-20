@@ -16447,7 +16447,7 @@ function renderSalesHub(){ /* saleshubChunk1 */
   function ago(d){ if(!d) return 'καμία επίσκεψη'; var dd=Math.floor((Date.now()-Date.parse(d))/86400000); return dd<=0?'σήμερα':(dd===1?'χθες':dd+' ημέρες πριν'); }
   var dateStr=new Date().toLocaleDateString('el-GR',{weekday:'long',day:'numeric',month:'long'});
   var rows=agenda.length?agenda.map(function(cu){
-    return '<div onclick="showPage(\'customers\')" style="display:flex;align-items:center;gap:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:9px;cursor:pointer">'+
+    return '<div onclick="openSalesClient(\''+cu.id+'\')" style="display:flex;align-items:center;gap:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:9px;cursor:pointer">'+
       '<div style="width:42px;height:42px;border-radius:11px;display:grid;place-items:center;font-weight:800;background:rgba(251,191,36,.14);color:'+AM+';flex:0 0 auto">'+ini(cu.name)+'</div>'+
       '<div style="flex:1;min-width:0"><div style="font-weight:700;color:var(--text-1)">'+(cu.name||'—')+'</div>'+
       '<div style="font-size:12px;color:var(--text-2);margin-top:2px">Τελευταία επίσκεψη: '+ago(cu.lastVisit)+'</div></div>'+
@@ -16464,6 +16464,48 @@ function renderSalesHub(){ /* saleshubChunk1 */
       '<div style="font-weight:800;color:'+AM+';margin-bottom:4px">📊 My Zone</div>'+
       '<div style="font-size:12.5px;color:var(--text-2)">Hit rate, μέσος όρος ανά επίσκεψη, απόδοση & στόχοι ζώνης — έρχονται στο επόμενο chunk.</div>'+
     '</div>'+
+  '</div>';
+  if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
+}
+
+function openSalesClient(id){ /* salesClientChunk2 */
+  var c=document.getElementById('content'); if(!c) return;
+  var cu=(typeof CUSTOMERS!=='undefined'&&Array.isArray(CUSTOMERS))?CUSTOMERS.find(function(x){return x.id==id;}):null;
+  if(!cu){ if(typeof showPage==='function') showPage('customers'); return; }
+  window._znSalesClient=id;
+  var AM='#fbbf24';
+  function ini(n){return ((String(n||'?').trim()[0])||'?').toUpperCase();}
+  function eur(n){return (parseFloat(n)||0).toLocaleString('el-GR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';}
+  var lastTxt='Καμία παραγγελία ακόκη';
+  try{
+    if(typeof SALES!=='undefined'&&Array.isArray(SALES)){
+      var mine=SALES.filter(function(s){return s.customerId==id;});
+      if(mine.length){
+        mine.sort(function(a,b){return Date.parse(b.date)-Date.parse(a.date);});
+        var d=mine[0].date; var sameDay=mine.filter(function(s){return s.date===d;});
+        var sum=sameDay.reduce(function(a,b){return a+(b.total||0);},0);
+        var dd=new Date(Date.parse(d)).toLocaleDateString('el-GR',{day:'numeric',month:'short',year:'numeric'});
+        lastTxt=dd+' · '+sameDay.length+' είδη · '+eur(sum);
+      }
+    }
+  }catch(e){}
+  c.innerHTML=
+  '<div style="max-width:560px;margin:0 auto">'+
+    '<button class="btn btn-ghost" style="margin-bottom:12px;width:auto;padding:8px 14px" onclick="showPage(\'saleshub\')"><i data-lucide="chevron-left" size="16"></i> Ατζέντα</button>'+
+    '<div style="background:linear-gradient(160deg,var(--bg-2),var(--bg-1));border:1px solid rgba(251,191,36,.22);border-radius:18px;padding:16px">'+
+      '<div style="display:flex;gap:12px;align-items:center">'+
+        '<div style="width:52px;height:52px;border-radius:13px;display:grid;place-items:center;font-weight:800;font-size:20px;background:'+AM+';color:#1a1208">'+ini(cu.name)+'</div>'+
+        '<div><div style="font-size:17px;font-weight:800;color:var(--text-1)">'+(cu.name||'—')+'</div>'+
+        '<div style="font-size:12px;color:var(--text-2);margin-top:3px">'+(cu.phone||'B2B πελάτης')+'</div></div></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">'+
+        '<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:13px;padding:12px"><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-2);font-weight:700">Σύνολο αγορών</div><div style="font-size:19px;font-weight:800;margin-top:5px;color:var(--text-1)">'+eur(cu.totalSpent)+'</div></div>'+
+        '<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:13px;padding:12px"><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-2);font-weight:700">Store credit</div><div style="font-size:19px;font-weight:800;margin-top:5px;color:var(--text-1)">'+eur(cu.storeCredit)+'</div></div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:10px;background:var(--bg-1);border:1px solid var(--border);border-radius:13px;padding:12px;margin-top:10px">'+
+        '<div style="font-size:16px">🧿</div><div><div style="font-size:12.5px;font-weight:700;color:var(--text-1)">Τελευταία παραγγελία</div><div style="font-size:11.5px;color:var(--text-2)">'+lastTxt+'</div></div></div>'+
+    '</div>'+
+    '<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;padding:11px;margin-top:12px;font-size:12px;color:var(--text-2)">ℹ️ Το <b style="color:var(--text-1)">B2B υπόλοιπο/λθξιπρόθεσμο</b> (receivables) και η <b style="color:var(--text-1)">παραγγελία χονδρικής</b> (Order Grid) έρχονται στα chunks 3-4.</div>'+
+    '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="showPage(\'pos\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία (POS)</button>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
 }
