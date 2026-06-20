@@ -24166,6 +24166,7 @@ async function renderExpenseCalendar(){
   `;
   
   await EXPENSE_CALENDAR.load();
+  await FLEET.load();
   _renderExpenseCalendarPage();
 }
 window.renderExpenseCalendar = renderExpenseCalendar;
@@ -24270,6 +24271,9 @@ function _renderExpenseCalendarPage(){
       <button class="tab ${EXP_CAL_FILTER==='all'?'active':''}" onclick="EXP_CAL_FILTER='all';_renderExpenseCalendarPage()">
         ⚙️ Ρυθμίσεις
       </button>
+      <button class="tab ${EXP_CAL_FILTER==='fleet'?'active':''}" onclick="EXP_CAL_FILTER='fleet';_renderExpenseCalendarPage()">
+        🚗 Στόλος
+      </button>
     </div>
     
     <!-- Content -->
@@ -24278,6 +24282,7 @@ function _renderExpenseCalendarPage(){
       ${EXP_CAL_FILTER === 'overdue' ? _renderOverduePayments(overdue) : ''}
       ${EXP_CAL_FILTER === 'paid' ? _renderPaidHistory(paid) : ''}
       ${EXP_CAL_FILTER === 'all' ? _renderCalendarSettings(calendar) : ''}
+      ${EXP_CAL_FILTER === 'fleet' ? _renderFleet() : ''}
     </div>
   `;
   
@@ -31683,3 +31688,386 @@ function predictDaysLeft(p){
   const dailyRate = totalQty / 30;
   return Math.round(p.stock / dailyRate);
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// 🚗 FLEET / ΣΤΟΛΟΣ ΟΧΗΜΑΤΩΝ — Slice F1 (vehicles, expiry+service engine, damage)
+// Lives inside «Ημερολόγιο Εξόδων» as the «Στόλος» tab. Single-shop (SHOP_ID).
+// ════════════════════════════════════════════════════════════════════════
+var FLEET_VIEW = 'fleet'; // fleet | notif
+var FLEET = {
+  CACHE: { vehicles: [], damage: [] },
+  async load(){
+    try{
+      var vRes = await sb.from('vehicles').select('*').eq('shop_id', SHOP_ID).order('created_at', { ascending: true });
+      var dRes = await sb.from('vehicle_damage').select('*').eq('shop_id', SHOP_ID).eq('status','open');
+      this.CACHE.vehicles = vRes.data || [];
+      this.CACHE.damage = dRes.data || [];
+      return true;
+    }catch(e){ console.error('[Fleet] load error:', e); return false; }
+  }
+};
+window.FLEET = FLEET;
+
+function _fleetDaysUntil(dstr){
+  if(!dstr) return null;
+  var t = new Date(); t.setHours(0,0,0,0);
+  var d = new Date(dstr); d.setHours(0,0,0,0);
+  return Math.round((d - t) / 86400000);
+}
+function _fleetWhen(days){
+  if(days == null) return '—';
+  if(days < 0) return 'έληξε';
+  if(days <= 45) return 'σε ' + days + ' ημέρες';
+  return 'σε ' + Math.round(days/30) + ' μήνες';
+}
+function _fleetSvc(v){
+  var target = (v.last_service_km || 0) + (v.service_every_km || 10000);
+  var remaining = target - (v.odometer || 0);
+  var rate = v.avg_km_day || 0;
+  var daysLeft = rate > 0 ? Math.max(0, Math.ceil(remaining / rate)) : null;
+  return { target: target, remaining: remaining, daysLeft: daysLeft, rate: rate };
+}
+function _fleetOpenDmg(vid){
+  return FLEET.CACHE.damage.filter(function(d){ return d.vehicle_id === vid; });
+}
+function _fleetEpill(label, days, extraOk){
+  var cls = 'o';
+  if(days != null){ cls = days <= 30 ? 'd' : (days <= 60 ? 'w' : 'o'); }
+  if(extraOk) cls = 'o';
+  return '<span class="zn-epill ' + cls + '">' + label + ' <b>' + _fleetWhen(days) + '</b></span>';
+}
+
+function _renderFleet(){
+  var vehicles = FLEET.CACHE.vehicles;
+  var pills = '<div class="zn-fpills">' +
+    '<button class="zn-fpill ' + (FLEET_VIEW==='fleet'?'on':'') + '" onclick="fleetSetView(\'fleet\')">Στόλος</button>' +
+    '<button class="zn-fpill ' + (FLEET_VIEW==='notif'?'on':'') + '" onclick="fleetSetView(\'notif\')">Ειδοποιήσεις</button>' +
+    '<button class="btn btn-primary" style="margin-left:auto;padding:6px 12px;font-size:13px" onclick="fleetVehicleForm(null)"><i data-lucide="plus" size="15"></i> Όχημα</button>' +
+    '</div>';
+
+  if(vehicles.length === 0){
+    return pills + '<div class="card" style="text-align:center;padding:36px 20px">' +
+      '<div style="font-size:46px;margin-bottom:10px">🚗</div>' +
+      '<div class="fw-800" style="font-size:17px;margin-bottom:6px">Δεν υπάρχουν οχήματα ακόμα</div>' +
+      '<div class="text-sm muted" style="max-width:360px;margin:0 auto 18px">Πρόσθεσε το αυτοκίνητο ή το μηχανάκι του στόλου σου για να παρακολουθείς service, ΚΤΕΟ, ασφάλεια και βλάβες.</div>' +
+      '<button class="btn btn-primary" onclick="fleetVehicleForm(null)"><i data-lucide="plus" size="16"></i> Προσθήκη Οχήματος</button></div>';
+  }
+  if(FLEET_VIEW === 'notif') return pills + _renderFleetNotif();
+  return pills + vehicles.map(_fleetCard).join('');
+}
+
+function _fleetCard(v){
+  var isCar = (v.vtype === 'car');
+  var cls = isCar ? 'amber' : 'cyan';
+  var blocked = (v.status === 'blocked');
+  var svc = _fleetSvc(v);
+  var kteo = _fleetDaysUntil(v.kteo_date);
+  var ins = _fleetDaysUntil(v.insurance_date);
+  var emi = isCar ? _fleetDaysUntil(v.emissions_date) : null;
+  var open = _fleetOpenDmg(v.id);
+  var es = _fleetEpill('ΚΤΕΟ', kteo) +
+           (isCar ? _fleetEpill('Καυσ.', emi) : '') +
+           _fleetEpill('Ασφ.', ins) +
+           '<span class="zn-epill ' + (v.roadtax_status==='ok'?'o':'d') + '">Τέλη <b>' + (v.roadtax_status==='ok'?'ΟΚ':'εκκρεμή') + '</b></span>';
+  var svcAlert = svc.daysLeft != null && svc.daysLeft <= 30;
+  var h = '<div class="zn-vcard ' + cls + (blocked?' blk':'') + '">' +
+    '<div class="zn-vhead" onclick="fleetDetail(\'' + v.id + '\')">' +
+      '<div class="zn-vico">' + (isCar?'🚗':'🏍️') + '</div>' +
+      '<div class="zn-vt"><b>' + (isCar?'Αυτοκίνητο':'Μηχανάκι') + ' · ' + (v.plate||'—') +
+        (blocked?' <span class="zn-blocked">ΑΚΙΝΗΤΟ</span>':'') + '</b>' +
+        '<span>' + (v.role_label?(v.role_label+' · '):'') + (v.driver_name||'—') + (v.zone?(' · '+(v.zone==='in'?'Εντός πόλης':'Εκτός πόλης')):'') + '</span></div>' +
+      '<div class="zn-chev">›</div></div>' +
+    '<div class="zn-vstats">' +
+      '<div class="zn-st"><div class="k">Οδόμετρο</div><div class="v">' + (v.odometer||0).toLocaleString('el') + '</div></div>' +
+      '<div class="zn-st km"><div class="k">Service ανά</div><div class="v">' + ((v.service_every_km||0)/1000) + 'k</div></div>' +
+      '<div class="zn-st"><div class="k">Επόμενο</div><div class="v" style="font-size:12.5px">' + svc.target.toLocaleString('el') + '</div></div>' +
+      '<div class="zn-st"><div class="k">Υπόλοιπο</div><div class="v">' + (svc.remaining>0?svc.remaining:0) + '</div></div>' +
+    '</div>' +
+    '<div class="zn-estrip">' + es + '</div>' +
+    (open.length ? '<div class="zn-arow danger"><span>🛠️ Ανοιχτή βλάβη: <b>' + _esc(open[0].description||'βλάβη') + '</b></span><span class="zn-soon">' + (blocked?'ακινητοποιεί':(open[0].severity==='mid'?'σοβαρή':'ελαφριά')) + '</span></div>' : '') +
+    '<div class="zn-arow ' + (svcAlert?'warn':'ok') + '"><span>🛢️ Service σε <b>' + (svc.remaining>0?svc.remaining:0) + ' χλμ</b></span><span class="zn-soon">' + (svc.daysLeft!=null?('≈'+svc.daysLeft+' μέρες'+(svcAlert?' · alert ΟΝ':'')):'όρισε ρυθμό χλμ') + '</span></div>' +
+    (kteo!=null && kteo<=30 ? '<div class="zn-arow danger"><span>🔧 ΚΤΕΟ ' + _fleetWhen(kteo) + '</b></span><span class="zn-soon">ειδοπ. 1 μήνα πριν</span></div>' : '') +
+    '<div class="zn-vbtns">' +
+      '<button class="zn-vbtn dmg" onclick="fleetDamageForm(\'' + v.id + '\')">⚠️ Βλάβη</button>' +
+      '<button class="zn-vbtn" onclick="fleetDetail(\'' + v.id + '\')">📋 Λεπτομέρειες</button>' +
+    '</div></div>';
+  return h;
+}
+
+function _renderFleetNotif(){
+  var rows = [];
+  FLEET.CACHE.vehicles.forEach(function(v){
+    var isCar = (v.vtype==='car');
+    _fleetOpenDmg(v.id).forEach(function(d){
+      rows.push({ u:-1, c:'d', t:'Βλάβη · '+(v.plate||''), s:_esc(d.description||''), val:(d.severity==='hi'?'ΑΚΙΝΗΤΟ':'ΑΝΟΙΧΤΗ'), e:(d.severity==='hi'?'μη διαθέσιμο':'') });
+    });
+    var kteo=_fleetDaysUntil(v.kteo_date);
+    if(kteo!=null && kteo<=60) rows.push({ u:kteo, c:kteo<=30?'d':'w', t:'ΚΤΕΟ · '+(v.plate||''), s:v.driver_name||'', val:_fleetWhen(kteo), e:kteo<=30?'ειδοπ. ενεργή':'' });
+    var ins=_fleetDaysUntil(v.insurance_date);
+    if(ins!=null && ins<=60) rows.push({ u:ins, c:ins<=30?'d':'w', t:'Ασφάλεια · '+(v.plate||''), s:v.driver_name||'', val:_fleetWhen(ins), e:ins<=30?'1 μήνα πριν':'' });
+    if(isCar){ var emi=_fleetDaysUntil(v.emissions_date); if(emi!=null && emi<=60) rows.push({ u:emi, c:emi<=30?'d':'w', t:'Κάρτα καυσαερίων · '+(v.plate||''), s:'μόνο αυτοκίνητα', val:_fleetWhen(emi), e:'' }); }
+    var svc=_fleetSvc(v);
+    if(svc.daysLeft!=null) rows.push({ u:svc.daysLeft, c:svc.daysLeft<=30?'w':'o', t:'Service · '+(v.plate||''), s:'όριο στα '+svc.target.toLocaleString('el'), val:'≈'+svc.daysLeft+' μέρες', e:svc.daysLeft<=30?'alert 30 μέρες πριν':'' });
+  });
+  rows.sort(function(a,b){ return a.u-b.u; });
+  if(!rows.length) return '<div class="card" style="text-align:center;padding:30px 20px"><div style="font-size:34px">✅</div><div class="fw-700" style="margin-top:8px">Καμία επερχόμενη ειδοποίηση στόλου</div></div>';
+  return rows.map(function(r){
+    return '<div class="zn-nrow ' + r.c + '"><span class="zn-nl"></span><div class="zn-nt"><b>' + r.t + '</b><span>' + r.s + '</span></div>' +
+      '<div class="zn-nv">' + r.val + (r.e?'<span class="zn-early">'+r.e+'</span>':'') + '</div></div>';
+  }).join('');
+}
+
+function fleetSetView(x){ FLEET_VIEW = x; _renderExpenseCalendarPage(); if(typeof lucide!=='undefined') lucide.createIcons(); }
+
+function _esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ---- Vehicle detail sheet ----
+function fleetDetail(id){
+  var v = FLEET.CACHE.vehicles.find(function(x){ return x.id===id; });
+  if(!v) return;
+  var isCar = (v.vtype==='car');
+  var svc = _fleetSvc(v);
+  var open = _fleetOpenDmg(v.id);
+  var predBlock = '';
+  if(svc.daysLeft != null){
+    var pred = new Date(); pred.setDate(pred.getDate()+svc.daysLeft);
+    var alertD = new Date(pred); alertD.setDate(alertD.getDate()-30);
+    var fmt = function(d){ return d.toLocaleDateString('el-GR',{day:'numeric',month:'short'}); };
+    predBlock = '<div class="zn-pred"><div class="zn-pt">🔮 Πρόβλεψη service (βάσει χλμ/μέρα)</div><div class="zn-pgrid">' +
+      '<div class="zn-pg"><div class="k">Μέσος ρυθμός</div><div class="v">' + svc.rate + ' χλμ/μέρα</div></div>' +
+      '<div class="zn-pg"><div class="k">Υπόλοιπο</div><div class="v">' + (svc.remaining>0?svc.remaining:0) + ' χλμ</div></div>' +
+      '<div class="zn-pg"><div class="k">Εκτίμηση ορίου</div><div class="v">' + fmt(pred) + '</div></div>' +
+      '<div class="zn-pg alert"><div class="k">Ειδοποίηση (−30μ)</div><div class="v">' + fmt(alertD) + '</div></div></div></div>';
+  } else {
+    predBlock = '<div class="zn-pred"><div class="zn-pt">🔮 Πρόβλεψη service</div><div class="text-sm muted">Όρισε «μέσο ρυθμό χλμ/μέρα» στα στοιχεία του οχήματος (ή θα υπολογιστεί αυτόματα από τα handover χλμ των βαρδιών).</div></div>';
+  }
+  var sched = [
+    ['ΚΤΕΟ', v.kteo_date ? _fleetWhen(_fleetDaysUntil(v.kteo_date)) : '—', _fleetDaysUntil(v.kteo_date)],
+    ['Κάρτα καυσαερίων', isCar ? (v.emissions_date?_fleetWhen(_fleetDaysUntil(v.emissions_date)):'—') : '— (μόνο αυτοκίνητα)', isCar?_fleetDaysUntil(v.emissions_date):null],
+    ['Ασφάλεια', v.insurance_date ? _fleetWhen(_fleetDaysUntil(v.insurance_date)) : '—', _fleetDaysUntil(v.insurance_date)],
+    ['Τέλη κυκλοφορίας', v.roadtax_status==='ok'?'πληρωμένα':'εκκρεμή', v.roadtax_status==='ok'?999:0],
+    ['Service κάθε', (v.service_every_km||0).toLocaleString('el')+' χλμ', null],
+    ['Επόμενο service', 'στα '+svc.target.toLocaleString('el'), null]
+  ];
+  var schedHtml = sched.map(function(r){
+    var tag = '';
+    if(r[2]!=null){ var tc = r[2]<=30?'d':'o'; tag = ' <span class="zn-tag '+tc+'">'+(tc==='d'?'!':'OK')+'</span>'; }
+    return '<div class="zn-sched"><span>'+r[0]+'</span><b>'+r[1]+tag+'</b></div>';
+  }).join('');
+  var dmgHtml = open.length ? open.map(function(d){
+    var lbl = d.severity==='hi'?'ακινητοποιεί':(d.severity==='mid'?'σοβαρή':'ελαφριά');
+    return '<div class="zn-drow"><span>🛠️ '+_esc(d.description||'βλάβη')+'</span>' +
+      '<span class="zn-sev '+d.severity+'">'+lbl+'</span>' +
+      '<button class="zn-fix" onclick="fleetCloseDamage(\''+d.id+'\',\''+v.id+'\')">✓ Επισκευάστηκε</button></div>';
+  }).join('') : '<div class="text-sm muted" style="padding:6px 2px">Καμία ενεργή βλάβη.</div>';
+
+  openModal('<div class="modal-head"><h3 class="fw-800 text-xl">' + (isCar?'Αυτοκίνητο':'Μηχανάκι') + ' · ' + _esc(v.plate||'') + '</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body">' +
+    '<div class="text-sm muted" style="margin-bottom:12px">' + _esc((v.role_label?v.role_label+' · ':'')+(v.driver_name||'')) + '</div>' +
+    predBlock +
+    '<div class="zn-sect">Λήξεις εγγράφων · alert 1 μήνα πριν</div>' + schedHtml +
+    '<div class="zn-sect" style="margin-top:16px">Αναφορές βλάβης</div>' + dmgHtml +
+    '<div class="flex gap-2 mt-3">' +
+      '<button class="btn btn-ghost" onclick="fleetDamageForm(\''+v.id+'\')">⚠️ Νέα βλάβη</button>' +
+      '<button class="btn btn-ghost" onclick="fleetVehicleForm(\''+v.id+'\')"><i data-lucide="edit-2" size="15"></i> Επεξεργασία</button>' +
+    '</div></div>');
+  if(typeof lucide!=='undefined') lucide.createIcons();
+}
+
+// ---- Vehicle add/edit form ----
+function fleetVehicleForm(id){
+  var v = id ? FLEET.CACHE.vehicles.find(function(x){ return x.id===id; }) : { vtype:'car', service_every_km:10000, avg_km_day:30, roadtax_status:'ok' };
+  if(!v) return;
+  var opt = function(val,cur,lbl){ return '<option value="'+val+'"'+(cur===val?' selected':'')+'>'+lbl+'</option>'; };
+  openModal('<div class="modal-head"><h3 class="fw-800 text-xl">' + (id?'Επεξεργασία':'Νέο') + ' Όχημα</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body"><div class="form-grid">' +
+    '<div class="form-row"><label class="form-label">Τύπος</label><select class="form-select" id="fv_type">' + opt('car',v.vtype,'🚗 Αυτοκίνητο') + opt('moto',v.vtype,'🏍️ Μηχανάκι') + '</select></div>' +
+    '<div class="form-row"><label class="form-label">Πινακίδα</label><input class="form-input" id="fv_plate" value="'+_esc(v.plate||'')+'" placeholder="π.χ. ΑΒΓ-1234"></div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+    '<div class="form-row"><label class="form-label">Ζώνη</label><select class="form-select" id="fv_zone">' + opt('',v.zone||'','—') + opt('in',v.zone,'Εντός πόλης') + opt('out',v.zone,'Εκτός πόλης') + '</select></div>' +
+    '<div class="form-row"><label class="form-label">Οδηγός</label><input class="form-input" id="fv_driver" value="'+_esc(v.driver_name||'')+'" placeholder="όνομα"></div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+    '<div class="form-row"><label class="form-label">Οδόμετρο (χλμ)</label><input class="form-input mono" id="fv_odo" inputmode="numeric" value="'+(v.odometer||0)+'"></div>' +
+    '<div class="form-row"><label class="form-label">Service κάθε (χλμ)</label><input class="form-input mono" id="fv_svc" inputmode="numeric" value="'+(v.service_every_km||10000)+'"></div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+    '<div class="form-row"><label class="form-label">Τελευτ. service στα (χλμ)</label><input class="form-input mono" id="fv_lastsvc" inputmode="numeric" value="'+(v.last_service_km||0)+'"></div>' +
+    '<div class="form-row"><label class="form-label">Μέσος ρυθμός (χλμ/μέρα)</label><input class="form-input mono" id="fv_rate" inputmode="numeric" value="'+(v.avg_km_day||30)+'"></div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+    '<div class="form-row"><label class="form-label">ΚΤΕΟ λήξη</label><input class="form-input" id="fv_kteo" type="date" value="'+(v.kteo_date||'')+'"></div>' +
+    '<div class="form-row"><label class="form-label">Ασφάλεια λήξη</label><input class="form-input" id="fv_ins" type="date" value="'+(v.insurance_date||'')+'"></div>' +
+    '</div>' +
+    '<div class="form-grid">' +
+    '<div class="form-row"><label class="form-label">Κάρτα καυσαερίων λήξη <span class="text-xs muted">(μόνο αυτοκ.)</span></label><input class="form-input" id="fv_emi" type="date" value="'+(v.emissions_date||'')+'"></div>' +
+    '<div class="form-row"><label class="form-label">Τέλη κυκλοφορίας</label><select class="form-select" id="fv_teli">' + opt('ok',v.roadtax_status,'Πληρωμένα') + opt('due',v.roadtax_status,'Εκκρεμή') + '</select></div>' +
+    '</div>' +
+    '<div class="flex gap-2 mt-3">' +
+      '<button class="btn btn-primary btn-lg" onclick="fleetSaveVehicle('+(id?('\''+id+'\''):'null')+')"><i data-lucide="save" size="16"></i> Αποθήκευση</button>' +
+      (id?'<button class="btn btn-ghost" onclick="fleetDeleteVehicle(\''+id+'\')"><i data-lucide="trash-2" size="15"></i></button>':'') +
+      '<button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>' +
+    '</div></div>');
+  if(typeof lucide!=='undefined') lucide.createIcons();
+}
+
+async function fleetSaveVehicle(id){
+  var gv = function(x){ var el=document.getElementById(x); return el?el.value:''; };
+  var gi = function(x){ var n=parseInt(gv(x)||'0',10); return isNaN(n)?0:n; };
+  var data = {
+    shop_id: SHOP_ID,
+    vtype: gv('fv_type'),
+    plate: (gv('fv_plate')||'').trim() || null,
+    zone: gv('fv_zone') || null,
+    driver_name: (gv('fv_driver')||'').trim() || null,
+    odometer: gi('fv_odo'),
+    service_every_km: gi('fv_svc') || 10000,
+    last_service_km: gi('fv_lastsvc'),
+    avg_km_day: gi('fv_rate'),
+    kteo_date: gv('fv_kteo') || null,
+    insurance_date: gv('fv_ins') || null,
+    emissions_date: gv('fv_emi') || null,
+    roadtax_status: gv('fv_teli') || 'ok'
+  };
+  try{
+    if(id){ await sb.from('vehicles').update(data).eq('id', id); }
+    else { await sb.from('vehicles').insert(data); }
+    await FLEET.load(); closeModal(); _renderExpenseCalendarPage();
+    if(typeof lucide!=='undefined') lucide.createIcons();
+    if(typeof toast==='function') toast('Το όχημα αποθηκεύτηκε', 'success');
+  }catch(e){ console.error('[Fleet] save vehicle:', e); if(typeof toast==='function') toast('Σφάλμα αποθήκευσης', 'danger'); }
+}
+
+async function fleetDeleteVehicle(id){
+  if(typeof showConfirm==='function'){
+    var ok = await showConfirm('Διαγραφή οχήματος;', 'Θα διαγραφεί το όχημα και οι βλάβες του.');
+    if(!ok) return;
+  }
+  try{
+    await sb.from('vehicle_damage').delete().eq('vehicle_id', id);
+    await sb.from('vehicles').delete().eq('id', id);
+    await FLEET.load(); closeModal(); _renderExpenseCalendarPage();
+    if(typeof lucide!=='undefined') lucide.createIcons();
+    if(typeof toast==='function') toast('Το όχημα διαγράφηκε', 'success');
+  }catch(e){ console.error('[Fleet] delete vehicle:', e); if(typeof toast==='function') toast('Σφάλμα διαγραφής', 'danger'); }
+}
+
+// ---- Damage report ----
+var _FLEET_DMG_SEV = 'lo';
+function fleetDamageForm(vehicleId){
+  _FLEET_DMG_SEV = 'lo';
+  var seg = function(s,lbl){ return '<button class="zn-segb '+s+(s==='lo'?' on':'')+'" data-s="'+s+'" onclick="fleetPickSev(this)">'+lbl+'</button>'; };
+  openModal('<div class="modal-head"><h3 class="fw-800 text-xl">Νέα αναφορά βλάβης</h3>' +
+    '<button class="icon-btn" onclick="closeModal()"><i data-lucide="x" size="16"></i></button></div>' +
+    '<div class="modal-body">' +
+    '<label class="form-label">Σοβαρότητα</label>' +
+    '<div class="zn-seg">' + seg('lo','Ελαφριά') + seg('mid','Σοβαρή') + seg('hi','Ακινητοποιεί') + '</div>' +
+    '<div class="form-row mt-2"><label class="form-label">Περιγραφή</label><input class="form-input" id="fd_desc" placeholder="π.χ. φρένο πίσω δεν πιάνει"></div>' +
+    '<div class="zn-blkwarn" id="fd_blk">🚫 Με «Ακινητοποιεί» το όχημα τίθεται <b>ΜΗ ΔΙΑΘΕΣΙΜΟ</b> για ανάθεση βάρδιας μέχρι την επισκευή.</div>' +
+    '<div class="text-xs muted mt-2">📷 Επισύναψη φωτό: διαθέσιμο στο επόμενο update (αποθήκευση Storage).</div>' +
+    '<div class="flex gap-2 mt-3">' +
+      '<button class="btn btn-primary btn-lg" onclick="fleetSaveDamage(\''+vehicleId+'\')"><i data-lucide="save" size="16"></i> Καταγραφή</button>' +
+      '<button class="btn btn-ghost" onclick="closeModal()">Ακύρωση</button>' +
+    '</div></div>');
+  if(typeof lucide!=='undefined') lucide.createIcons();
+}
+function fleetPickSev(el){
+  _FLEET_DMG_SEV = el.getAttribute('data-s');
+  var all = document.querySelectorAll('.zn-segb');
+  for(var i=0;i<all.length;i++){ all[i].classList.remove('on'); }
+  el.classList.add('on');
+  var blk = document.getElementById('fd_blk');
+  if(blk) blk.style.display = (_FLEET_DMG_SEV==='hi') ? 'block' : 'none';
+}
+async function fleetSaveDamage(vehicleId){
+  var descEl = document.getElementById('fd_desc');
+  var desc = descEl ? (descEl.value||'').trim() : '';
+  if(!desc){ if(typeof toast==='function') toast('Γράψε περιγραφή βλάβης', 'warning'); return; }
+  try{
+    await sb.from('vehicle_damage').insert({ shop_id: SHOP_ID, vehicle_id: vehicleId, severity: _FLEET_DMG_SEV, description: desc, status: 'open' });
+    if(_FLEET_DMG_SEV === 'hi'){ await sb.from('vehicles').update({ status: 'blocked' }).eq('id', vehicleId); }
+    await FLEET.load(); closeModal(); _renderExpenseCalendarPage();
+    if(typeof lucide!=='undefined') lucide.createIcons();
+    if(typeof toast==='function') toast('Η βλάβη καταγράφηκε', 'success');
+  }catch(e){ console.error('[Fleet] save damage:', e); if(typeof toast==='function') toast('Σφάλμα καταγραφής', 'danger'); }
+}
+async function fleetCloseDamage(damageId, vehicleId){
+  try{
+    await sb.from('vehicle_damage').update({ status: 'closed' }).eq('id', damageId);
+    // αν δεν μένει ανοιχτή «ακινητοποιεί» βλάβη → ξεμπλοκάρισμα
+    var rest = await sb.from('vehicle_damage').select('id').eq('vehicle_id', vehicleId).eq('status','open').eq('severity','hi');
+    if(!rest.data || rest.data.length === 0){ await sb.from('vehicles').update({ status: 'active' }).eq('id', vehicleId); }
+    await FLEET.load(); closeModal(); _renderExpenseCalendarPage();
+    if(typeof lucide!=='undefined') lucide.createIcons();
+    if(typeof toast==='function') toast('Η βλάβη έκλεισε', 'success');
+  }catch(e){ console.error('[Fleet] close damage:', e); if(typeof toast==='function') toast('Σφάλμα', 'danger'); }
+}
+
+window.fleetSetView=fleetSetView; window.fleetDetail=fleetDetail; window.fleetVehicleForm=fleetVehicleForm;
+window.fleetSaveVehicle=fleetSaveVehicle; window.fleetDeleteVehicle=fleetDeleteVehicle;
+window.fleetDamageForm=fleetDamageForm; window.fleetPickSev=fleetPickSev; window.fleetSaveDamage=fleetSaveDamage; window.fleetCloseDamage=fleetCloseDamage;
+window._renderFleet=_renderFleet;
+
+// ---- Fleet CSS (injected once; self-contained, theme-independent) ----
+(function(){
+  if(document.getElementById('zn-fleet-css')) return;
+  var s = document.createElement('style'); s.id='zn-fleet-css';
+  s.textContent = ''
+   + '.zn-fpills{display:flex;gap:8px;align-items:center;margin-bottom:14px}'
+   + '.zn-fpill{font-size:13px;font-weight:700;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:#1c2533;color:#8a97a9;cursor:pointer}'
+   + '.zn-fpill.on{background:#161d29;color:#e9eef6;border-color:#fbbf24}'
+   + '.zn-vcard{background:#161d29;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:15px;margin-bottom:14px}'
+   + '.zn-vcard.amber{border-color:rgba(251,191,36,.25)}.zn-vcard.cyan{border-color:rgba(34,211,238,.25)}.zn-vcard.blk{border-color:rgba(248,113,113,.4)}'
+   + '.zn-vhead{display:flex;align-items:center;gap:12px;margin-bottom:13px;cursor:pointer}'
+   + '.zn-vico{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:23px;border:1px solid rgba(255,255,255,.08);flex:0 0 auto}'
+   + '.zn-vcard.amber .zn-vico{background:rgba(251,191,36,.13)}.zn-vcard.cyan .zn-vico{background:rgba(34,211,238,.13)}'
+   + '.zn-vt{flex:1;min-width:0}.zn-vt b{font-size:15px;font-weight:800;display:block;color:#e9eef6}.zn-vt span{font-size:12px;color:#8a97a9}'
+   + '.zn-chev{color:#5d6878;font-size:20px}'
+   + '.zn-blocked{display:inline-block;font-size:10px;font-weight:800;background:#f87171;color:#2a0000;padding:2px 7px;border-radius:7px;margin-left:6px}'
+   + '.zn-vstats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:11px}'
+   + '.zn-st{background:#1c2533;border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:9px 5px;text-align:center}'
+   + '.zn-st .k{font-size:9px;color:#8a97a9;font-weight:600;line-height:1.2}.zn-st .v{font-size:14.5px;font-weight:800;margin-top:3px;color:#e9eef6}'
+   + '.zn-vcard.amber .zn-st.km .v{color:#fbbf24}.zn-vcard.cyan .zn-st.km .v{color:#22d3ee}'
+   + '.zn-estrip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px}'
+   + '.zn-epill{font-size:10px;font-weight:700;padding:5px 9px;border-radius:9px;border:1px solid rgba(255,255,255,.08);background:#1c2533;color:#8a97a9}'
+   + '.zn-epill b{font-weight:800}.zn-epill.d{border-color:rgba(248,113,113,.4);color:#ffc4c4;background:rgba(248,113,113,.12)}'
+   + '.zn-epill.w{border-color:rgba(245,158,11,.4);color:#ffd99b;background:rgba(245,158,11,.12)}'
+   + '.zn-epill.o{color:#34d399;border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.08)}'
+   + '.zn-arow{display:flex;align-items:center;gap:9px;border-radius:11px;padding:10px 12px;font-size:12.5px;font-weight:600;margin-top:8px;border:1px solid}'
+   + '.zn-arow.warn{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35);color:#ffd99b}'
+   + '.zn-arow.danger{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.35);color:#ffc4c4}'
+   + '.zn-arow.ok{background:rgba(52,211,153,.10);border-color:rgba(52,211,153,.3);color:#a7f3d4}'
+   + '.zn-arow b{font-weight:800}.zn-soon{margin-left:auto;font-size:9px;font-weight:800;background:rgba(255,255,255,.08);padding:3px 7px;border-radius:8px;color:#8a97a9;white-space:nowrap}'
+   + '.zn-vbtns{display:flex;gap:8px;margin-top:13px}'
+   + '.zn-vbtn{flex:1;height:42px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:#1c2533;color:#e9eef6;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}'
+   + '.zn-vbtn.dmg{border-color:rgba(248,113,113,.3);color:#ffb8b8}'
+   + '.zn-pred{background:linear-gradient(135deg,rgba(251,191,36,.08),transparent);border:1px solid rgba(251,191,36,.25);border-radius:13px;padding:13px;margin-bottom:13px}'
+   + '.zn-pt{font-size:11px;font-weight:800;color:#fbbf24;letter-spacing:.4px;margin-bottom:9px;text-transform:uppercase}'
+   + '.zn-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}'
+   + '.zn-pg{background:#1c2533;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 11px}'
+   + '.zn-pg .k{font-size:10px;color:#8a97a9}.zn-pg .v{font-size:14px;font-weight:800;margin-top:2px;color:#e9eef6}.zn-pg.alert .v{color:#f59e0b}'
+   + '.zn-sect{font-size:11px;font-weight:800;color:#5d6878;text-transform:uppercase;letter-spacing:1px;margin:2px 2px 10px}'
+   + '.zn-sched{display:flex;justify-content:space-between;font-size:12.5px;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.08)}'
+   + '.zn-sched span{color:#8a97a9}.zn-sched b{font-weight:700;color:#e9eef6}'
+   + '.zn-tag{font-size:9px;font-weight:800;padding:2px 6px;border-radius:6px;margin-left:6px}.zn-tag.d{background:rgba(248,113,113,.12);color:#f87171}.zn-tag.o{background:rgba(52,211,153,.12);color:#34d399}'
+   + '.zn-drow{display:flex;align-items:center;gap:9px;background:#161d29;border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;color:#e9eef6}'
+   + '.zn-sev{font-size:9px;font-weight:800;padding:3px 8px;border-radius:8px;white-space:nowrap}'
+   + '.zn-sev.lo{background:rgba(245,158,11,.12);color:#f59e0b}.zn-sev.mid{background:rgba(251,146,60,.15);color:#fb923c}.zn-sev.hi{background:rgba(248,113,113,.12);color:#f87171}'
+   + '.zn-fix{margin-left:auto;font-size:11px;font-weight:700;background:rgba(52,211,153,.12);color:#34d399;border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:5px 9px;cursor:pointer}'
+   + '.zn-seg{display:flex;gap:6px;margin:8px 0}'
+   + '.zn-segb{flex:1;text-align:center;font-size:11.5px;font-weight:700;padding:10px 4px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:#1c2533;color:#8a97a9;cursor:pointer}'
+   + '.zn-segb.on.lo{background:rgba(245,158,11,.12);border-color:#f59e0b;color:#f59e0b}'
+   + '.zn-segb.on.mid{background:rgba(251,146,60,.15);border-color:#fb923c;color:#fb923c}'
+   + '.zn-segb.on.hi{background:rgba(248,113,113,.12);border-color:#f87171;color:#f87171}'
+   + '.zn-blkwarn{display:none;margin-top:9px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.4);border-radius:10px;padding:9px 11px;font-size:11.5px;color:#ffc4c4}'
+   + '.zn-nrow{display:flex;align-items:center;gap:12px;background:#161d29;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:13px 14px;margin-bottom:10px}'
+   + '.zn-nl{width:9px;height:9px;border-radius:50%;flex:0 0 auto}.zn-nrow.d .zn-nl{background:#f87171}.zn-nrow.w .zn-nl{background:#f59e0b}.zn-nrow.o .zn-nl{background:#34d399}'
+   + '.zn-nt{flex:1}.zn-nt b{font-size:13px;font-weight:700;display:block;color:#e9eef6}.zn-nt span{font-size:11px;color:#8a97a9}'
+   + '.zn-nv{font-size:12px;font-weight:800;text-align:right;white-space:nowrap;color:#e9eef6}.zn-nrow.d .zn-nv{color:#f87171}.zn-nrow.w .zn-nv{color:#f59e0b}.zn-nrow.o .zn-nv{color:#34d399}'
+   + '.zn-early{font-size:9px;color:#5d6878;font-weight:700;display:block;margin-top:2px}';
+  document.head.appendChild(s);
+})();
+
