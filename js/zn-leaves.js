@@ -822,6 +822,7 @@ async function loadAllData(){
     console.log('Querying app_users...');
     const usersRes = await sb.from('app_users').select('*').eq('active',true);
     console.log('✓ app_users loaded:', usersRes.data?.length || 0, 'users');
+    try{ const _gr = await sb.from('shop_settings').select('value').eq('shop_id',SHOP_ID).eq('key','fleet_gps_required').maybeSingle(); window._znFleetGpsRequired = !!(_gr && _gr.data && String(_gr.data.value)==='true'); }catch(_){ window._znFleetGpsRequired = false; }
 
     await loadHardwareCompat();
 
@@ -31747,7 +31748,7 @@ function _renderFleet(){
     '<button class="zn-fpill ' + (FLEET_VIEW==='fleet'?'on':'') + '" onclick="fleetSetView(\'fleet\')">Στόλος</button>' +
     '<button class="zn-fpill ' + (FLEET_VIEW==='notif'?'on':'') + '" onclick="fleetSetView(\'notif\')">Ειδοποιήσεις</button>' +
     '<button class="btn btn-primary" style="margin-left:auto;padding:6px 12px;font-size:13px" onclick="fleetVehicleForm(null)"><i data-lucide="plus" size="15"></i> Όχημα</button>' +
-    '</div>';
+    '</div>' + _znFleetGpsToggleHtml();
 
   if(vehicles.length === 0){
     return pills + '<div class="card" style="text-align:center;padding:36px 20px">' +
@@ -32103,11 +32104,12 @@ function _znOpenPickupModal(){
   _znPickupCond='ok'; _znPickupGpsVal=null; _znPickupPhoto=null; _znPickupLastOdo=null;
   var _mh=document.getElementById('modalHost'); if(_mh) _mh.innerHTML='';
   var v=CURRENT_USER; var plate=(v.vehicle_plate||'').trim(); var isCar=(v.vehicle_type!=='moto');
+  var gpsReq=!!window._znFleetGpsRequired;
   openModal('<div class="modal-head"><h3 class="fw-800 text-xl">🚗 Παραλαβή Οχήματος</h3></div>'
    +'<div class="modal-body">'
    +'<div class="text-sm muted" style="margin-bottom:12px">Πριν ξεκινήσει η βάρδιά σου, '+_znEsc(v.name||'')+'</div>'
    +'<div class="zn-vchip">'+(isCar?'🚗 Αυτοκίνητο':'🏍️ Μηχανάκι')+' · '+_znEsc(plate||'—')+'</div>'
-   +'<button class="btn btn-ghost" id="znPkGps" style="width:100%" onclick="_znPickupGps()">📍 GPS Clock-in (προαιρετικό)</button>'
+   +(gpsReq?'<button class="btn btn-ghost" id="znPkGps" style="width:100%" onclick="_znPickupGps()">📍 GPS Clock-in (υποχρεωτικό)</button>':'')
    +'<label class="form-label" style="display:block;margin-top:12px">🚗 Χλμ παραλαβής (οδόμετρο)</label>'
    +'<input class="form-input mono" id="znPkOdo" inputmode="numeric" placeholder="π.χ. 84210" oninput="_znPkMismatch()">'
    +'<div class="text-sm muted" id="znPkLast" style="margin-top:6px"></div>'
@@ -32120,10 +32122,12 @@ function _znOpenPickupModal(){
    +'<label class="btn btn-ghost" style="width:100%;margin-top:8px;cursor:pointer">📷 Προσθήκη φωτό<input type="file" accept="image/*" capture="environment" style="display:none" onchange="_znPickupPhotoPick(this)"></label>'
    +'<div class="text-xs muted" id="znPkPhotoName" style="margin-top:4px"></div>'
    +'</div>'
+   +(gpsReq?'<div class="text-xs muted" style="margin-top:8px">📍 Απαιτείται GPS για να ξεκινήσει η βάρδια.</div>':'')
    +'<button class="btn btn-primary btn-lg" style="width:100%;margin-top:14px" onclick="_znConfirmPickup()">▶ Ξεκίνα Βάρδια</button>'
    +'<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;font-size:12px" onclick="_forceClockInLogout()">Έκανα λάθος είσοδο — Logout</button>'
    +'</div>');
   if(typeof lucide!=='undefined') lucide.createIcons();
+  if(gpsReq && typeof _znPickupGps==='function') _znPickupGps();
   if(plate){ try{ sb.from('vehicles').select('odometer').eq('shop_id',SHOP_ID).eq('plate',plate).limit(1).then(function(vr){
     if(vr&&vr.data&&vr.data[0]&&vr.data[0].odometer!=null){ _znPickupLastOdo=vr.data[0].odometer;
       var o=document.getElementById('znPkOdo'); if(o&&!o.value) o.value=_znPickupLastOdo;
@@ -32164,6 +32168,7 @@ async function _znConfirmPickup(){
   var odoEl=document.getElementById('znPkOdo');
   var odo=parseInt(((odoEl&&odoEl.value)||'').replace(/\D/g,''),10);
   if(!odo){ if(typeof toast==='function') toast('Συμπλήρωσε χλμ παραλαβής','warning'); return; }
+  if(window._znFleetGpsRequired && !_znPickupGpsVal){ if(typeof toast==='function') toast('Απαιτείται GPS — πάτησε «GPS Clock-in»','warning'); return; }
   if(_znPickupCond==='bad'){ var de=document.getElementById('znPkDesc'); if(!de||!de.value.trim()){ if(typeof toast==='function') toast('Περίγραψε τη βλάβη','warning'); return; } }
   window._znVehPickup={ odo:odo, gps:_znPickupGpsVal||null, condition:_znPickupCond, desc:((document.getElementById('znPkDesc')||{}).value||''), photoFile:_znPickupPhoto||null };
   closeModal();
@@ -32191,4 +32196,26 @@ async function _znCommitPickup(shiftId){
 window._znIsVehicleUser=_znIsVehicleUser; window._znOpenPickupModal=_znOpenPickupModal; window._znPickupGps=_znPickupGps;
 window._znPickupCond=_znPickupCond; window._znPkMismatch=_znPkMismatch; window._znPickupPhotoPick=_znPickupPhotoPick;
 window._znConfirmPickup=_znConfirmPickup; window._znCommitPickup=_znCommitPickup;
+
+// ════════════════════════════════════════════════════════════════════════
+// 🚗 FLEET F3-GPS — admin toggle: mandatory GPS for staff shifts (shop_settings)
+// ════════════════════════════════════════════════════════════════════════
+function _znFleetGpsToggleHtml(){
+  var on=!!window._znFleetGpsRequired;
+  return '<div class="zn-vcard" style="display:flex;align-items:center;gap:12px;padding:13px 15px;margin-bottom:14px">'
+   +'<div style="flex:1"><div class="fw-700" style="font-size:13.5px">📍 Υποχρεωτικό GPS στις βάρδιες</div>'
+   +'<div class="text-xs muted">Όταν ΟΝ, οι υπάλληλοι με όχημα δεν ξεκινούν βάρδια χωρίς GPS.</div></div>'
+   +'<button class="zn-fpill '+(on?'on':'')+'" onclick="fleetToggleGps()" style="min-width:64px">'+(on?'ΝΑΙ':'ΟΧΙ')+'</button></div>';
+}
+async function fleetToggleGps(){
+  var next=!window._znFleetGpsRequired;
+  try{
+    await sb.from('shop_settings').upsert({shop_id:SHOP_ID, key:'fleet_gps_required', value: next?'true':'false'});
+    window._znFleetGpsRequired=next;
+    if(typeof _renderExpenseCalendarPage==='function') _renderExpenseCalendarPage();
+    if(typeof lucide!=='undefined') lucide.createIcons();
+    if(typeof toast==='function') toast(next?'GPS υποχρεωτικό: ΟΝ':'GPS υποχρεωτικό: OFF','success');
+  }catch(e){ console.error('[Fleet] gps toggle',e); if(typeof toast==='function') toast('Σφάλμα','danger'); }
+}
+window.fleetToggleGps=fleetToggleGps; window._znFleetGpsToggleHtml=_znFleetGpsToggleHtml;
 
