@@ -32098,10 +32098,10 @@ function _znInjectHandoverCss(){
    +'.zn-pkflag{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#ffd99b;border-radius:11px;padding:10px 12px;font-size:12px}';
   document.head.appendChild(s);
 }
-var _znPickupCond='ok', _znPickupGpsVal=null, _znPickupPhoto=null, _znPickupLastOdo=null;
+var _znPkCondVal='ok', _znPickupGpsVal=null, _znPickupPhoto=null, _znPickupLastOdo=null;
 function _znOpenPickupModal(){
   _znInjectHandoverCss();
-  _znPickupCond='ok'; _znPickupGpsVal=null; _znPickupPhoto=null; _znPickupLastOdo=null;
+  _znPkCondVal='ok'; _znPickupGpsVal=null; _znPickupPhoto=null; _znPickupLastOdo=null;
   var _mh=document.getElementById('modalHost'); if(_mh) _mh.innerHTML='';
   var v=CURRENT_USER; var plate=(v.vehicle_plate||'').trim(); var isCar=(v.vehicle_type!=='moto');
   var gpsReq=!!window._znFleetGpsRequired;
@@ -32142,7 +32142,7 @@ function _znPickupGps(){
    function(){ _znPickupGpsVal=null; if(btn)btn.textContent='⚠️ GPS αρνήθηκε (προαιρετικό)'; }, {enableHighAccuracy:true,timeout:8000,maximumAge:60000});
 }
 function _znPickupCond(bad){
-  _znPickupCond = bad?'bad':'ok';
+  _znPkCondVal = bad?'bad':'ok';
   var a=document.getElementById('znPkCondOk'), b=document.getElementById('znPkCondBad'), d=document.getElementById('znPkDmg');
   if(a)a.classList.toggle('on',!bad); if(b)b.classList.toggle('on',!!bad); if(d)d.style.display=bad?'block':'none';
 }
@@ -32169,8 +32169,8 @@ async function _znConfirmPickup(){
   var odo=parseInt(((odoEl&&odoEl.value)||'').replace(/\D/g,''),10);
   if(!odo){ if(typeof toast==='function') toast('Συμπλήρωσε χλμ παραλαβής','warning'); return; }
   if(window._znFleetGpsRequired && !_znPickupGpsVal){ if(typeof toast==='function') toast('Απαιτείται GPS — πάτησε «GPS Clock-in»','warning'); return; }
-  if(_znPickupCond==='bad'){ var de=document.getElementById('znPkDesc'); if(!de||!de.value.trim()){ if(typeof toast==='function') toast('Περίγραψε τη βλάβη','warning'); return; } }
-  window._znVehPickup={ odo:odo, gps:_znPickupGpsVal||null, condition:_znPickupCond, desc:((document.getElementById('znPkDesc')||{}).value||''), photoFile:_znPickupPhoto||null };
+  if(_znPkCondVal==='bad'){ var de=document.getElementById('znPkDesc'); if(!de||!de.value.trim()){ if(typeof toast==='function') toast('Περίγραψε τη βλάβη','warning'); return; } }
+  window._znVehPickup={ odo:odo, gps:_znPickupGpsVal||null, condition:_znPkCondVal, desc:((document.getElementById('znPkDesc')||{}).value||''), photoFile:_znPickupPhoto||null };
   closeModal();
   await clockIn();
   var mh=document.getElementById('modalHost'); if(mh) mh.innerHTML='';
