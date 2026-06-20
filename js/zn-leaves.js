@@ -886,7 +886,8 @@ async function loadAllData(){
 
     console.log('Mapping USERS...');
     USERS = (usersRes.data||[]).map(u=>({
-      id:u.id, name:u.name, role:u.role, pin:u.pin, perms:u.permissions||[]
+      id:u.id, name:u.name, role:u.role, pin:u.pin, perms:u.permissions||[],
+      vehicle_type:u.vehicle_type||null, vehicle_zone:u.vehicle_zone||null, vehicle_plate:u.vehicle_plate||null
     }));
     console.log('✓ USERS mapped:', USERS.length);
     
@@ -16083,6 +16084,7 @@ async function _doForceClockIn(){
     if(typeof clockIn === 'function'){
       await clockIn();
     }
+    if(typeof _znIsVehicleUser==='function' && _znIsVehicleUser(CURRENT_USER) && !isUserClockedIn(CURRENT_USER.id)){ return; }
     // Close the force modal
     const modalHost = document.getElementById('modalHost');
     if(modalHost) modalHost.innerHTML = '';
@@ -17540,6 +17542,7 @@ async function clockIn(){
     toast('Έχεις ήδη ανοιχτή βάρδια','warn');
     return;
   }
+  if(typeof _znIsVehicleUser==='function' && _znIsVehicleUser(CURRENT_USER) && !window._znVehPickup){ _znOpenPickupModal(); return; }
   // Πάρε τα καθήκοντα του ρόλου με robust matching
   const templates = getTaskTemplates();
   const matchedKey = resolveRoleKey(CURRENT_USER.role, Object.keys(templates));
@@ -17569,6 +17572,7 @@ async function clockIn(){
     }).select().single();
     if(error) throw error;
     SHIFTS_CACHE.unshift(data);
+    if(window._znVehPickup){ await _znCommitPickup(data.id); window._znVehPickup = null; }
 
     // Ειδοποίηση admin μέσω WhatsApp
     const waOwner = (typeof WA_CONFIG!=='undefined') ? WA_CONFIG.ownerPhone : null;
@@ -32070,4 +32074,117 @@ window._renderFleet=_renderFleet;
    + '.zn-early{font-size:9px;color:#5d6878;font-weight:700;display:block;margin-top:2px}';
   document.head.appendChild(s);
 })();
+
+// ════════════════════════════════════════════════════════════════════════
+// 🚗 FLEET F3a — Vehicle PICKUP handover at employee clock-in (Προσέλευση)
+// Wraps clockIn() via a non-blocking gate for vehicle roles. Photo→Storage 'fleet'.
+// ════════════════════════════════════════════════════════════════════════
+function _znEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _znIsVehicleUser(u){
+  if(!u) return false;
+  if(u.vehicle_plate) return true;
+  var r = u.role || '';
+  return r.indexOf('Πωλητής')>=0 || r.indexOf('Διανομέας')>=0 || /εξωτερικ|διανομ|sales|courier/i.test(r);
+}
+function _znInjectHandoverCss(){
+  if(document.getElementById('zn-handover-css')) return;
+  var s=document.createElement('style'); s.id='zn-handover-css';
+  s.textContent='.zn-vchip{display:inline-flex;align-items:center;gap:8px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:7px 12px;border-radius:11px;font-size:12.5px;font-weight:800;margin-bottom:12px}'
+   +'.zn-cseg{display:flex;gap:8px;margin-top:7px}'
+   +'.zn-cbtn{flex:1;text-align:center;font-size:12px;font-weight:700;padding:12px 6px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:#1c2533;color:#8a97a9;cursor:pointer}'
+   +'.zn-cbtn.ok.on{background:rgba(52,211,153,.12);border-color:#34d399;color:#34d399}'
+   +'.zn-cbtn.bad.on{background:rgba(248,113,113,.12);border-color:#f87171;color:#f87171}'
+   +'.zn-pkflag{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#ffd99b;border-radius:11px;padding:10px 12px;font-size:12px}';
+  document.head.appendChild(s);
+}
+var _znPickupCond='ok', _znPickupGpsVal=null, _znPickupPhoto=null, _znPickupLastOdo=null;
+async function _znOpenPickupModal(){
+  _znInjectHandoverCss();
+  _znPickupCond='ok'; _znPickupGpsVal=null; _znPickupPhoto=null; _znPickupLastOdo=null;
+  var v=CURRENT_USER; var plate=(v.vehicle_plate||'').trim();
+  if(plate){ try{ var vr=await sb.from('vehicles').select('odometer').eq('shop_id',SHOP_ID).eq('plate',plate).limit(1); if(vr.data&&vr.data[0]) _znPickupLastOdo=vr.data[0].odometer; }catch(_){} }
+  var isCar=(v.vehicle_type!=='moto');
+  openModal('<div class="modal-head"><h3 class="fw-800 text-xl">🚗 Παραλαβή Οχήματος</h3></div>'
+   +'<div class="modal-body">'
+   +'<div class="text-sm muted" style="margin-bottom:12px">Πριν ξεκινήσει η βάρδιά σου, '+_znEsc(v.name||'')+'</div>'
+   +'<div class="zn-vchip">'+(isCar?'🚗 Αυτοκίνητο':'🏍️ Μηχανάκι')+' · '+_znEsc(plate||'—')+'</div>'
+   +'<button class="btn btn-ghost" id="znPkGps" style="width:100%" onclick="_znPickupGps()">📍 GPS Clock-in (προαιρετικό)</button>'
+   +'<label class="form-label" style="display:block;margin-top:12px">🚗 Χλμ παραλαβής (οδόμετρο)</label>'
+   +'<input class="form-input mono" id="znPkOdo" inputmode="numeric" value="'+(_znPickupLastOdo!=null?_znPickupLastOdo:'')+'" placeholder="π.χ. 84210" oninput="_znPkMismatch()">'
+   +(_znPickupLastOdo!=null?'<div class="text-sm muted" style="margin-top:6px">Τελευταία καταχωρημένη: <b>'+Number(_znPickupLastOdo).toLocaleString('el')+'</b></div>':'')
+   +'<div class="zn-pkflag" id="znPkFlag" style="display:none;margin-top:9px">⚠️ Διαφέρει από την προηγούμενη παράδοση — αδήλωτα χλμ.</div>'
+   +'<label class="form-label" style="display:block;margin-top:14px">Κατάσταση οχήματος</label>'
+   +'<div class="zn-cseg"><button class="zn-cbtn ok on" id="znPkCondOk" onclick="_znPickupCond(0)">✅ Χωρίς εμφανή βλάβη</button>'
+   +'<button class="zn-cbtn bad" id="znPkCondBad" onclick="_znPickupCond(1)">⚠️ Με εμφανή βλάβη</button></div>'
+   +'<div id="znPkDmg" style="display:none;margin-top:10px">'
+   +'<textarea class="form-input" id="znPkDesc" placeholder="Περιγραφή ορατής βλάβης…" style="min-height:54px"></textarea>'
+   +'<label class="btn btn-ghost" style="width:100%;margin-top:8px;cursor:pointer">📷 Προσθήκη φωτό<input type="file" accept="image/*" capture="environment" style="display:none" onchange="_znPickupPhotoPick(this)"></label>'
+   +'<div class="text-xs muted" id="znPkPhotoName" style="margin-top:4px"></div>'
+   +'</div>'
+   +'<button class="btn btn-primary btn-lg" style="width:100%;margin-top:14px" onclick="_znConfirmPickup()">▶ Ξεκίνα Βάρδια</button>'
+   +'<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;font-size:12px" onclick="_forceClockInLogout()">Έκανα λάθος είσοδο — Logout</button>'
+   +'</div>');
+  if(typeof lucide!=='undefined') lucide.createIcons();
+}
+function _znPickupGps(){
+  var btn=document.getElementById('znPkGps');
+  if(!navigator.geolocation){ if(btn)btn.textContent='📍 GPS μη διαθέσιμο'; return; }
+  if(btn)btn.textContent='📍 Λήψη...';
+  navigator.geolocation.getCurrentPosition(function(p){ _znPickupGpsVal=p.coords.latitude.toFixed(4)+', '+p.coords.longitude.toFixed(4); if(btn){btn.textContent='✅ '+_znPickupGpsVal; btn.style.color='#34d399'; btn.style.borderColor='rgba(52,211,153,.4)';} },
+   function(){ _znPickupGpsVal=null; if(btn)btn.textContent='⚠️ GPS αρνήθηκε (προαιρετικό)'; }, {enableHighAccuracy:true,timeout:8000,maximumAge:60000});
+}
+function _znPickupCond(bad){
+  _znPickupCond = bad?'bad':'ok';
+  var a=document.getElementById('znPkCondOk'), b=document.getElementById('znPkCondBad'), d=document.getElementById('znPkDmg');
+  if(a)a.classList.toggle('on',!bad); if(b)b.classList.toggle('on',!!bad); if(d)d.style.display=bad?'block':'none';
+}
+function _znPkMismatch(){
+  if(_znPickupLastOdo==null) return;
+  var el=document.getElementById('znPkOdo'), f=document.getElementById('znPkFlag'); if(!el||!f) return;
+  var v=parseInt((el.value||'').replace(/\D/g,''),10);
+  f.style.display=(v && v!==Number(_znPickupLastOdo))?'block':'none';
+}
+function _znPickupPhotoPick(inp){
+  _znPickupPhoto=(inp.files&&inp.files[0])||null;
+  var n=document.getElementById('znPkPhotoName'); if(n) n.textContent=_znPickupPhoto?('📎 '+_znPickupPhoto.name):'';
+}
+async function _znUploadFleetPhoto(file){
+  try{
+    var path=SHOP_ID+'/damage/'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'.jpg';
+    var up=await sb.storage.from('fleet').upload(path, file, {upsert:true, contentType:file.type||'image/jpeg'});
+    if(up.error) throw up.error;
+    return sb.storage.from('fleet').getPublicUrl(path).data.publicUrl;
+  }catch(e){ console.error('[Fleet] photo upload',e); return null; }
+}
+async function _znConfirmPickup(){
+  var odoEl=document.getElementById('znPkOdo');
+  var odo=parseInt(((odoEl&&odoEl.value)||'').replace(/\D/g,''),10);
+  if(!odo){ if(typeof toast==='function') toast('Συμπλήρωσε χλμ παραλαβής','warning'); return; }
+  if(_znPickupCond==='bad'){ var de=document.getElementById('znPkDesc'); if(!de||!de.value.trim()){ if(typeof toast==='function') toast('Περίγραψε τη βλάβη','warning'); return; } }
+  window._znVehPickup={ odo:odo, gps:_znPickupGpsVal||null, condition:_znPickupCond, desc:((document.getElementById('znPkDesc')||{}).value||''), photoFile:_znPickupPhoto||null };
+  closeModal();
+  await clockIn();
+  var mh=document.getElementById('modalHost'); if(mh) mh.innerHTML='';
+  if(typeof refreshShiftDisplays==='function') refreshShiftDisplays();
+  setTimeout(function(){ if(typeof showStartPhaseTasksModal==='function') showStartPhaseTasksModal(); },300);
+}
+async function _znCommitPickup(shiftId){
+  var d=window._znVehPickup; if(!d) return;
+  var plate=(CURRENT_USER.vehicle_plate||'').trim(); var veh=null;
+  try{
+    if(plate){ var vr=await sb.from('vehicles').select('*').eq('shop_id',SHOP_ID).eq('plate',plate).limit(1); veh=(vr.data&&vr.data[0])||null; }
+    if(!veh){
+      var ins=await sb.from('vehicles').insert({ shop_id:SHOP_ID, vtype:(CURRENT_USER.vehicle_type==='moto'?'moto':'car'), plate:plate||null, zone:CURRENT_USER.vehicle_zone||null, driver_name:CURRENT_USER.name||null, role_label:CURRENT_USER.role||null, odometer:d.odo, status:'active' }).select().single();
+      veh=ins.data;
+    }
+    await sb.from('vehicle_shifts').insert({ shop_id:SHOP_ID, vehicle_id:veh?veh.id:null, user_id:CURRENT_USER.id, driver_name:CURRENT_USER.name||null, odo_start:d.odo, gps_in:d.gps||null, started_at:new Date().toISOString(), shift_id:shiftId });
+    if(d.condition==='bad'){
+      var photoUrl=null; if(d.photoFile) photoUrl=await _znUploadFleetPhoto(d.photoFile);
+      await sb.from('vehicle_damage').insert({ shop_id:SHOP_ID, vehicle_id:veh?veh.id:null, severity:'lo', description:'[Παραλαβή] '+(d.desc||'εμφανής βλάβη'), photo_url:photoUrl, status:'open', created_by:CURRENT_USER.name||null });
+    }
+  }catch(e){ console.error('[Fleet] pickup commit',e); }
+}
+window._znIsVehicleUser=_znIsVehicleUser; window._znOpenPickupModal=_znOpenPickupModal; window._znPickupGps=_znPickupGps;
+window._znPickupCond=_znPickupCond; window._znPkMismatch=_znPkMismatch; window._znPickupPhotoPick=_znPickupPhotoPick;
+window._znConfirmPickup=_znConfirmPickup; window._znCommitPickup=_znCommitPickup;
 
