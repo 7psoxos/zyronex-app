@@ -26277,12 +26277,21 @@ document.addEventListener('keydown', function(e){
 /* ============================================================
    USERS
    ============================================================ */
-function _usersSetTab(tab){
-  if(tab==='shifts'){
-    if(typeof renderShifts==='function') renderShifts();
-  } else {
-    renderUsers();
+var USERS_VIEW='users';
+async function _usersSetTab(tab){
+  USERS_VIEW = (tab==='shifts') ? 'shifts' : 'users';
+  if(USERS_VIEW==='shifts'){
+    try{
+      var _r = await sb.from('shifts').select('*').order('started_at',{ascending:false}).limit(300);
+      SHIFTS_CACHE = (_r && _r.data) || SHIFTS_CACHE || [];
+    }catch(e){}
+    if(typeof loadShiftsExtensions==='function'){ try{ await loadShiftsExtensions(); }catch(e){} }
   }
+  renderUsers();
+}
+function _toggleShiftHist(el){
+  var card = el.closest('.ucx-card'); if(!card) return;
+  var h = card.querySelector('.ucxs-hist'); if(h) h.classList.toggle('open');
 }
 
 function renderUsers(){
@@ -26422,6 +26431,15 @@ function renderUsers(){
     .ucx-rv{font-size:13px;font-weight:600;color:var(--text-1)}
     .ucx-chips{display:flex;flex-wrap:wrap;gap:5px;padding-top:10px}
     .ucx-act-chip{font-size:11px;padding:5px 10px;border-radius:20px;font-weight:600}
+    .ucxs-hist{display:none;margin-top:10px;border-top:1px solid rgba(255,255,255,0.07);padding-top:8px}
+    .ucxs-hist.open{display:block}
+    .ucxs-hrow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+    .ucxs-hmain{display:flex;flex-direction:column;gap:2px;min-width:0}
+    .ucxs-hdate{font-size:12px;font-weight:600;color:var(--text-1)}
+    .ucxs-hmeta{font-size:10px;color:var(--text-2)}
+    .ucxs-hright{display:flex;align-items:center;gap:6px;flex-shrink:0}
+    .ucxs-hstatus{font-size:10px;font-weight:600}
+    .ucxs-mini{width:28px;height:28px;min-width:28px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;color:var(--text-2);cursor:pointer}
     @media(max-width:600px){.ucx-grid{grid-template-columns:1fr}.ucx-hero{height:200px}}
   </style>
   <div class="page-head">
@@ -26432,8 +26450,8 @@ function renderUsers(){
     </div>
   </div>
   <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
-    <button onclick="_usersSetTab('users')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:700;background:var(--accent);color:#000">👨‍💼 Χρήστες</button>
-    <button onclick="_usersSetTab('shifts')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:500;background:transparent;color:var(--text-1)">🕐 Βάρδιες</button>
+    <button onclick="_usersSetTab('users')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:${USERS_VIEW==='shifts'?'500':'700'};background:${USERS_VIEW==='shifts'?'transparent':'var(--accent)'};color:${USERS_VIEW==='shifts'?'var(--text-1)':'#000'}">👨‍💼 Χρήστες</button>
+    <button onclick="_usersSetTab('shifts')" style="flex:1;padding:11px 8px;border:none;cursor:pointer;font-size:13px;font-weight:${USERS_VIEW==='shifts'?'700':'500'};background:${USERS_VIEW==='shifts'?'var(--accent)':'transparent'};color:${USERS_VIEW==='shifts'?'#000':'var(--text-1)'}">🕐 Βάρδιες</button>
   </div>
   <div class="ucx-grid">${USERS.map(u=>{
     const gender    = _detectGender(u.name);
@@ -26453,6 +26471,44 @@ function renderUsers(){
       : (u.perms||[]).filter(p=>p!=='*').slice(0,5).map(p=>`<span class="chip chip-neutral" style="font-size:11px">${permLabels[p]||p}</span>`).join('')
         + ((u.perms||[]).filter(p=>p!=='*').length>5?`<span class="chip chip-neutral" style="font-size:11px">+${(u.perms||[]).filter(p=>p!=='*').length-5}</span>`:'')
         || '<span class="muted text-xs">Κανένα δικαίωμα</span>';
+    // ── Shift-view extras (computed from SHIFTS_CACHE) ─────────
+    const _isWh   = (statLbl==='Παραλαβές');
+    const _uAll   = (SHIFTS_CACHE||[]).filter(s=>s.user_id===u.id);
+    const _ms0    = new Date(); _ms0.setDate(1); _ms0.setHours(0,0,0,0);
+    const _uMonth = _uAll.filter(s=>s.started_at && new Date(s.started_at)>=_ms0);
+    let _totMin=0, _totRev=0, _totTx=0;
+    _uMonth.forEach(s=>{
+      if(s.ended_at && typeof shiftDuration==='function'){ _totMin += (shiftDuration(s).totalMinutes||0); }
+      if(typeof getShiftStats==='function'){ const _st=getShiftStats(s); _totRev+=(_st.revenue||0); _totTx+=(_st.txCount||0); }
+    });
+    const _hoursStr = Math.floor(_totMin/60)+'ω '+(_totMin%60)+'λ';
+    const _done     = _uMonth.filter(s=>s.ended_at).length;
+    const _avgMin   = _done ? Math.round(_totMin/_done) : 0;
+    const _avgStr   = Math.floor(_avgMin/60)+'ω '+(_avgMin%60)+'λ';
+    const _midLbl   = _isWh ? 'Παραλαβές μήνα' : 'Τζίρος μήνα';
+    const _midVal   = _isWh ? String(_totTx) : (typeof eur==='function'?eur(_totRev):_totRev.toFixed(2)+'€');
+    const _histRows = (_uAll.slice(0,8).map(s=>{
+      const _sd=new Date(s.started_at); const _ed=s.ended_at?new Date(s.ended_at):null;
+      const _dur=(typeof shiftDuration==='function')?shiftDuration(s).display:'';
+      const _st=(typeof getShiftStats==='function')?getShiftStats(s):{revenue:0,txCount:0};
+      const _tasks=s.tasks||[]; const _dn=_tasks.filter(t=>t.done).length;
+      const _badge=_tasks.length?(_dn===_tasks.length
+        ? `<span class="chip" style="background:rgba(74,222,128,0.15);color:#4ade80;font-size:10px">✓ ${_dn}/${_tasks.length}</span>`
+        : `<span class="chip ${_dn===0?'chip-danger':'chip-warn'}" style="font-size:10px">${_dn}/${_tasks.length}</span>`):'';
+      const _act=!s.ended_at;
+      const _time=_sd.toLocaleDateString('el-GR',{day:'2-digit',month:'2-digit'})+' · '+_sd.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})+(_ed?(' → '+_ed.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'})):' → —');
+      const _meta='Διάρκεια '+_dur+(_isWh?(' · '+(_st.txCount||0)+' παραλ.'):(' · '+(typeof eur==='function'?eur(_st.revenue||0):(_st.revenue||0))));
+      return `<div class="ucxs-hrow"><div class="ucxs-hmain"><div class="ucxs-hdate">${_time}</div><div class="ucxs-hmeta">${_meta}</div></div>`+
+        `<div class="ucxs-hright">${_badge}<span class="ucxs-hstatus" style="color:${_act?'var(--accent)':'#4ade80'}">${_act?'Ενεργή':'Ολοκληρώθηκε'}</span>`+
+        `<button class="ucxs-mini" onclick="${_act?'openSmartShiftClose()':'openShiftDetail('+s.id+')'}" title="Λεπτομέρειες"><i data-lucide="eye" size="13"></i></button>`+
+        `<button class="ucxs-mini" style="color:var(--danger)" onclick="deleteShift(${s.id})" title="Διαγραφή"><i data-lucide="trash-2" size="13"></i></button></div></div>`;
+    }).join('')) || '<div class="muted text-xs" style="padding:8px 0">Καμία βάρδια.</div>';
+    const glassChipHtml = (USERS_VIEW==='shifts')
+      ? `<div class="ucx-glass-chip" style="background:${ac.glass};border:1px solid ${ac.border}"><div class="ucx-glass-chip-stat" style="color:${ac.accent}">Βάρδιες: <strong>${_uMonth.length}/μήνα</strong></div><div class="ucx-glass-chip-sched" style="color:rgba(255,255,255,0.85)">Ώρες: ${_hoursStr}</div></div>`
+      : `<div class="ucx-glass-chip" style="background:${ac.glass};border:1px solid ${ac.border}"><div class="ucx-glass-chip-stat" style="color:${ac.accent}">${statLbl}: <strong>${mShifts}/μήνα</strong></div><div class="ucx-glass-chip-sched" style="color:rgba(255,255,255,0.85)">Ωράριο: ${sched}</div></div>`;
+    const bodyHtml = (USERS_VIEW==='shifts')
+      ? `<div class="ucx-body"><div class="ucx-row"><span class="ucx-rl">Κατάσταση</span><span class="ucx-rv" style="color:${isOnline?'#4ade80':'var(--text-2)'}">${isOnline?'● Σε βάρδια':'○ Εκτός'}</span></div><div class="ucx-row"><span class="ucx-rl">Τελευταία βάρδια</span><span class="ucx-rv">${lastSeen}</span></div><div class="ucx-row"><span class="ucx-rl">${_midLbl}</span><span class="ucx-rv">${_midVal}</span></div><div class="ucx-row" style="border-bottom:none"><span class="ucx-rl">Μ.ό. διάρκειας</span><span class="ucx-rv">${_avgStr}</span></div><div class="ucx-chips"><span class="ucx-act-chip" onclick="_toggleShiftHist(this)" style="cursor:pointer;background:${ac.glass.replace('0.72','0.35')};border:1px solid ${ac.border};color:${ac.accent};display:inline-flex;align-items:center;gap:6px"><i data-lucide="history" size="13"></i> Ιστορικό βαρδιών</span></div><div class="ucxs-hist">${_histRows}</div></div>`
+      : `<div class="ucx-body"><div class="ucx-row"><span class="ucx-rl">Τελευταία σύνδεση</span><span class="ucx-rv">${lastSeen}</span></div><div class="ucx-chips"><span class="ucx-act-chip" style="background:${ac.glass.replace('0.72','0.35')};border:1px solid ${ac.border};color:${ac.accent}">${actChip}</span></div><div class="ucx-chips">${permsHtml}</div></div>`;
     return `<div class="ucx-card">
       <div class="ucx-hero">
         <img class="ucx-hero-img" src="${photoUrl}" alt="${u.role}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.background='linear-gradient(135deg,#1a1a2e,#16213e)'">
@@ -26470,20 +26526,9 @@ function renderUsers(){
           <button style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,0.18);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.3);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="openUserModal(${u.id})" title="Επεξεργασία"><i data-lucide="edit-2" size="15"></i></button>
           ${USERS.length>1?`<button style="width:34px;height:34px;border-radius:10px;background:rgba(239,68,68,0.25);backdrop-filter:blur(10px);border:1px solid rgba(239,68,68,0.5);color:#fca5a5;cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="deleteUser(${u.id})" title="Διαγραφή"><i data-lucide="trash-2" size="15"></i></button>`:''}
         </div>
-        <!-- Bottom-right: glass chip with stats + schedule -->
-        <div class="ucx-glass-chip" style="background:${ac.glass};border:1px solid ${ac.border}">
-          <div class="ucx-glass-chip-stat" style="color:${ac.accent}">${statLbl}: <strong>${mShifts}/μήνα</strong></div>
-          <div class="ucx-glass-chip-sched" style="color:rgba(255,255,255,0.85)">Ωράριο: ${sched}</div>
-        </div>
+        ${glassChipHtml}
       </div>
-      <!-- Body rows -->
-      <div class="ucx-body">
-        <div class="ucx-row"><span class="ucx-rl">Τελευταία σύνδεση</span><span class="ucx-rv">${lastSeen}</span></div>
-        <div class="ucx-chips">
-          <span class="ucx-act-chip" style="background:${ac.glass.replace('0.72','0.35')};border:1px solid ${ac.border};color:${ac.accent}">${actChip}</span>
-        </div>
-        <div class="ucx-chips">${permsHtml}</div>
-      </div>
+      ${bodyHtml}
     </div>`;
   }).join('')}</div>`;
   document.getElementById('content').innerHTML=html;lucide.createIcons();
