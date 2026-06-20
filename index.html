@@ -13391,7 +13391,7 @@ var INSPECTOR = {
     tick('Έλεγχος δικαιωμάτων χρηστών...');
     try{
       const {data:u1} = await sb.from('app_users').select('id,name,role,permissions');
-      const validKeys = ['*','pos','inventory','customers','shipments','suppliers','reports','cashbook','ai','campaigns','alerts','users','settings'];
+      const validKeys = ['*','pos','inventory','customers','shipments','suppliers','reports','cashbook','ai','campaigns','alerts','users','settings','fleet','deliveries','gps_shifts'];
       (u1||[]).forEach(u=>{
         const invalidPerms = (u.permissions||[]).filter(p=>!validKeys.includes(p));
         if(invalidPerms.length){
@@ -26548,8 +26548,8 @@ function openUserModal(id){
     'Ταμίας':       ['pos','customers','shipments','inventory','alerts'],
     'Αποθήκη':      ['inventory','suppliers','alerts'],
     'Υπάλληλος':    ['pos','customers'],
-    'Εξωτερικός Πωλητής': ['pos','customers'],
-    'Διανομέας':          ['pos','customers']
+    'Εξωτερικός Πωλητής': ['pos','customers','fleet','gps_shifts','deliveries'],
+    'Διανομέας':          ['pos','customers','fleet','gps_shifts','deliveries']
   };
   const u = id ? USERS.find(x=>x.id===id) : {name:'',role:'Ταμίας',pin:'',perms:DEFAULTS_BY_ROLE['Ταμίας']};
   if(!u){toast('Χρήστης δεν βρέθηκε','danger');return}
@@ -26568,6 +26568,9 @@ function openUserModal(id){
     {key:'alerts', label:'Ειδοποιήσεις'},
     {key:'users', label:'Διαχείριση Χρηστών'},
     {key:'settings', label:'Ρυθμίσεις'},
+    {key:'fleet', label:'🚗 Στόλος & Έξοδα Οχημάτων'},
+    {key:'deliveries', label:'🗺️ Διανομές / Δρομολόγια'},
+    {key:'gps_shifts', label:'📍 GPS Βάρδιες'},
   ];
   const currentPerms = u.perms || [];
   const hasFullPerms = currentPerms.includes('*');
@@ -26587,6 +26590,25 @@ function openUserModal(id){
         <option ${u.role==='Εξωτερικός Πωλητής'?'selected':''}>Εξωτερικός Πωλητής</option>
         <option ${u.role==='Διανομέας'?'selected':''}>Διανομέας</option>
       </select></div>
+    </div>
+    <div class="form-row" id="vehicleFields" style="${(u.role==='Εξωτερικός Πωλητής'||u.role==='Διανομέας')?'':'display:none'}">
+      <label class="form-label">🚗 Στοιχεία Οχήματος</label>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Τύπος</label>
+          <select class="form-select" id="u_vehicle_type">
+            <option value="" ${!u.vehicle_type?'selected':''}>—</option>
+            <option value="moto" ${u.vehicle_type==='moto'?'selected':''}>🏍️ Μηχανάκι</option>
+            <option value="car" ${u.vehicle_type==='car'?'selected':''}>🚗 Αυτοκίνητο</option>
+          </select></div>
+        <div class="form-row"><label class="form-label">Ζώνη</label>
+          <select class="form-select" id="u_vehicle_zone">
+            <option value="" ${!u.vehicle_zone?'selected':''}>—</option>
+            <option value="in" ${u.vehicle_zone==='in'?'selected':''}>Εντός πόλης</option>
+            <option value="out" ${u.vehicle_zone==='out'?'selected':''}>Εκτός πόλης</option>
+          </select></div>
+      </div>
+      <div class="form-row"><label class="form-label">Πινακίδα</label>
+        <input class="form-input" id="u_vehicle_plate" value="${u.vehicle_plate||''}" placeholder="π.χ. ΑΒΓ-1234"></div>
     </div>
     <div class="form-row">
       <label class="form-label">PIN (4 ψηφία) *</label>
@@ -26633,10 +26655,12 @@ function applyRoleDefaults(role){
     'Ταμίας':       ['pos','customers','shipments','inventory','alerts'],
     'Αποθήκη':      ['inventory','suppliers','alerts'],
     'Υπάλληλος':    ['pos','customers'],
-    'Εξωτερικός Πωλητής': ['pos','customers'],
-    'Διανομέας':          ['pos','customers']
+    'Εξωτερικός Πωλητής': ['pos','customers','fleet','gps_shifts','deliveries'],
+    'Διανομέας':          ['pos','customers','fleet','gps_shifts','deliveries']
   };
   const perms = DEFAULTS_BY_ROLE[role] || [];
+  const _vf = document.getElementById('vehicleFields');
+  if(_vf) _vf.style.display = (role==='Εξωτερικός Πωλητής'||role==='Διανομέας') ? '' : 'none';
   const isAdmin = perms.includes('*');
 
   const allBox = document.getElementById('u_perm_all');
@@ -26644,7 +26668,7 @@ function applyRoleDefaults(role){
     allBox.checked = isAdmin;
     togglePermAll(isAdmin);
   }
-  const allKeys = ['pos','inventory','customers','shipments','suppliers','reports','cashbook','ai','campaigns','alerts','users','settings'];
+  const allKeys = ['pos','inventory','customers','shipments','suppliers','reports','cashbook','ai','campaigns','alerts','users','settings','fleet','deliveries','gps_shifts'];
   allKeys.forEach(k=>{
     const cb = document.getElementById('u_perm_'+k);
     if(cb) cb.checked = !isAdmin && perms.includes(k);
@@ -26656,6 +26680,9 @@ async function saveUser(id){
   const role = document.getElementById('u_role').value;
   const pin = document.getElementById('u_pin').value.trim();
   const hasFullPerms = document.getElementById('u_perm_all').checked;
+  const vehicle_type = document.getElementById('u_vehicle_type')?.value || null;
+  const vehicle_zone = document.getElementById('u_vehicle_zone')?.value || null;
+  const vehicle_plate = (document.getElementById('u_vehicle_plate')?.value || '').trim() || null;
 
   if(!name){toast('Το όνομα είναι υποχρεωτικό','danger');return}
   if(!/^\d{4}$/.test(pin)){toast('Το PIN πρέπει να είναι 4 ψηφία','danger');return}
@@ -26668,23 +26695,23 @@ async function saveUser(id){
   if(hasFullPerms){
     perms = ['*'];
   }else{
-    const allKeys = ['pos','inventory','customers','shipments','suppliers','reports','cashbook','ai','campaigns','alerts','users','settings'];
+    const allKeys = ['pos','inventory','customers','shipments','suppliers','reports','cashbook','ai','campaigns','alerts','users','settings','fleet','deliveries','gps_shifts'];
     perms = allKeys.filter(k=>document.getElementById(`u_perm_${k}`)?.checked);
   }
 
-  const data = {name, role, pin, permissions: perms};
+  const data = {name, role, pin, permissions: perms, vehicle_type, vehicle_zone, vehicle_plate};
 
   try{
     if(id){
       const {error} = await sb.from('app_users').update(data).eq('id',id);
       if(error) throw error;
       const idx = USERS.findIndex(u=>u.id===id);
-      if(idx>=0) USERS[idx] = {...USERS[idx], name, role, pin, perms};
+      if(idx>=0) USERS[idx] = {...USERS[idx], name, role, pin, perms, vehicle_type, vehicle_zone, vehicle_plate};
       toast('Ο χρήστης ενημερώθηκε','success');
     }else{
       const {data:newUser, error} = await sb.from('app_users').insert(data).select().single();
       if(error) throw error;
-      USERS.push({id:newUser.id, name, role, pin, perms});
+      USERS.push({id:newUser.id, name, role, pin, perms, vehicle_type, vehicle_zone, vehicle_plate});
       toast('Ο χρήστης προστέθηκε','success');
     }
     closeModal();
