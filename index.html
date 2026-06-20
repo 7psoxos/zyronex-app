@@ -46130,9 +46130,12 @@ body.light-theme #znRoleArcWrap text,html.zn-light #znRoleArcWrap text{fill:#1e2
 <script id="zx-profile-role">
 (function(){
   var NS="http://www.w3.org/2000/svg";
-  function roleName(){
+  function roleName(){ /* znRoleFix2 */
     try{
       var u=window.CURRENT_USER; if(!u) return "";
+      var rl=String(u.role||"").toLowerCase();
+      if(rl.indexOf("\u03c0\u03c9\u03bb\u03b7\u03c4")>=0||rl.indexOf("sales")>=0) return "\u03a0\u03c9\u03bb\u03b7\u03c4\u03ae\u03c2";
+      if(rl.indexOf("\u03b4\u03b9\u03b1\u03bd\u03bf\u03bc")>=0||rl.indexOf("courier")>=0) return "\u0394\u03b9\u03b1\u03bd\u03bf\u03bc\u03ad\u03b1\u03c2";
       var p=u.perms||[];
       if(p.indexOf("*")>=0) return "\u0394\u03b9\u03b1\u03c7\u03b5\u03b9\u03c1\u03b9\u03c3\u03c4\u03ae\u03c2";
       var m={pos:"\u03a4\u03b1\u03bc\u03af\u03b1\u03c2",inventory:"\u0391\u03c0\u03bf\u03b8\u03b7\u03ba\u03ac\u03c1\u03b9\u03bf\u03c2"};
@@ -46142,6 +46145,21 @@ body.light-theme #znRoleArcWrap text,html.zn-light #znRoleArcWrap text{fill:#1e2
   function syncRail(){
     try{
       var rail=document.querySelector(".zx-rail-avatar"); if(!rail) return;
+      var u=window.CURRENT_USER||{};
+      var rl=String(u.role||"").toLowerCase();
+      var isS=rl.indexOf("\u03c0\u03c9\u03bb\u03b7\u03c4")>=0||rl.indexOf("sales")>=0;
+      var isC=rl.indexOf("\u03b4\u03b9\u03b1\u03bd\u03bf\u03bc")>=0||rl.indexOf("courier")>=0;
+      if(isS||isC){
+        var tag=isS?"s":"c";
+        if(rail.getAttribute("data-znrole")!==tag){
+          rail.setAttribute("data-znrole",tag);
+          var col=isS?"#fbbf24":"#22d3ee";
+          var ini=((String(u.name||"?").trim()[0])||"?").toUpperCase();
+          rail.innerHTML='<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#1a1208;background:'+col+'">'+ini+'</span>';
+        }
+        return;
+      }
+      rail.removeAttribute("data-znrole");
       var top=document.getElementById("topAvatar");
       var img=top&&top.querySelector&&top.querySelector("img");
       if(img&&img.src){
