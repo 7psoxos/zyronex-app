@@ -32098,20 +32098,19 @@ function _znInjectHandoverCss(){
   document.head.appendChild(s);
 }
 var _znPickupCond='ok', _znPickupGpsVal=null, _znPickupPhoto=null, _znPickupLastOdo=null;
-async function _znOpenPickupModal(){
+function _znOpenPickupModal(){
   _znInjectHandoverCss();
   _znPickupCond='ok'; _znPickupGpsVal=null; _znPickupPhoto=null; _znPickupLastOdo=null;
-  var v=CURRENT_USER; var plate=(v.vehicle_plate||'').trim();
-  if(plate){ try{ var vr=await sb.from('vehicles').select('odometer').eq('shop_id',SHOP_ID).eq('plate',plate).limit(1); if(vr.data&&vr.data[0]) _znPickupLastOdo=vr.data[0].odometer; }catch(_){} }
-  var isCar=(v.vehicle_type!=='moto');
+  var _mh=document.getElementById('modalHost'); if(_mh) _mh.innerHTML='';
+  var v=CURRENT_USER; var plate=(v.vehicle_plate||'').trim(); var isCar=(v.vehicle_type!=='moto');
   openModal('<div class="modal-head"><h3 class="fw-800 text-xl">🚗 Παραλαβή Οχήματος</h3></div>'
    +'<div class="modal-body">'
    +'<div class="text-sm muted" style="margin-bottom:12px">Πριν ξεκινήσει η βάρδιά σου, '+_znEsc(v.name||'')+'</div>'
    +'<div class="zn-vchip">'+(isCar?'🚗 Αυτοκίνητο':'🏍️ Μηχανάκι')+' · '+_znEsc(plate||'—')+'</div>'
    +'<button class="btn btn-ghost" id="znPkGps" style="width:100%" onclick="_znPickupGps()">📍 GPS Clock-in (προαιρετικό)</button>'
    +'<label class="form-label" style="display:block;margin-top:12px">🚗 Χλμ παραλαβής (οδόμετρο)</label>'
-   +'<input class="form-input mono" id="znPkOdo" inputmode="numeric" value="'+(_znPickupLastOdo!=null?_znPickupLastOdo:'')+'" placeholder="π.χ. 84210" oninput="_znPkMismatch()">'
-   +(_znPickupLastOdo!=null?'<div class="text-sm muted" style="margin-top:6px">Τελευταία καταχωρημένη: <b>'+Number(_znPickupLastOdo).toLocaleString('el')+'</b></div>':'')
+   +'<input class="form-input mono" id="znPkOdo" inputmode="numeric" placeholder="π.χ. 84210" oninput="_znPkMismatch()">'
+   +'<div class="text-sm muted" id="znPkLast" style="margin-top:6px"></div>'
    +'<div class="zn-pkflag" id="znPkFlag" style="display:none;margin-top:9px">⚠️ Διαφέρει από την προηγούμενη παράδοση — αδήλωτα χλμ.</div>'
    +'<label class="form-label" style="display:block;margin-top:14px">Κατάσταση οχήματος</label>'
    +'<div class="zn-cseg"><button class="zn-cbtn ok on" id="znPkCondOk" onclick="_znPickupCond(0)">✅ Χωρίς εμφανή βλάβη</button>'
@@ -32125,6 +32124,11 @@ async function _znOpenPickupModal(){
    +'<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;font-size:12px" onclick="_forceClockInLogout()">Έκανα λάθος είσοδο — Logout</button>'
    +'</div>');
   if(typeof lucide!=='undefined') lucide.createIcons();
+  if(plate){ try{ sb.from('vehicles').select('odometer').eq('shop_id',SHOP_ID).eq('plate',plate).limit(1).then(function(vr){
+    if(vr&&vr.data&&vr.data[0]&&vr.data[0].odometer!=null){ _znPickupLastOdo=vr.data[0].odometer;
+      var o=document.getElementById('znPkOdo'); if(o&&!o.value) o.value=_znPickupLastOdo;
+      var l=document.getElementById('znPkLast'); if(l) l.innerHTML='Τελευταία καταχωρημένη: <b>'+Number(_znPickupLastOdo).toLocaleString('el')+'</b>'; }
+  }).catch(function(){}); }catch(_){} }
 }
 function _znPickupGps(){
   var btn=document.getElementById('znPkGps');
