@@ -16597,10 +16597,10 @@ function renderB2BCheckout(){ /* checkoutChunk5 */
     '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Τρόπος παράδοσης</div>'+
     opt('fleet','🚐','Άμεση — Στόλος','Φεύγει τώρα με δικό μας όχημα. Αφαιρεί άμεσα από το απόθεμα οχήματος.',AM)+
     opt('courier','📦','Μεταφορική / Courier','Δημιουργεί παραγγελία ως «Προς Προετοιμασία» για αποστολή από το κεντρικό.',CY)+
-    '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:14px;margin:6px 0 14px">'+
+    _znB2BRoutePanel()+_znB2BDocToggle()+'<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:14px;margin:6px 0 14px">'+
       srow('Καθαρή αξία',_znB2BEur(T.net))+srow('Έκπτωση B2B '+T.t.p+'%','−'+_znB2BEur(T.disc),'g')+srow('ΦΠΑ 24%',_znB2BEur(T.after*0.24))+srow('Σύνολο',_znB2BEur(T.total),'big')+
     '</div>'+
-    '<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;padding:11px;margin-bottom:14px;font-size:12px;color:var(--text-2)">ℹ️ Δρομολόγηση, Τιμολόγιο vs Δελτίο, και ειδοποιήσεις έρχονται στο chunk 6.</div>'+
+    _znB2BNotifPreview()+
     '<button class="btn btn-primary" style="width:100%" onclick="_znB2BSubmit()">'+(window._znB2BBusy?'Καταχωρείται…':'Καταχώρηση παραγγελίας')+'</button>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
@@ -16608,6 +16608,7 @@ function renderB2BCheckout(){ /* checkoutChunk5 */
 async function _znB2BSubmit(){
   if(window._znB2BBusy) return; var st=window._znB2B; var T=_znB2BTotals();
   if(T.items===0){ if(typeof toast==='function') toast('Άδεια παραγγελία','warn'); return; }
+  if(window._znB2BDeliv==='courier' && window._znB2BRoute==='courier' && !window._znB2BCourier){ if(typeof toast==='function') toast('Διάλεξε μεταφορική','warn'); return; }
   if(typeof sb==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
   window._znB2BBusy=true; renderB2BCheckout();
   var deliv=window._znB2BDeliv;
@@ -16615,7 +16616,7 @@ async function _znB2BSubmit(){
     var hdr={ shop_id:SHOP_ID, customer_id:st.cust, vehicle_id:(window._znVehId||null),
       created_by:((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null),
       status:(deliv==='fleet'?'delivered':'preparing'), delivery_type:deliv,
-      net:T.net, discount:T.disc, discount_pct:T.t.p, vat:(T.after*0.24), total:T.total, note:null };
+      net:T.net, discount:T.disc, discount_pct:T.t.p, vat:(T.after*0.24), total:T.total, route:(deliv==='courier'?(window._znB2BRoute||null):null), courier:((deliv==='courier'&&window._znB2BRoute==='courier')?(window._znB2BCourier||null):null), doc_type:(window._znB2BDoc||'invoice'), note:null };
     var ins=await sb.from('b2b_orders').insert(hdr).select().single();
     if(ins.error||!ins.data){ throw ins.error||new Error('no id'); }
     var oid=ins.data.id;
@@ -16637,7 +16638,7 @@ async function _znB2BSubmit(){
 function _znB2BDone(oid, deliv, total){
   var c=document.getElementById('content'); if(!c) return; var st=window._znB2B;
   var cu=(CUSTOMERS||[]).find(function(x){return x.id==st.cust;})||{};
-  var dl=deliv==='fleet'?'Άμεση — Στόλος (παραδόθηκε)':'Μεταφορική — «Προς Προετοιμασία»';
+  var dl; if(deliv==='fleet'){ dl='Άμεση — Στόλος (παραδόθηκε)'; } else if(window._znB2BRoute==='courier'){ dl='Courier — '+(window._znB2BCourier||'—'); } else { dl='Μεταφορική — δικός μας διανομέας'; }
   c.innerHTML='<div style="max-width:560px;margin:0 auto"><div style="text-align:center;padding:30px 6px 10px">'+
     '<div style="width:80px;height:80px;border-radius:50%;margin:0 auto 16px;display:grid;place-items:center;font-size:38px;background:radial-gradient(circle,rgba(34,197,94,.25),transparent 70%);border:2px solid #22c55e;color:#22c55e">✓</div>'+
     '<div style="font-size:19px;font-weight:800;color:var(--text-1)">Νέα παραγγελία καταχωρήθηκε</div>'+
@@ -16649,6 +16650,36 @@ function _znB2BDone(oid, deliv, total){
     '<button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="openSalesClient(\''+st.cust+'\')">Καρτέλα πελάτη</button>'+
   '</div>';
 }
+
+
+window._znB2BRoute='store'; window._znB2BDoc='invoice'; window._znB2BCourier=null;
+window._znB2BCouriers=['ACS','Γενική Ταχ.','ΕΛΤΑ Courier','Speedex','BOX Now'];
+function _znB2BSetRoute(r){ window._znB2BRoute=r; renderB2BCheckout(); }
+function _znB2BSetDoc(d){ window._znB2BDoc=d; renderB2BCheckout(); }
+function _znB2BPickCourier(cN){ window._znB2BCourier=cN; renderB2BCheckout(); }
+function _znB2BRoutePanel(){ /* routeChunk6 */
+  if(window._znB2BDeliv!=='courier') return '';
+  var AM='#fbbf24', CY='#22d3ee'; var r=window._znB2BRoute;
+  function seg(key,emoji,label,col){ var sel=r===key; return '<div onclick="_znB2BSetRoute(\''+key+'\')" style="flex:1;text-align:center;padding:13px 8px;border-radius:13px;border:1.5px solid '+(sel?col:'var(--border)')+';cursor:pointer;font-weight:700;font-size:13px;color:'+(sel?col:'var(--text-1)')+';background:'+(sel?col+'18':'var(--bg-2)')+'"><span style="display:block;font-size:18px;margin-bottom:4px">'+emoji+'</span>'+label+'</div>'; }
+  var html='<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin:2px 0 8px">Δρομολόγηση</div><div style="display:flex;gap:8px;margin-bottom:12px">'+seg('store','🏬','Δικός μας διανομέας',AM)+seg('courier','🚚','Εξωτερική Courier',CY)+'</div>';
+  if(r==='store'){ html+='<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--text-2);line-height:1.5">Δημιουργείται «Προς Προετοιμασία». Το βλέπει ο <b style="color:var(--text-1)">αποθηκάριος ή ο ιδιοκτήτης</b>· μετά γίνεται ανάθεση διανομής και ο διανομέας το βλέπει στο login ή με ειδοποίηση.</div>'; }
+  else { html+='<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px">'+window._znB2BCouriers.map(function(cN){ var sel=window._znB2BCourier===cN; return '<div onclick="_znB2BPickCourier(\''+cN.replace(/'/g,'')+'\')" style="flex:0 0 auto;padding:10px 14px;border-radius:12px;border:1.5px solid '+(sel?CY:'var(--border)')+';background:'+(sel?'rgba(34,211,238,.12)':'var(--bg-2)')+';font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;color:'+(sel?CY:'var(--text-1)')+'">'+cN+'</div>'; }).join('')+'</div>'; }
+  return html;
+}
+function _znB2BDocToggle(){
+  var AM='#fbbf24'; var d=window._znB2BDoc;
+  function seg(key,emoji,label){ var sel=d===key; return '<div onclick="_znB2BSetDoc(\''+key+'\')" style="flex:1;text-align:center;padding:13px 8px;border-radius:13px;border:1.5px solid '+(sel?AM:'var(--border)')+';cursor:pointer;font-weight:700;font-size:13.5px;color:'+(sel?AM:'var(--text-1)')+';background:'+(sel?'rgba(251,191,36,.1)':'var(--bg-2)')+'"><span style="display:block;font-size:18px;margin-bottom:4px">'+emoji+'</span>'+label+'</div>'; }
+  return '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin:2px 0 8px">Παραστατικό</div><div style="display:flex;gap:8px;margin-bottom:14px">'+seg('invoice','🧾','Τιμολόγιο')+seg('delivery_note','📄','Δελτίο Αποστολής')+'</div>';
+}
+function _znB2BNotifPreview(){
+  var d=window._znB2BDeliv, r=window._znB2BRoute; var items=[];
+  function ni(e,t){ return '<div style="display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--text-2);padding:6px 0"><span style="font-size:14px;flex:0 0 auto">'+e+'</span><span>'+t+'</span></div>'; }
+  if(d==='fleet'){ items.push(ni('✅','Δέσμευση & αφαίρεση από το όχημα — άμεση παράδοση.')); }
+  else if(r==='store'){ items.push(ni('🏬','«Προς Προετοιμασία» στο κεντρικό.')); items.push(ni('👤','Ειδοποίηση σε αποθηκάριο/ιδιοκτήτη.')); items.push(ni('🛵','Update όταν γίνει ανάθεση & παράδοση.')); }
+  else { items.push(ni('🏬','«Προς Προετοιμασία» στο κεντρικό.')); items.push(ni('🚚','Courier: '+(window._znB2BCourier||'—')+'.')); items.push(ni('📦','Tracking μόλις παραδοθεί στη μεταφορική.')); }
+  return '<div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.3);border-radius:14px;padding:13px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:7px;font-weight:800;font-size:12.5px;color:#cbb8ff;margin-bottom:6px">🔔 Τι θα δεις (ειδοποιήσεις)</div>'+items.join('')+'</div>';
+}
+
 
 function showPage(p, _navOpts) {
   // 🛡️ Validate page parameter
