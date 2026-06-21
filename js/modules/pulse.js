@@ -10,6 +10,7 @@
 
 /* ── State ── */
 var PULSE = {
+  view: 'home',            // home | studio | postcreator | content | video  /* pulseLauncherP1 */
   tab: 'studio',           // studio | postcreator | content
   // Photo Studio
   originalFile: null,
@@ -38,37 +39,56 @@ var PULSE = {
 };
 
 /* ── Render main page ── */
+var PULSE_TILES = [
+  { id:'studio',      icon:'📸', label:'Photo Studio',   desc:'Αφαίρεση φόντου, ρυθμίσεις', color:'#6366f1' },
+  { id:'postcreator', icon:'🎨', label:'Post Creator',   desc:'Δημιουργία post για social', color:'#f59e0b' },
+  { id:'content',     icon:'✍️', label:'Content Engine', desc:'SEO, captions, hashtags', color:'#8b5cf6' },
+  { id:'video',       icon:'🎬', label:'Video Studio',   desc:'Trim, crop, text, export', color:'#34d399' }
+];
+
+function _pulseBannerHTML() {
+  return '<div class="pulse-header">' +
+    '<div class="pulse-header-icon">✨</div>' +
+    '<div class="pulse-header-text">' +
+      '<h2>ZyroNex Pulse — Creative Studio</h2>' +
+      '<p>Επεξεργασία φωτογραφιών, δημιουργία post & στοχευμένο content για social media</p>' +
+    '</div>' +
+  '</div>';
+}
+
+function _pulseHomeGridHTML() {
+  return '<div class="sg-grid">' +
+    PULSE_TILES.map(function(t) {
+      return '<div class="sg-tile" onclick="pulseOpen(\'' + t.id + '\')" style="border-top:3px solid ' + t.color + '">' +
+        '<div class="sg-icon">' + t.icon + '</div>' +
+        '<div class="sg-label">' + t.label + '</div>' +
+        '<div class="sg-desc">' + t.desc + '</div>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+}
+
 function renderPulse() {
   var c = document.getElementById('content');
   if (!c) return;
-  c.innerHTML =
-    '<div class="pulse-page">' +
-    '<div class="pulse-header">' +
-      '<div class="pulse-header-icon">✨</div>' +
-      '<div class="pulse-header-text">' +
-        '<h2>ZyroNex Pulse — Creative Studio</h2>' +
-        '<p>Επεξεργασία φωτογραφιών, δημιουργία post & στοχευμένο content για social media</p>' +
-      '</div>' +
-    '</div>' +
-    '<div class="pulse-tabs">' +
-      '<button class="pulse-tab' + (PULSE.tab==='studio'?' active':'') + '" onclick="pulseSetTab(\'studio\')">📸 Photo Studio</button>' +
-      '<button class="pulse-tab' + (PULSE.tab==='postcreator'?' active':'') + '" onclick="pulseSetTab(\'postcreator\')">🎨 Post Creator</button>' +
-      '<button class="pulse-tab' + (PULSE.tab==='content'?' active':'') + '" onclick="pulseSetTab(\'content\')">✍️ Content Engine</button>' +
-      '<button class="pulse-tab' + (PULSE.tab==='video'?' active':'') + '" onclick="pulseSetTab(\'video\')">🎬 Video Studio</button>' +
-    '</div>' +
+  if (!PULSE.view) PULSE.view = 'home';
+  if (PULSE.view === 'home') {
+    c.innerHTML = '<div class="pulse-page">' + _pulseBannerHTML() + _pulseHomeGridHTML() + '</div>';
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    return;
+  }
+  PULSE.tab = PULSE.view;
+  c.innerHTML = '<div class="pulse-page">' + _pulseBannerHTML() +
+    '<button class="pulse-back" onclick="pulseHome()" style="display:inline-flex;align-items:center;gap:6px;margin:4px 0 12px;background:rgba(255,255,255,.06);color:var(--text-1,#cdd6f4);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer">← Πίσω στα εργαλεία</button>' +
     '<div id="pulseTabContent" style="overflow-x:hidden;max-width:100%"></div>' +
   '</div>';
-
   _pulseRenderTab();
 }
 
-function pulseSetTab(t) {
-  PULSE.tab = t;
-  document.querySelectorAll('.pulse-tab').forEach(function(b) {
-    b.classList.toggle('active', b.textContent.indexOf(t==='studio'?'Photo':t==='postcreator'?'Post':'Content') >= 0);
-  });
-  _pulseRenderTab();
-}
+function pulseOpen(id) { PULSE.view = id; PULSE.tab = id; renderPulse(); }
+function pulseHome() { PULSE.view = 'home'; renderPulse(); }
+
+function pulseSetTab(t) { pulseOpen(t); }
 
 function _pulseRenderTab() {
   var wrap = document.getElementById('pulseTabContent');
@@ -297,8 +317,7 @@ function psExportFormat(w, h, btn) {
 
 function psSendToPostCreator() {
   PULSE.postImage = PULSE.processedDataUrl || PULSE.originalDataUrl;
-  PULSE.tab = 'postcreator';
-  renderPulse();
+  pulseOpen('postcreator');
   if(typeof toast==='function') toast('✅ Φωτογραφία στάλθηκε στο Post Creator!', 'success');
 }
 
@@ -1178,7 +1197,7 @@ function ceCopyAllHashtags() {
 }
 
 // Expose all functions globally after lazy load
-var _pulseExports = [renderPulse, pulseSetTab, _pulseRenderTab, _pulseStudioHTML, _pulseStudioBind, psLoadFile, psLoadFileObj, psAdjust, psResetAdjustments, psRevertOriginal, psReset, psRemoveBG, psDownload, psExportFormat, psSendToPostCreator, _pulsePostCreatorHTML, _pulsePostCreatorBind, pcSetFormat, pcSetBg, pcSetTextColor, pcLoadImg, pcCopyToStudio, _pcGetOffscreen, _pcRenderToCanvas, _pcDrawTextHR, pcDraw, _pcDrawText, pcDownload, _pcInitDrag, _pulseVideoStudioHTML, _vsDropHTML, _vsEditorHTML, _vsLoadHTML, _vsResultHTML, _vsOvHTML, _vsT, _vsRE, vsROv, vsLoad, vsOnMeta, vsOnTime, vsPP, vsTLClick, vsUTL, vsBindTL, vsTLD, vsAF, vsReset, vsAddText, vsODS, _vsBindOvDrag, vsExport, _pulseContentEngineHTML, _pulseContentEngineBind, _pulseCeResultsHTML, _pulseCeKeywordsHTML, ceGeneratePosts, ceGenerateKeywords, ceCopy, ceCopyHashtag, ceCopyAllHashtags];
+var _pulseExports = [renderPulse, pulseSetTab, pulseOpen, pulseHome, _pulseBannerHTML, _pulseHomeGridHTML, _pulseRenderTab, _pulseStudioHTML, _pulseStudioBind, psLoadFile, psLoadFileObj, psAdjust, psResetAdjustments, psRevertOriginal, psReset, psRemoveBG, psDownload, psExportFormat, psSendToPostCreator, _pulsePostCreatorHTML, _pulsePostCreatorBind, pcSetFormat, pcSetBg, pcSetTextColor, pcLoadImg, pcCopyToStudio, _pcGetOffscreen, _pcRenderToCanvas, _pcDrawTextHR, pcDraw, _pcDrawText, pcDownload, _pcInitDrag, _pulseVideoStudioHTML, _vsDropHTML, _vsEditorHTML, _vsLoadHTML, _vsResultHTML, _vsOvHTML, _vsT, _vsRE, vsROv, vsLoad, vsOnMeta, vsOnTime, vsPP, vsTLClick, vsUTL, vsBindTL, vsTLD, vsAF, vsReset, vsAddText, vsODS, _vsBindOvDrag, vsExport, _pulseContentEngineHTML, _pulseContentEngineBind, _pulseCeResultsHTML, _pulseCeKeywordsHTML, ceGeneratePosts, ceGenerateKeywords, ceCopy, ceCopyHashtag, ceCopyAllHashtags];
 (function() {
   var i;
   for (i = 0; i < _pulseExports.length; i++) {
