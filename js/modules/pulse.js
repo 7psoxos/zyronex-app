@@ -58,13 +58,13 @@ function _pulseBannerHTML() {
   '</div>';
 }
 
-function _pulseHomeGridHTML() {
-  return '<div class="sg-grid">' +
+function _pulseHomeGridHTML() {  /* pulseTileFixP1 */
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;padding:6px 0">' +
     PULSE_TILES.map(function(t) {
-      return '<div class="sg-tile" onclick="pulseOpen(\'' + t.id + '\')" style="border-top:3px solid ' + t.color + '">' +
-        '<div class="sg-icon">' + t.icon + '</div>' +
-        '<div class="sg-label">' + t.label + '</div>' +
-        '<div class="sg-desc">' + t.desc + '</div>' +
+      return '<div onclick="pulseOpen(\'' + t.id + '\')" style="background:var(--bg-2,#161d30);border:1px solid var(--border,rgba(255,255,255,.08));border-top:3px solid ' + t.color + ';border-radius:16px;padding:18px 12px;text-align:center;cursor:pointer">' +
+        '<div style="font-size:30px;line-height:1;margin-bottom:8px">' + t.icon + '</div>' +
+        '<div style="font-size:14px;font-weight:700;color:var(--text-1,#e2e8f0)">' + t.label + '</div>' +
+        '<div style="font-size:11px;color:var(--text-3,#8a96b4);line-height:1.3;margin-top:3px">' + t.desc + '</div>' +
       '</div>';
     }).join('') +
   '</div>';
@@ -983,7 +983,7 @@ function _pulseVideoStudioHTML(){
 }
 
 function _vsDropHTML(){
-  return '<div class="vs-dropzone" id="vsDZ" onclick="document.getElementById(\'vsIn\').click()">'
+  return '<div class="vs-dropzone" id="vsDZ" style="text-align:center" onclick="document.getElementById(\'vsIn\').click()">'
     +'<input type="file" id="vsIn" accept="video/*" style="display:none" onchange="vsLoad(this)">'
     +'<div style="font-size:52px;margin-bottom:14px">🎬</div>'
     +'<p style="margin:0 0 6px;color:var(--text-0);font-size:15px;font-weight:700">Ανέβασε βίντεο</p>'
