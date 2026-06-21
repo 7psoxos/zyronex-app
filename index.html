@@ -16693,7 +16693,7 @@ function renderMyZone(){ /* myZoneChunk7 */
     '<button class="btn btn-ghost" style="margin-bottom:12px;width:auto;padding:8px 14px" onclick="showPage(\'saleshub\')"><i data-lucide="chevron-left" size="16"></i> Ατζέντα</button>'+
     '<div style="font-size:19px;font-weight:800;color:var(--text-1)">My Zone</div>'+
     '<div style="color:var(--text-2);font-size:12.5px;margin-bottom:14px">Μόνο τα δικά σου νούμερα</div>'+
-    '<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div></div>';
+    '<div id="znMzTabs" style="display:flex;gap:6px;margin:0 0 12px">'+'<button id="mzT_perf" onclick="_znMyZoneTab(\'perf\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--amber);color:#1a1206">Απόδοση</button>'+'<button id="mzT_shifts" onclick="_znMyZoneTab(\'shifts\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--bg-2);color:var(--text-2)">Βάρδιες</button>'+'<button id="mzT_ot" onclick="_znMyZoneTab(\'ot\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--bg-2);color:var(--text-2)">Υπερωρίες</button>'+'</div>'+'<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div>'+'<div id="znZoneShifts" style="display:none"></div>'+'<div id="znZoneOT" style="display:none"></div></div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   _znLoadMyZone();
 }
@@ -17078,6 +17078,58 @@ function _znVehHandover(shiftId, idx){ /* vehDutyP2c9 */
   else finish();
 }
 
+
+
+/* myZoneShiftsP1 — My Zone: own shifts + overtime (read-only from SHIFTS_CACHE) */
+function _znMyZoneTab(t){
+  var map={perf:'znZoneBody',shifts:'znZoneShifts',ot:'znZoneOT'};
+  Object.keys(map).forEach(function(k){
+    var el=document.getElementById(map[k]); if(el) el.style.display=(k===t)?'block':'none';
+    var btn=document.getElementById('mzT_'+k);
+    if(btn){ btn.style.background=(k===t)?'var(--amber)':'var(--bg-2)'; btn.style.color=(k===t)?'#1a1206':'var(--text-2)'; }
+  });
+  if(t==='shifts') _znRenderMyShifts();
+  if(t==='ot') _znRenderMyOT();
+}
+function _znMyShifts(){
+  var uid=(typeof CURRENT_USER!=='undefined' && CURRENT_USER)?CURRENT_USER.id:null;
+  var arr=(typeof SHIFTS_CACHE!=='undefined' && SHIFTS_CACHE)?SHIFTS_CACHE:[];
+  return arr.filter(function(s){ return s && s.user_id===uid && s.started_at; })
+            .sort(function(a,b){ return (b.started_at>a.started_at)?1:-1; });
+}
+function _znShiftMins(s){
+  if(!s || !s.started_at) return 0;
+  var st=new Date(s.started_at).getTime();
+  var en=s.ended_at?new Date(s.ended_at).getTime():Date.now();
+  return Math.max(0, Math.round((en-st)/60000));
+}
+function _znHM(mins){ var h=Math.floor(mins/60), m=mins%60; return h+'\u03c9 '+(m<10?'0':'')+m+'\u2032'; }
+function _znRenderMyShifts(){
+  var box=document.getElementById('znZoneShifts'); if(!box) return;
+  var sh=_znMyShifts().slice(0,10);
+  if(!sh.length){ box.innerHTML='<div style="text-align:center;color:var(--text-2);padding:24px">\u0394\u03b5\u03bd \u03c5\u03c0\u03ac\u03c1\u03c7\u03bf\u03c5\u03bd \u03b2\u03ac\u03c1\u03b4\u03b9\u03b5\u03c2 \u03b1\u03ba\u03cc\u03bc\u03b7.</div>'; return; }
+  var rows=sh.map(function(s){
+    var d=new Date(s.started_at);
+    var dlbl=d.toLocaleDateString('el-GR',{weekday:'short',day:'2-digit',month:'2-digit'});
+    var stt=d.toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'});
+    var active=!s.ended_at;
+    var ent=active?'<b style="color:var(--success,#34d399)">\u03c3\u03b5 \u03b5\u03be\u03ad\u03bb\u03b9\u03be\u03b7</b>':('<b>'+_znHM(_znShiftMins(s))+'</b>');
+    var endt=active?'\u2192 \u03b5\u03bd\u03b5\u03c1\u03b3\u03ae':new Date(s.ended_at).toLocaleTimeString('el-GR',{hour:'2-digit',minute:'2-digit'});
+    return '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+dlbl+' \u00b7 '+stt+'\u2013'+endt+'</span>'+ent+'</div>';
+  }).join('');
+  box.innerHTML='<div class="card" style="padding:14px"><div style="font-weight:800;margin-bottom:2px">\u039f\u03b9 \u03b2\u03ac\u03c1\u03b4\u03b9\u03ad\u03c2 \u03bc\u03bf\u03c5</div><div style="font-size:11.5px;color:var(--text-2);margin-bottom:6px">\u03a4\u03b5\u03bb\u03b5\u03c5\u03c4\u03b1\u03af\u03b5\u03c2 '+sh.length+'</div>'+rows+'</div>';
+}
+function _znRenderMyOT(){
+  var box=document.getElementById('znZoneOT'); if(!box) return;
+  var now=new Date(), m0=now.getMonth(), y0=now.getFullYear(), STD=8*60, total=0, rows='';
+  _znMyShifts().forEach(function(s){
+    if(!s.ended_at) return;
+    var d=new Date(s.started_at); if(d.getMonth()!==m0 || d.getFullYear()!==y0) return;
+    var ot=_znShiftMins(s)-STD;
+    if(ot>0){ total+=ot; rows+='<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+d.toLocaleDateString('el-GR',{weekday:'short',day:'2-digit',month:'2-digit'})+'</span><b>+'+_znHM(ot)+'</b></div>'; }
+  });
+  box.innerHTML='<div class="card" style="padding:14px"><div style="font-weight:800;margin-bottom:2px">\u03a5\u03c0\u03b5\u03c1\u03c9\u03c1\u03af\u03b5\u03c2 \u03bc\u03ae\u03bd\u03b1</div><div style="font-size:26px;font-weight:800;color:#22d3ee;margin:4px 0">'+_znHM(total)+'</div><div style="font-size:11.5px;color:var(--text-2);margin-bottom:6px">\u03a0\u03ac\u03bd\u03c9 \u03b1\u03c0\u03c2 8\u03c9/\u03b7\u03bc\u03ae\u03c1\u03b1</div>'+(rows||'<div style="color:var(--text-2);font-size:13px;padding:8px 0">\u039a\u03b1\u03bc\u03af\u03b1 \u03c5\u03c0\u03b5\u03c1\u03c9\u03c1\u03af\u03b1 \u03b1\u03c5\u03c4\u03cc\u03bd \u03c4\u03bf\u03bd \u03bc\u03ae\u03bd\u03b1.</div>')+'<div style="font-size:10.5px;color:var(--text-2);margin-top:8px">\u03a5\u03c0\u03bf\u03bb\u03bf\u03b3\u03af\u03b6\u03b5\u03c4\u03b1\u03b9 \u03b1\u03c5\u03c4\u03cc\u03bc\u03b1\u03c4\u03b1 \u03b1\u03c0\u03cc \u03ad\u03bd\u03b1\u03c1\u03be\u03b7/\u03bb\u03ae\u03be\u03b7 \u03b2\u03ac\u03c1\u03b4\u03b9\u03b1\u03c2.</div></div>';
+}
 
 function showPage(p, _navOpts) {
   // 🛡️ Validate page parameter
