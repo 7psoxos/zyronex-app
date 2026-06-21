@@ -16543,7 +16543,7 @@ function _znB2BRender(){
     return '<div style="background:var(--bg-2);border:1px solid '+(ln.tq>0?'rgba(251,191,36,.45)':'var(--border)')+';border-radius:15px;padding:12px 13px;margin-bottom:10px">'+
       '<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px;color:var(--text-1)">'+(p.name||'—')+'</div><div style="font-size:11px;color:var(--text-2);margin-top:2px">'+(p.category||'')+'</div></div>'+
       '<div style="text-align:right;white-space:nowrap"><div style="font-weight:800;font-size:14.5px;color:var(--text-1)">'+_znB2BEur(p.price)+'</div><div style="font-size:10.5px;color:var(--text-2)">/ τεμ. B2B</div></div></div>'+
-      '<div style="display:inline-flex;margin-top:8px;border:1px solid var(--border);border-radius:9px;overflow:hidden;font-size:11px;font-weight:700"><div style="padding:4px 9px;background:'+(low?'rgba(239,68,68,.13);color:#ff9d9d':'rgba(34,211,238,.1);color:#7fe7f6')+'">🏬 '+(p.stock!=null?p.stock:0)+' κεντρικό</div></div>'+
+      '<div style="display:inline-flex;margin-top:8px;border:1px solid var(--border);border-radius:9px;overflow:hidden;font-size:11px;font-weight:700"><div style="padding:4px 9px;background:'+(low?'rgba(239,68,68,.13);color:#ff9d9d':'rgba(34,211,238,.1);color:#7fe7f6')+'">🏬 '+(p.stock!=null?p.stock:0)+' κεντρικό</div></div>'+_znB2BFreeBadge(p)+
       '<div style="display:flex;gap:10px;margin-top:11px">'+
         _znB2BStepper('Τεμάχια','',pcs,'_znB2BStep('+p.id+',1)','_znB2BStep('+p.id+',-1)')+
         _znB2BStepper('Κούτες','<span onclick="_znB2BSetBox('+p.id+')" style="color:'+AM+';cursor:pointer">×'+box+'</span>',bx,'_znB2BBoxStep('+p.id+',1)','_znB2BBoxStep('+p.id+',-1)')+
@@ -16622,8 +16622,9 @@ async function _znB2BSubmit(){
     if(ins.error||!ins.data){ throw ins.error||new Error('no id'); }
     var oid=ins.data.id;
     var items=[];
-    (PRODUCTS||[]).forEach(function(p){ var l=_znB2BLine(p); if(l.tq>0){ items.push({ order_id:oid, product_id:p.id, product_name:p.name, qty:l.tq, unit_price:(parseFloat(p.price)||0), line_total:l.total }); } });
+    var _offer=0; (PRODUCTS||[]).forEach(function(p){ var l=_znB2BLine(p); if(l.tq>0){ items.push({ order_id:oid, product_id:p.id, product_name:p.name, qty:l.tq, unit_price:(parseFloat(p.price)||0), line_total:l.total }); var _fu=_znB2BFreeUnits(p,l.tq); if(_fu>0){ items.push({ order_id:oid, product_id:p.id, product_name:(p.name||'')+' (δωρεάν bundle)', qty:_fu, unit_price:0, line_total:0 }); _offer+=_fu*(parseFloat(p.cost)||0); } } });
     if(items.length){ var ii=await sb.from('b2b_order_items').insert(items); if(ii.error) throw ii.error; }
+    if(typeof _offer!=='undefined' && _offer>0){ try{ await sb.from('b2b_orders').update({offer_cost:_offer}).eq('id',oid); }catch(e){} }
     if(deliv==='fleet' && window._znVehId && window.VEHICLE_STOCK){
       for(var k=0;k<items.length;k++){ var it=items[k]; var cur=(it.product_id in window.VEHICLE_STOCK)?window.VEHICLE_STOCK[it.product_id]:null; if(cur!=null){ var nq=Math.max(0,cur-it.qty); try{ await sb.from('vehicle_stock').update({qty:nq,updated_at:new Date().toISOString()}).eq('shop_id',SHOP_ID).eq('vehicle_id',window._znVehId).eq('product_id',it.product_id); window.VEHICLE_STOCK[it.product_id]=nq; }catch(e){} } }
     }
@@ -17027,6 +17028,33 @@ async function _znBundleDelete(i){
   if(!confirm('Διαγραφή bundle;')) return;
   try{ var r=await sb.from('bundle_rules').delete().eq('id',b.id); if(r&&r.error) throw r.error; window.BUNDLE_RULES=null; renderBundles(); }
   catch(e){ if(typeof toast==='function')toast('Αποτυχία διαγραφής.','error'); }
+}
+
+
+
+window.BUNDLE_RULES=null; window._znBundLoading=false;
+async function _znLoadBundleRules(){ /* bundleApplyP2c7 */
+  if(window.BUNDLE_RULES!==null||window._znBundLoading) return;
+  window._znBundLoading=true;
+  try{ if(typeof sb!=='undefined'){ var r=await sb.from('bundle_rules').select('id,scope,target_product_id,target_category,buy_qty,free_qty,active').eq('shop_id',SHOP_ID); window.BUNDLE_RULES=(r&&r.data)?r.data:[]; } else { window.BUNDLE_RULES=[]; } }
+  catch(e){ window.BUNDLE_RULES=[]; }
+  window._znBundLoading=false;
+  try{ if(typeof _znB2BRender==='function'&&window._znB2B&&window._znB2B.cust!=null&&document.getElementById('content')){ _znB2BRender(); } }catch(e){}
+}
+function _znBundleRuleFor(p){
+  if(window.BUNDLE_RULES===null){ _znLoadBundleRules(); return null; }
+  var rules=window.BUNDLE_RULES||[]; if(!rules.length||!p) return null;
+  var r=rules.find(function(x){ return x.active!==false && x.scope==='product' && String(x.target_product_id)===String(p.id); });
+  if(!r) r=rules.find(function(x){ return x.active!==false && x.scope==='category' && x.target_category===p.category; });
+  return r||null;
+}
+function _znB2BFreeUnits(p,tq){ var r=_znBundleRuleFor(p); if(!r||!r.buy_qty||!r.free_qty) return 0; return Math.floor(tq/r.buy_qty)*(r.free_qty||0); }
+function _znB2BFreeBadge(p){
+  var r=_znBundleRuleFor(p); if(!r) return '';
+  var tq=0; try{ tq=_znB2BLine(p).tq; }catch(e){}
+  var label=(r.buy_qty||0)+'+'+(r.free_qty||0); var free=_znB2BFreeUnits(p,tq);
+  if(free>0) return '<div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.35);color:#fbbf24;border-radius:9px;padding:4px 9px;font-size:11px;font-weight:800">🎁 '+label+' → +'+free+' δωρεάν</div>';
+  return '<div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--text-2);border-radius:9px;padding:4px 9px;font-size:11px;font-weight:700">🎁 '+label+'</div>';
 }
 
 
