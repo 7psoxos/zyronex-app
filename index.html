@@ -27793,6 +27793,15 @@ function renderSettings(){
 // Tasks may be strings (legacy) or objects {text, phase, scheduledTime, priority}
 // Default tasks now use the new format with phase information
 var DEFAULT_TASKS_PER_ROLE = {
+  'Εξωτερικός Πωλητής': [
+    {text:'Έλεγχος αποθέματος οχήματος', phase:'start', type:'simple'},
+    {text:'Παράδοση οχήματος', phase:'end', type:'vehicle'},
+    {text:'Παράδοση είσπραξης ημέρας', phase:'end', type:'cash'}
+  ],
+  'Διανομέας': [
+    {text:'Παραλαβή δρξμολογίου', phase:'start', type:'simple'},
+    {text:'Παράδοση οχήματος', phase:'end', type:'vehicle'}
+  ],
   'Ταμίας': [
     {text:'Άνοιγμα ταμείου & καταμέτρηση', phase:'start'},
     {text:'Έλεγχος POS terminal', phase:'start'},
@@ -27825,8 +27834,8 @@ var DEFAULT_TASKS_PER_ROLE = {
 
 // Normalize: convert string tasks to object format
 function normalizeTask(t){
-  if(typeof t === 'string') return {text:t, phase:'during'};
-  return {text:t.text||'', phase:t.phase||'during', scheduledTime:t.scheduledTime||null, priority:t.priority||'normal'};
+  if(typeof t === 'string') return {text:t, phase:'during', type:'simple'};
+  return {text:t.text||'', phase:t.phase||'during', type:t.type||'simple', scheduledTime:t.scheduledTime||null, priority:t.priority||'normal'};
 }
 function normalizeTaskList(arr){
   return (arr||[]).map(normalizeTask);
@@ -27842,6 +27851,7 @@ function getTaskTemplates(){
       // Normalize legacy string-based format to object format
       const normalized = {};
       Object.keys(saved).forEach(role=>{ normalized[role] = normalizeTaskList(saved[role]); });
+      /* dutyTypesP2c8 */ Object.keys(DEFAULT_TASKS_PER_ROLE).forEach(role=>{ if(!normalized[role]) normalized[role]=normalizeTaskList(DEFAULT_TASKS_PER_ROLE[role]); });
       return normalized;
     }
   }catch(_){}
@@ -27859,7 +27869,7 @@ function getTasksForRolePhase(role, phase){
 function openTaskTemplatesModal(){
   // Load current templates into draft
   TASK_TEMPLATES_DRAFT = JSON.parse(JSON.stringify(getTaskTemplates()));
-  const roles = ['Διαχειριστής', 'Ταμίας', 'Αποθήκη', 'Υπάλληλος'];
+  const roles = ['Διαχειριστής', 'Ταμίας', 'Αποθήκη', 'Υπάλληλος', 'Εξωτερικός Πωλητής', 'Διανομέας'];
 
   openModal(`<div class="modal-head">
     <h3 class="fw-800 text-xl">✅ Καθήκοντα Βάρδιας ανά Ρόλο</h3>
@@ -27884,7 +27894,7 @@ var _renderSettingsInline = renderSettings;
 
 function renderTaskTemplatesBody(){
   const templates = TASK_TEMPLATES_DRAFT || {};
-  const roles = ['Διαχειριστής', 'Ταμίας', 'Αποθήκη', 'Υπάλληλος'];
+  const roles = ['Διαχειριστής', 'Ταμίας', 'Αποθήκη', 'Υπάλληλος', 'Εξωτερικός Πωλητής', 'Διανομέας'];
   const phaseLabels = {start:'🌅 Έναρξη', during:'⏱️ Διάρκεια', end:'🌙 Λήξη'};
   return `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
     ${roles.map(role=>{
@@ -27898,7 +27908,7 @@ function renderTaskTemplatesBody(){
               <button class="icon-btn" style="padding:3px;flex-shrink:0" onclick="removeDraftTask('${role}',${i})" title="Διαγραφή"><i data-lucide="x" size="12"></i></button>
             </div>
             <div style="display:flex;gap:4px;align-items:center;font-size:11px">
-              <select class="form-select" style="padding:2px 6px;font-size:11px;flex:1" onchange="updateDraftTask('${role}',${i},'phase',this.value)">
+              <select class="form-select" style="padding:2px 6px;font-size:11px;flex:1" onchange="updateDraftTask('${role}',${i},'type',this.value)"><option value="simple" ${(t.type||'simple')==='simple'?'selected':''}>▢ Απλό</option><option value="timer" ${t.type==='timer'?'selected':''}>⏱️ Timer</option><option value="vehicle" ${t.type==='vehicle'?'selected':''}>🚐 Όχημα</option><option value="cash" ${t.type==='cash'?'selected':''}>💶 Ταμείο</option></select><select class="form-select" style="padding:2px 6px;font-size:11px;flex:1" onchange="updateDraftTask('${role}',${i},'phase',this.value)">
                 <option value="start" ${t.phase==='start'?'selected':''}>${phaseLabels.start}</option>
                 <option value="during" ${(t.phase==='during'||!t.phase)?'selected':''}>${phaseLabels.during}</option>
                 <option value="end" ${t.phase==='end'?'selected':''}>${phaseLabels.end}</option>
@@ -27921,7 +27931,7 @@ function renderTaskTemplatesBody(){
 function addDraftTask(role){
   if(!TASK_TEMPLATES_DRAFT[role]) TASK_TEMPLATES_DRAFT[role] = [];
   TASK_TEMPLATES_DRAFT[role] = normalizeTaskList(TASK_TEMPLATES_DRAFT[role]);
-  TASK_TEMPLATES_DRAFT[role].push({text:'Νέο καθήκον', phase:'during'});
+  TASK_TEMPLATES_DRAFT[role].push({text:'Νέο καθήκον', phase:'during', type:'simple'});
   document.getElementById('taskTemplatesBody').innerHTML = renderTaskTemplatesBody();
   lucide.createIcons();
 }
@@ -27953,7 +27963,7 @@ function saveTaskTemplatesFromModal(){
   Object.keys(TASK_TEMPLATES_DRAFT).forEach(role=>{
     clean[role] = normalizeTaskList(TASK_TEMPLATES_DRAFT[role]||[])
       .filter(t => t.text && t.text.trim())
-      .map(t => ({text: t.text.trim(), phase: t.phase||'during', scheduledTime: t.scheduledTime||null}));
+      .map(t => ({text: t.text.trim(), phase: t.phase||'during', type: t.type||'simple', scheduledTime: t.scheduledTime||null}));
   });
   localStorage.setItem('shiftTaskTemplates', JSON.stringify(clean));
   TASK_TEMPLATES_DRAFT = null;
