@@ -44,7 +44,8 @@ var PULSE_TILES = [
   { id:'postcreator', icon:'🎨', label:'Post Creator',   desc:'Δημιουργία post για social', color:'#f59e0b' },
   { id:'content',     icon:'✍️', label:'Content Engine', desc:'SEO, captions, hashtags', color:'#8b5cf6' },
   { id:'video',       icon:'🎬', label:'Video Studio',   desc:'Trim, crop, text, export', color:'#34d399' },
-  { id:'pdf',         icon:'📄', label:'PDF',            desc:'Merge, split, εικόνες, συμπίεση', color:'#ef4444' }
+  { id:'pdf',         icon:'📄', label:'PDF',            desc:'Merge, split, εικόνες, συμπίεση', color:'#ef4444' },
+  { id:'qr',          icon:'🔳', label:'QR / Barcode',   desc:'Δημιουργία + ανάγνωση', color:'#06b6d4' }
 ];
 
 function _pulseBannerHTML() {
@@ -243,6 +244,95 @@ function _pulsePdfHTML() {
   '</div>';
 }
 PULSE_EXTRA['pdf'] = { html: _pulsePdfHTML };
+
+/* ── QR / Barcode tool (pulseQrP1) ── */
+var _qrLibReady = null;
+var _qrCam = null;
+function _pulseEnsureQrLibs() {
+  if (_qrLibReady) return _qrLibReady;
+  _qrLibReady = new Promise(function (resolve, reject) {
+    function inject(src, cb) { var s = document.createElement('script'); s.src = src; s.onload = cb; s.onerror = function () { reject(new Error('load ' + src)); }; document.head.appendChild(s); }
+    function need1() { if (window.QRCode) { need2(); } else { inject('https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js', need2); } }
+    function need2() { if (window.Html5Qrcode) { resolve(); return; } inject('https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js', function () { resolve(); }); }
+    need1();
+  });
+  return _qrLibReady;
+}
+function qrPick() { var el = document.getElementById('qrFileIn'); if (el) el.click(); }
+async function qrGenerate() {
+  try {
+    var inp = document.getElementById('qrText'); var txt = inp ? inp.value.trim() : '';
+    if (!txt) { if (typeof toast === 'function') toast('Γράψε κείμενο ή URL', 'warning'); return; }
+    await _pulseEnsureQrLibs();
+    var url = await QRCode.toDataURL(txt, { width: 320, margin: 2 });
+    var area = document.getElementById('qrGenResult');
+    area.innerHTML = '<img src="' + url + '" alt="QR" style="width:240px;max-width:100%;background:#fff;padding:10px;border-radius:12px;margin:8px auto;display:block">' +
+      '<a href="' + url + '" download="qr.png" class="ps-btn primary" style="display:block;text-align:center">⬇️ Κατέβασε QR</a>';
+  } catch (e) {
+    var a = document.getElementById('qrGenResult'); if (a) a.innerHTML = '<p style="color:#f87171;font-size:13px">Σφάλμα: ' + (e && e.message ? e.message : e) + '</p>';
+    if (typeof toast === 'function') toast('Σφάλμα QR', 'danger');
+  }
+}
+function _qrShowRead(text) {
+  var area = document.getElementById('qrReadResult'); if (!area) return;
+  var isUrl = /^https?:\/\//i.test(text);
+  var safe = (typeof _escHtml === 'function') ? _escHtml(text) : text;
+  area.innerHTML = '<div style="background:var(--bg-2,#161d30);border:1px solid var(--border,rgba(255,255,255,.08));border-radius:10px;padding:12px;margin-top:8px;word-break:break-all">' +
+    '<div style="font-size:11px;color:var(--text-3,#8a96b4);margin-bottom:4px">Αποτέλεσμα</div>' +
+    '<div style="font-size:14px;color:var(--text-1,#e2e8f0)">' + safe + '</div>' +
+    (isUrl ? '<a href="' + text + '" target="_blank" rel="noopener" class="ps-btn" style="display:block;text-align:center;margin-top:8px">🔗 Άνοιγμα</a>' : '') +
+  '</div>';
+  if (typeof toast === 'function') toast('Διαβάστηκε', 'success');
+}
+async function qrReadFile(input) {
+  try {
+    var f = input.files[0]; input.value = ''; if (!f) return;
+    await _pulseEnsureQrLibs();
+    var tmp = new Html5Qrcode('qrReaderHidden');
+    var text = await tmp.scanFile(f, false);
+    try { tmp.clear(); } catch (e) {}
+    _qrShowRead(text);
+  } catch (e) { if (typeof toast === 'function') toast('Δεν βρέθηκε κωδικός στην εικόνα', 'warning'); }
+}
+async function qrScanCamera() {
+  try {
+    await _pulseEnsureQrLibs();
+    if (_qrCam) { try { await _qrCam.stop(); } catch (e) {} _qrCam = null; }
+    var reg = document.getElementById('qrReader'); if (reg) reg.style.display = 'block';
+    _qrCam = new Html5Qrcode('qrReader');
+    await _qrCam.start({ facingMode: 'environment' }, { fps: 10, qrbox: 230 },
+      function (decoded) { qrStopCamera(); _qrShowRead(decoded); },
+      function () {});
+    var btn = document.getElementById('qrStopBtn'); if (btn) btn.style.display = 'block';
+  } catch (e) { if (typeof toast === 'function') toast('Δεν ήταν δυνατζ η κάμερα', 'danger'); }
+}
+async function qrStopCamera() {
+  try { if (_qrCam) { await _qrCam.stop(); _qrCam.clear(); _qrCam = null; } } catch (e) {}
+  var reg = document.getElementById('qrReader'); if (reg) reg.style.display = 'none';
+  var btn = document.getElementById('qrStopBtn'); if (btn) btn.style.display = 'none';
+}
+function _pulseQrHTML() {
+  return '<div class="ps-tools" style="display:block">' +
+    '<div class="ps-tool-group">' +
+      '<div class="ps-tool-group-title">🔳 Δημιουργία QR</div>' +
+      '<input type="text" id="qrText" placeholder="Κείμενο ή URL..." style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border,rgba(255,255,255,.12));background:var(--bg-1,#0e1322);color:var(--text-1,#e2e8f0);font-size:14px;margin-bottom:8px">' +
+      '<button class="ps-btn primary" style="width:100%" onclick="qrGenerate()">Δημιουργία</button>' +
+      '<div id="qrGenResult" style="margin-top:8px"></div>' +
+    '</div>' +
+    '<div class="ps-tool-group" style="margin-top:12px">' +
+      '<div class="ps-tool-group-title">📷 Ανάγνωση QR / Barcode</div>' +
+      '<button class="ps-btn" style="width:100%;margin-bottom:8px" onclick="qrPick()">🖼️ Ανάγνωση από εικόνα</button>' +
+      '<input type="file" id="qrFileIn" accept="image/*" style="display:none" onchange="qrReadFile(this)">' +
+      '<button class="ps-btn" style="width:100%" onclick="qrScanCamera()">📷 Σάρωση με κάμερα</button>' +
+      '<div id="qrReader" style="display:none;margin-top:8px;border-radius:12px;overflow:hidden"></div>' +
+      '<button class="ps-btn" id="qrStopBtn" style="display:none;width:100%;margin-top:8px" onclick="qrStopCamera()">⏹ Διακοπή κάμερας</button>' +
+      '<div id="qrReaderHidden" style="display:none"></div>' +
+      '<div id="qrReadResult"></div>' +
+    '</div>' +
+  '</div>';
+}
+PULSE_EXTRA['qr'] = { html: _pulseQrHTML };
+
 
 function pulseSetTab(t) { pulseOpen(t); }
 
