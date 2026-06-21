@@ -16123,6 +16123,9 @@ async function _doLogoutWithClockOut(){
 // Internal logout that actually clears state — bypasses guards
 function _doLogout(){CURRENT_USER=null;SELECTED_USER_ID=null;PIN_BUFFER='';
   clearSession();
+  // SECURITY (znLogoutClearP1): wipe stale page content + history so the previous user's page cannot persist behind login/clock-in
+  try { var _zc = document.getElementById('content'); if(_zc) _zc.innerHTML = ''; } catch(_){}
+  try { window._pageHistory = []; } catch(_){}
   // Reset shifts loaded flag so next user gets fresh load
   window._SHIFTS_LOADED = false;
   SHIFTS_CACHE = [];
