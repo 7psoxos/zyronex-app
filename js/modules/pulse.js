@@ -43,7 +43,8 @@ var PULSE_TILES = [
   { id:'studio',      icon:'📸', label:'Photo Studio',   desc:'Αφαίρεση φόντου, ρυθμίσεις', color:'#6366f1' },
   { id:'postcreator', icon:'🎨', label:'Post Creator',   desc:'Δημιουργία post για social', color:'#f59e0b' },
   { id:'content',     icon:'✍️', label:'Content Engine', desc:'SEO, captions, hashtags', color:'#8b5cf6' },
-  { id:'video',       icon:'🎬', label:'Video Studio',   desc:'Trim, crop, text, export', color:'#34d399' }
+  { id:'video',       icon:'🎬', label:'Video Studio',   desc:'Trim, crop, text, export', color:'#34d399' },
+  { id:'pdf',         icon:'📄', label:'PDF',            desc:'Merge, split, εικόνες, συμπίεση', color:'#ef4444' }
 ];
 
 function _pulseBannerHTML() {
@@ -82,11 +83,166 @@ function renderPulse() {
     '<button class="pulse-back" onclick="pulseHome()" style="display:inline-flex;align-items:center;gap:6px;margin:4px 0 12px;background:rgba(255,255,255,.06);color:var(--text-1,#cdd6f4);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer">← Πίσω στα εργαλεία</button>' +
     '<div id="pulseTabContent" style="overflow-x:hidden;max-width:100%"></div>' +
   '</div>';
-  _pulseRenderTab();
+  if (typeof PULSE_EXTRA !== 'undefined' && PULSE_EXTRA[PULSE.view]) {
+    var _w = document.getElementById('pulseTabContent');
+    _w.innerHTML = PULSE_EXTRA[PULSE.view].html();
+    if (PULSE_EXTRA[PULSE.view].bind) PULSE_EXTRA[PULSE.view].bind();
+  } else {
+    _pulseRenderTab();
+  }
 }
 
 function pulseOpen(id) { PULSE.view = id; PULSE.tab = id; renderPulse(); }
 function pulseHome() { PULSE.view = 'home'; renderPulse(); }
+
+/* ── PDF tool (pulsePdfP1) ── */
+var PULSE_EXTRA = (typeof PULSE_EXTRA !== 'undefined') ? PULSE_EXTRA : {};
+var _pdfLibReady = null;
+function _pulseEnsurePdfLibs() {
+  if (_pdfLibReady) return _pdfLibReady;
+  _pdfLibReady = new Promise(function (resolve, reject) {
+    function inject(src, cb) { var s = document.createElement('script'); s.src = src; s.onload = cb; s.onerror = function () { reject(new Error('load ' + src)); }; document.head.appendChild(s); }
+    function needLib() { if (window.PDFLib) { needPdfjs(); } else { inject('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', needPdfjs); } }
+    function needPdfjs() {
+      if (window.pdfjsLib) { resolve(); return; }
+      inject('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', function () {
+        try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; } catch (e) {}
+        resolve();
+      });
+    }
+    needLib();
+  });
+  return _pdfLibReady;
+}
+function _fmtKB(n) { return (n / 1024).toFixed(0) + ' KB'; }
+function _pdfBusy(msg) { var a = document.getElementById('pdfResult'); if (a) a.innerHTML = '<p style="color:var(--text-2);font-size:13px">' + (msg || '\u0395\u03c0\u03b5\u03be\u03b5\u03c1\u03b3\u03b1\u03c3\u03af\u03b1...') + '</p>'; }
+function _pdfErr(e) { var a = document.getElementById('pdfResult'); if (a) a.innerHTML = '<p style="color:#f87171;font-size:13px">\u03a3\u03c6\u03ac\u03bb\u03bc\u03b1: ' + (e && e.message ? e.message : e) + '</p>'; if (typeof toast === 'function') toast('\u03a3\u03c6\u03ac\u03bb\u03bc\u03b1 PDF', 'danger'); }
+function _pdfResult(blob, name, origLen, newLen) {
+  var area = document.getElementById('pdfResult'); if (!area) return;
+  var url = URL.createObjectURL(blob);
+  var info = (origLen && newLen) ? ('<p style="font-size:12px;color:var(--text-2);margin:6px 0">\u0391\u03c0\u03cc ' + _fmtKB(origLen) + ' \u2192 ' + _fmtKB(newLen) + '</p>') : '';
+  area.innerHTML = info + '<a href="' + url + '" download="' + name + '" class="ps-btn primary" style="display:block;text-align:center;margin-top:6px">\u2b07\ufe0f \u039a\u03b1\u03c4\u03ae\u03b2\u03b1\u03c3\u03b5 ' + name + '</a>';
+}
+function _imgToPngBytes(file) {
+  return new Promise(function (resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var im = new Image();
+    im.onload = function () {
+      try {
+        var cv = document.createElement('canvas'); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+        cv.getContext('2d').drawImage(im, 0, 0);
+        var b64 = cv.toDataURL('image/png').split(',')[1]; var bin = atob(b64); var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        URL.revokeObjectURL(url); resolve({ bytes: arr, w: cv.width, h: cv.height });
+      } catch (e) { reject(e); }
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('image')); };
+    im.src = url;
+  });
+}
+async function pdfMerge(input) {
+  try {
+    var files = Array.prototype.slice.call(input.files); input.value = '';
+    if (files.length < 2) { if (typeof toast === 'function') toast('\u0394\u03b9\u03ac\u03bb\u03b5\u03be\u03b5 2+ PDF', 'warning'); return; }
+    _pdfBusy('\u03a3\u03c5\u03b3\u03c7\u03ce\u03bd\u03b5\u03c5\u03c3\u03b7...'); await _pulseEnsurePdfLibs();
+    var out = await PDFLib.PDFDocument.create();
+    for (var i = 0; i < files.length; i++) {
+      var bytes = await files[i].arrayBuffer();
+      var doc = await PDFLib.PDFDocument.load(bytes);
+      var pages = await out.copyPages(doc, doc.getPageIndices());
+      pages.forEach(function (pg) { out.addPage(pg); });
+    }
+    _pdfResult(new Blob([await out.save()], { type: 'application/pdf' }), 'merged.pdf');
+  } catch (e) { _pdfErr(e); }
+}
+async function pdfSplit(input) {
+  try {
+    var f = input.files[0]; input.value = ''; if (!f) return;
+    await _pulseEnsurePdfLibs();
+    var bytes = await f.arrayBuffer(); var src = await PDFLib.PDFDocument.load(bytes); var total = src.getPageCount();
+    var from = parseInt(prompt('\u0391\u03c0\u03cc \u03c3\u03b5\u03bb\u03af\u03b4\u03b1 (1-' + total + '):', '1'), 10);
+    if (!from) return;
+    var to = parseInt(prompt('\u0388\u03c9\u03c2 \u03c3\u03b5\u03bb\u03af\u03b4\u03b1 (1-' + total + '):', String(total)), 10);
+    if (!to || from < 1 || to > total || from > to) { if (typeof toast === 'function') toast('\u039c\u03b7 \u03ad\u03b3\u03ba\u03c5\u03c1\u03bf \u03b5\u03cd\u03c1\u03bf\u03c2', 'warning'); return; }
+    _pdfBusy('\u0395\u03be\u03b1\u03b3\u03c9\u03b3\u03ae...');
+    var out = await PDFLib.PDFDocument.create(); var idx = []; for (var i = from - 1; i <= to - 1; i++) idx.push(i);
+    var pages = await out.copyPages(src, idx); pages.forEach(function (pg) { out.addPage(pg); });
+    _pdfResult(new Blob([await out.save()], { type: 'application/pdf' }), 'pages_' + from + '-' + to + '.pdf');
+  } catch (e) { _pdfErr(e); }
+}
+async function pdfFromImages(input) {
+  try {
+    var files = Array.prototype.slice.call(input.files); input.value = ''; if (!files.length) return;
+    _pdfBusy('\u0394\u03b7\u03bc\u03b9\u03bf\u03c5\u03c1\u03b3\u03af\u03b1 PDF...'); await _pulseEnsurePdfLibs();
+    var out = await PDFLib.PDFDocument.create();
+    for (var i = 0; i < files.length; i++) {
+      var r = await _imgToPngBytes(files[i]);
+      var img = await out.embedPng(r.bytes);
+      var page = out.addPage([r.w, r.h]); page.drawImage(img, { x: 0, y: 0, width: r.w, height: r.h });
+    }
+    _pdfResult(new Blob([await out.save()], { type: 'application/pdf' }), 'images.pdf');
+  } catch (e) { _pdfErr(e); }
+}
+async function pdfToImages(input) {
+  try {
+    var f = input.files[0]; input.value = ''; if (!f) return;
+    _pdfBusy('\u039c\u03b5\u03c4\u03b1\u03c4\u03c1\u03bf\u03c0\u03ae \u03c3\u03b5 \u03b5\u03b9\u03ba\u03cc\u03bd\u03b5\u03c2...'); await _pulseEnsurePdfLibs();
+    var bytes = await f.arrayBuffer();
+    var doc = await pdfjsLib.getDocument({ data: bytes }).promise;
+    var area = document.getElementById('pdfResult'); area.innerHTML = '';
+    for (var n = 1; n <= doc.numPages; n++) {
+      var page = await doc.getPage(n); var vp = page.getViewport({ scale: 2 });
+      var cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      var a = document.createElement('a'); a.href = cv.toDataURL('image/png'); a.download = 'page_' + n + '.png';
+      a.className = 'ps-btn'; a.style.cssText = 'display:block;margin:6px 0;text-align:center'; a.textContent = '\u2b07\ufe0f \u03a3\u03b5\u03bb\u03af\u03b4\u03b1 ' + n;
+      area.appendChild(a);
+    }
+    if (typeof toast === 'function') toast('\u0388\u03c4\u03bf\u03b9\u03bc\u03b5\u03c2 ' + doc.numPages + ' \u03b5\u03b9\u03ba\u03cc\u03bd\u03b5\u03c2', 'success');
+  } catch (e) { _pdfErr(e); }
+}
+async function pdfCompress(input) {
+  try {
+    var f = input.files[0]; input.value = ''; if (!f) return;
+    _pdfBusy('\u03a3\u03c5\u03bc\u03c0\u03af\u03b5\u03c3\u03b7...'); await _pulseEnsurePdfLibs();
+    var orig = new Uint8Array(await f.arrayBuffer());
+    var doc = await pdfjsLib.getDocument({ data: orig.slice() }).promise;
+    var out = await PDFLib.PDFDocument.create();
+    for (var n = 1; n <= doc.numPages; n++) {
+      var page = await doc.getPage(n); var vp = page.getViewport({ scale: 1.5 });
+      var cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      var b64 = cv.toDataURL('image/jpeg', 0.7).split(',')[1]; var bin = atob(b64); var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      var img = await out.embedJpg(arr); var pg = out.addPage([cv.width, cv.height]); pg.drawImage(img, { x: 0, y: 0, width: cv.width, height: cv.height });
+    }
+    var comp = await out.save();
+    var keep = comp.length < orig.length ? comp : orig;
+    _pdfResult(new Blob([keep], { type: 'application/pdf' }), 'compressed.pdf', orig.length, keep.length);
+  } catch (e) { _pdfErr(e); }
+}
+function _pdfOp(label, accept, multi, fn) {
+  var id = 'pdfin_' + fn;
+  return '<div style="margin:8px 0">' +
+    '<input type="file" id="' + id + '" accept="' + accept + '" ' + (multi ? 'multiple' : '') + ' style="display:none" onchange="' + fn + '(this)">' +
+    '<button class="ps-btn" style="width:100%;text-align:left" onclick="document.getElementById(\'' + id + '\').click()">' + label + '</button>' +
+  '</div>';
+}
+function _pulsePdfHTML() {
+  return '<div class="ps-tools" style="display:block">' +
+    '<div class="ps-tool-group">' +
+      '<div class="ps-tool-group-title">\ud83d\udcc4 PDF</div>' +
+      '<p style="font-size:11px;color:var(--text-2);margin:0 0 6px">\u038c\u03bb\u03b1 \u03c4\u03c1\u03ad\u03c7\u03bf\u03c5\u03bd \u03c3\u03c4\u03b7 \u03c3\u03c5\u03c3\u03ba\u03b5\u03c5\u03ae \u03c3\u03bf\u03c5 \u2014 \u03c7\u03c9\u03c1\u03af\u03c2 upload.</p>' +
+      _pdfOp('\ud83d\udd17 \u03a3\u03c5\u03b3\u03c7\u03ce\u03bd\u03b5\u03c5\u03c3\u03b7 (2+ PDF)', 'application/pdf', true, 'pdfMerge') +
+      _pdfOp('\u2702\ufe0f \u0395\u03be\u03b1\u03b3\u03c9\u03b3\u03ae \u03c3\u03b5\u03bb\u03af\u03b4\u03c9\u03bd (\u03b1\u03c0\u03cc\u2013\u03ad\u03c9\u03c2)', 'application/pdf', false, 'pdfSplit') +
+      _pdfOp('\ud83d\uddbc\ufe0f PDF \u2192 \u0395\u03b9\u03ba\u03cc\u03bd\u03b5\u03c2', 'application/pdf', false, 'pdfToImages') +
+      _pdfOp('\ud83d\udcd1 \u0395\u03b9\u03ba\u03cc\u03bd\u03b5\u03c2 \u2192 PDF', 'image/*', true, 'pdfFromImages') +
+      _pdfOp('\ud83d\udddc\ufe0f \u03a3\u03c5\u03bc\u03c0\u03af\u03b5\u03c3\u03b7 PDF', 'application/pdf', false, 'pdfCompress') +
+    '</div>' +
+    '<div id="pdfResult" style="margin-top:10px"></div>' +
+  '</div>';
+}
+PULSE_EXTRA['pdf'] = { html: _pulsePdfHTML };
 
 function pulseSetTab(t) { pulseOpen(t); }
 
