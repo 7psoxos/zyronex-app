@@ -16460,9 +16460,9 @@ function renderSalesHub(){ /* saleshubChunk1 */
     '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Ατζέντα — δρομολόγιο επισκέψεων</div>'+
     rows+
     '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+
-    '<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-top:14px">'+
+    '<div onclick="renderMyZone()" style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-top:14px;cursor:pointer">'+
       '<div style="font-weight:800;color:'+AM+';margin-bottom:4px">📊 My Zone</div>'+
-      '<div style="font-size:12.5px;color:var(--text-2)">Hit rate, μέσος όρος ανά επίσκεψη, απόδοση & στόχοι ζώνης — έρχονται στο επόμενο chunk.</div>'+
+      '<div style="font-size:12.5px;color:var(--text-2)">Δες τα στατιστικά της ζώνης σου ›</div>'+
     '</div>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
@@ -16678,6 +16678,52 @@ function _znB2BNotifPreview(){
   else if(r==='store'){ items.push(ni('🏬','«Προς Προετοιμασία» στο κεντρικό.')); items.push(ni('👤','Ειδοποίηση σε αποθηκάριο/ιδιοκτήτη.')); items.push(ni('🛵','Update όταν γίνει ανάθεση & παράδοση.')); }
   else { items.push(ni('🏬','«Προς Προετοιμασία» στο κεντρικό.')); items.push(ni('🚚','Courier: '+(window._znB2BCourier||'—')+'.')); items.push(ni('📦','Tracking μόλις παραδοθεί στη μεταφορική.')); }
   return '<div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.3);border-radius:14px;padding:13px;margin-bottom:14px"><div style="display:flex;align-items:center;gap:7px;font-weight:800;font-size:12.5px;color:#cbb8ff;margin-bottom:6px">🔔 Τι θα δεις (ειδοποιήσεις)</div>'+items.join('')+'</div>';
+}
+
+
+
+function renderMyZone(){ /* myZoneChunk7 */
+  var c=document.getElementById('content'); if(!c) return;
+  c.innerHTML='<div style="max-width:560px;margin:0 auto">'+
+    '<button class="btn btn-ghost" style="margin-bottom:12px;width:auto;padding:8px 14px" onclick="showPage(\'saleshub\')"><i data-lucide="chevron-left" size="16"></i> Ατζέντα</button>'+
+    '<div style="font-size:19px;font-weight:800;color:var(--text-1)">My Zone</div>'+
+    '<div style="color:var(--text-2);font-size:12.5px;margin-bottom:14px">Μόνο τα δικά σου νούμερα</div>'+
+    '<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div></div>';
+  if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
+  _znLoadMyZone();
+}
+async function _znLoadMyZone(){
+  var box=document.getElementById('znZoneBody'); if(!box) return;
+  var eur=function(n){return (parseFloat(n)||0).toLocaleString('el-GR',{minimumFractionDigits:0,maximumFractionDigits:0})+' €';};
+  try{
+    if(typeof sb==='undefined'){ box.textContent='Σφάλμα σύνδεσης'; return; }
+    var uid=((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null);
+    var q=sb.from('b2b_orders').select('id,total,created_at,status,delivery_type').eq('shop_id',SHOP_ID);
+    if(uid!=null) q=q.eq('created_by',uid);
+    var r=await q; var rows=(r&&r.data)?r.data:[];
+    var now=new Date(); var ym=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
+    var monthRows=rows.filter(function(o){ return String(o.created_at||'').slice(0,7)===ym; });
+    var monthRev=monthRows.reduce(function(a,b){return a+(parseFloat(b.total)||0);},0);
+    var monthCnt=monthRows.length; var aov=monthCnt?monthRev/monthCnt:0;
+    var prep=rows.filter(function(o){return o.status==='preparing';}).length;
+    var deliv=rows.filter(function(o){return o.status==='delivered';}).length;
+    var ids=monthRows.map(function(o){return o.id;}); var top=[];
+    if(ids.length){ try{
+      var ri=await sb.from('b2b_order_items').select('product_name,qty,line_total,order_id').in('order_id',ids);
+      var agg={}; (ri&&ri.data?ri.data:[]).forEach(function(it){ var k=it.product_name||'—'; if(!agg[k])agg[k]={q:0,v:0}; agg[k].q+=(it.qty||0); agg[k].v+=(parseFloat(it.line_total)||0); });
+      top=Object.keys(agg).map(function(k){return {name:k,q:agg[k].q,v:agg[k].v};}).sort(function(a,b){return b.v-a.v;}).slice(0,3);
+    }catch(e){} }
+    function card(l,v,d,col){ return '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:13px"><div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;font-weight:700">'+l+'</div><div style="font-size:22px;font-weight:800;margin-top:5px;color:'+(col||'var(--text-1)')+'">'+v+'</div>'+(d?'<div style="font-size:11px;color:var(--text-2);margin-top:3px">'+d+'</div>':'')+'</div>'; }
+    var html='';
+    if(rows.length===0){ html='<div style="color:var(--text-2);text-align:center;padding:30px 10px">Δεν υπάρχουν ακόμη B2B παραγγελίες σου.<br>Μόλις καταχωρήσεις, θα δεις εδώ τα στατιστικά σου.</div>'; }
+    else{
+      html='<div style="background:linear-gradient(160deg,var(--bg-2),var(--bg-1));border:1px solid rgba(251,191,36,.22);border-radius:18px;padding:16px;margin-bottom:12px;text-align:left"><div style="font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Τζίρος μήνα (B2B)</div><div style="font-size:30px;font-weight:800;color:var(--text-1);margin-top:4px">'+eur(monthRev)+'</div><div style="font-size:11.5px;color:var(--text-2);margin-top:4px">'+monthCnt+' παραγγελίες αυτόν τον μήνα</div></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'+card('Μ.Ο. ανά παραγγελία',eur(aov),'AOV','#fbbf24')+card('Σύνολο παραγγελιών',String(rows.length),'όλες οι περίοδοι')+card('Προς Προετοιμασία',String(prep),'εκκρεμείς','#22d3ee')+card('Παραδομένες',String(deliv),'άμεσες','#86efac')+'</div>';
+      if(top.length){ html+='<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin:6px 0 8px">🏆 Top προϊόντα (μήνας)</div><div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:6px 14px">'+top.map(function(t,i){return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(i<top.length-1?'border-bottom:1px solid var(--border)':'')+'"><div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--text-1)">'+(i+1)+'. '+t.name+'</div><div style="font-size:11px;color:var(--text-2)">'+t.q+' τεμ.</div></div><div style="font-weight:800;color:#fbbf24">'+eur(t.v)+'</div></div>';}).join('')+'</div>'; }
+      html+='<div style="background:var(--bg-2);border:1px dashed var(--border);border-radius:12px;padding:12px;margin-top:12px;font-size:12px;color:var(--text-2);line-height:1.5">Hit rate, μέσος όρος ανά <b style="color:var(--text-1)">επίσκεψη</b>, απόδοση δειγμάτων & στόχος ζώνης χρειάζονται καταγραφή επισκέψεων/δειγμάτων — έρχονται με το επόμενο module.</div>';
+    }
+    box.outerHTML='<div id="znZoneBody">'+html+'</div>';
+  }catch(e){ console.error('[MyZone]',e); box.textContent='Δεν ήταν δυνατή η φόρτωση (έλεγξε ότι έτρεξε το SQL των b2b_orders).'; }
 }
 
 
