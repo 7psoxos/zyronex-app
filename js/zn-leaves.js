@@ -838,7 +838,7 @@ async function loadAllData(){
     
     console.log('Querying customers...');
     const custRes = await sb.from('customers')
-      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified,loyalty_lifetime_points,loyalty_elite')
+      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified,loyalty_lifetime_points,loyalty_elite,customer_type,meta')
       .order('name')
       .limit(2000);
     
@@ -928,7 +928,7 @@ async function loadAllData(){
     console.log('Mapping CUSTOMERS...');
     CUSTOMERS = (custRes.data||[]).map(c=>({
       id:c.id, name:c.name, phone:c.phone, email:c.email,
-      totalSpent:parseFloat(c.total_spent||0), visits:c.visits||0,
+      totalSpent:parseFloat(c.total_spent||0), visits:c.visits||0, customer_type:(c.customer_type||'retail'), meta:(c.meta||{}),
       lastVisit:c.last_visit, preferredNicotine:c.preferred_nicotine, orders:[],
       loyaltyPoints: c.loyalty_points||0,
       loyaltyTier: c.loyalty_tier||'bronze',
