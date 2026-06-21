@@ -16934,7 +16934,7 @@ function _znPlansRender(){
       '<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="_znPlanSave('+i+')">💾 Αποθήκευση</button>'+(p.id?'<button class="btn btn-ghost" style="width:auto;padding:12px 14px" onclick="_znPlanDelete('+i+')">🗑</button>':'')+'</div>'+
     '</div>';
   }).join('');
-  box.outerHTML='<div id="znPlansBody">'+html+'<button class="btn btn-ghost" style="width:100%" onclick="_znPlanNew()">＋ Νέο πλάνο</button></div>';
+  box.outerHTML='<div id="znPlansBody">'+html+'<button class="btn btn-ghost" style="width:100%" onclick="_znPlanNew()">＋ Νέο πλάνο</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="renderBundles()">🎁 Bundles (X+Y)</button>'+'</div>';
 }
 async function _znPlanSave(i){
   var p=window._znPlans[i]; if(!p) return; if(typeof sb==='undefined'){ if(typeof toast==='function')toast('Σφάλμα σύνδεσης','error'); return; }
@@ -16977,6 +16977,56 @@ async function _znB2BLoadPlanLine(custId){
   var pid=(cu&&cu.meta&&cu.meta.discount_plan_id)||null; var plan=null;
   if(pid!=null) plan=plans.find(function(p){return p.id==pid;}); var isDef=false; if(!plan){ plan=plans.find(function(p){return p.is_default;}); isDef=true; }
   box.innerHTML='🏷️ Πλάνο: <b style="color:var(--text-1)">'+(plan?plan.name:'Προεπιλογή')+'</b>'+(isDef&&plan?' <span style="font-size:10px;color:var(--text-2)">(default)</span>':'');
+}
+
+
+
+async function _znFetchBundles(){ try{ if(typeof sb==='undefined') return []; var r=await sb.from('bundle_rules').select('id,name,scope,target_product_id,target_category,buy_qty,free_qty,active').eq('shop_id',SHOP_ID).order('id'); return (r&&r.data)?r.data:[]; }catch(e){ return []; } }
+async function renderBundles(){ /* bundlesP2c6 */
+  var c=document.getElementById('content'); if(!c) return;
+  c.innerHTML='<div style="max-width:560px;margin:0 auto"><button class="btn btn-ghost" style="margin-bottom:10px;width:auto;padding:8px 14px" onclick="renderDiscountPlans()"><i data-lucide="chevron-left" size="16"></i> Πλάνα</button><div style="font-size:18px;font-weight:800;color:var(--text-1)">Bundles (X+Y)</div><div style="color:var(--text-2);font-size:12px;margin-bottom:12px">Αγοράζει X → παίρνει Y δωρεάν, ανά προϊόν ή κατηγορία</div><div id="znBundlesBody" style="color:var(--text-2);text-align:center;padding:20px">Φόρτωση…</div></div>';
+  if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
+  window._znBundles=await _znFetchBundles();
+  _znBundlesRender();
+}
+function _znBundleSet(i,f,v){ var b=window._znBundles[i]; if(!b) return; if(f==='buy_qty'||f==='free_qty') b[f]=Math.max(0,parseInt(v)||0); else b[f]=v; if(f==='scope') _znBundlesRender(); }
+function _znBundleNew(){ window._znBundles.push({name:'Νέο bundle',scope:'product',target_product_id:null,target_category:null,buy_qty:5,free_qty:1,active:true}); _znBundlesRender(); }
+function _znBundlesRender(){
+  var box=document.getElementById('znBundlesBody'); if(!box) return; var list=window._znBundles||[];
+  var cats=[]; (PRODUCTS||[]).forEach(function(p){ if(p.category&&cats.indexOf(p.category)<0) cats.push(p.category); });
+  function inp(v,oc,extra){ return '<input value="'+String(v==null?'':v).replace(/"/g,'&quot;')+'" onchange="'+oc+'" style="background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:9px;color:var(--text-1);font-size:14px;'+(extra||'')+'">'; }
+  function numi(v,oc){ return '<input type="number" inputmode="numeric" value="'+(v||0)+'" onchange="'+oc+'" style="width:62px;background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:9px;color:#fbbf24;font-weight:800;font-size:15px;text-align:center">'; }
+  var html=list.map(function(b,i){
+    var tgt;
+    if(b.scope==='category'){ tgt='<select onchange="_znBundleSet('+i+',\'target_category\',this.value)" style="flex:1;background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:10px;color:var(--text-1);font-size:13.5px"><option value="">— κατηγορία —</option>'+cats.map(function(cn){return '<option value="'+cn.replace(/"/g,'')+'"'+(b.target_category===cn?' selected':'')+'>'+cn+'</option>';}).join('')+'</select>'; }
+    else { tgt='<select onchange="_znBundleSet('+i+',\'target_product_id\',this.value)" style="flex:1;background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:10px;color:var(--text-1);font-size:13.5px"><option value="">— προϊόν —</option>'+(PRODUCTS||[]).map(function(p){return '<option value="'+p.id+'"'+(String(b.target_product_id)===String(p.id)?' selected':'')+'>'+String(p.name||'').slice(0,40)+'</option>';}).join('')+'</select>'; }
+    function scopeBtn(key,label){ var on=b.scope===key; return '<button onclick="_znBundleSet('+i+',\'scope\',\''+key+'\')" style="flex:1;padding:9px;border-radius:9px;font-weight:700;font-size:12.5px;cursor:pointer;border:1px solid '+(on?'#22d3ee':'var(--border)')+';background:'+(on?'rgba(34,211,238,.12)':'transparent')+';color:'+(on?'#22d3ee':'var(--text-2)')+'">'+label+'</button>'; }
+    return '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:12px">'+
+      '<div style="display:flex;gap:8px;margin-bottom:9px"><span style="font-size:17px;font-weight:800;color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:9px;padding:6px 11px;white-space:nowrap">'+(b.buy_qty||0)+'+'+(b.free_qty||0)+'</span>'+inp(b.name,'_znBundleSet('+i+',\'name\',this.value)','flex:1')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:9px">'+scopeBtn('product','Προϊόν')+scopeBtn('category','Κατηγορία')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:9px">'+tgt+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:11px"><span style="font-size:12.5px;color:var(--text-2)">Αγοράζει</span>'+numi(b.buy_qty,'_znBundleSet('+i+',\'buy_qty\',this.value)')+'<span style="font-size:12.5px;color:var(--text-2)">→ δωρεάν</span>'+numi(b.free_qty,'_znBundleSet('+i+',\'free_qty\',this.value)')+'</div>'+
+      '<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="_znBundleSave('+i+')">💾 Αποθήκευση</button>'+(b.id?'<button class="btn btn-ghost" style="width:auto;padding:12px 14px" onclick="_znBundleDelete('+i+')">🗑</button>':'')+'</div>'+
+    '</div>';
+  }).join('');
+  box.outerHTML='<div id="znBundlesBody">'+html+'<button class="btn btn-ghost" style="width:100%" onclick="_znBundleNew()">＋ Νέο bundle</button></div>';
+}
+async function _znBundleSave(i){
+  var b=window._znBundles[i]; if(!b) return; if(typeof sb==='undefined'){ if(typeof toast==='function')toast('Σφάλμα σύνδεσης','error'); return; }
+  if(b.scope==='product' && !b.target_product_id){ if(typeof toast==='function')toast('Διάλεξε προϊόν','warn'); return; }
+  if(b.scope==='category' && !b.target_category){ if(typeof toast==='function')toast('Διάλεξε κατηγορία','warn'); return; }
+  var payload={shop_id:SHOP_ID,name:(b.name||null),scope:(b.scope||'product'),target_product_id:(b.scope==='product'?b.target_product_id:null),target_category:(b.scope==='category'?b.target_category:null),buy_qty:(b.buy_qty||0),free_qty:(b.free_qty||0),active:(b.active!==false)};
+  try{
+    if(b.id){ var u=await sb.from('bundle_rules').update(payload).eq('id',b.id); if(u&&u.error) throw u.error; }
+    else { var ins=await sb.from('bundle_rules').insert(payload).select().single(); if(ins.error) throw ins.error; }
+    if(typeof toast==='function')toast('Το bundle αποθηκεύτηκε','success'); window.BUNDLE_RULES=null; renderBundles();
+  }catch(e){ console.error('[bundle save]',e); if(typeof toast==='function')toast('Αποτυχία (έλεγξε SQL bundle_rules).','error'); }
+}
+async function _znBundleDelete(i){
+  var b=window._znBundles[i]; if(!b||!b.id){ window._znBundles.splice(i,1); _znBundlesRender(); return; }
+  if(!confirm('Διαγραφή bundle;')) return;
+  try{ var r=await sb.from('bundle_rules').delete().eq('id',b.id); if(r&&r.error) throw r.error; window.BUNDLE_RULES=null; renderBundles(); }
+  catch(e){ if(typeof toast==='function')toast('Αποτυχία διαγραφής.','error'); }
 }
 
 
