@@ -16536,7 +16536,7 @@ function _znB2BRender(){
   var tabs=cats.map(function(cat){ var n=(PRODUCTS||[]).filter(function(p){return p.category===cat && _znB2BLine(p).tq>0;}).length;
     return '<div onclick="_znB2BTab(\''+String(cat).replace(/'/g,"")+'\')" style="flex:0 0 auto;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;white-space:nowrap;'+(cat===st.cat?'background:rgba(251,191,36,.16);border-color:'+AM+';color:'+AM:'background:var(--bg-2);color:var(--text-2)')+'">'+cat+(n?' · '+n:'')+'</div>';
   }).join('');
-  var list=(PRODUCTS||[]).filter(function(p){return p.category===st.cat;});
+  var _q=(st.q||''); var list=(PRODUCTS||[]).filter(function(p){ if(_q){ return String(p.name||'').toLowerCase().indexOf(_q)>=0 || String(p.barcode||'').toLowerCase().indexOf(_q)>=0; } return p.category===st.cat; });
   var rows=list.length?list.map(function(p){
     var pcs=st.pcs[p.id]||0, bx=st.bx[p.id]||0, ln=_znB2BLine(p); var box=_znB2BBoxOf(p);
     var low=(parseFloat(p.stock)||0)<20;
@@ -16558,6 +16558,7 @@ function _znB2BRender(){
     '<button class="btn btn-ghost" style="margin-bottom:10px;width:auto;padding:8px 14px" onclick="openSalesClient(\''+st.cust+'\')"><i data-lucide="chevron-left" size="16"></i> '+(cu.name||'Πελάτης')+'</button>'+
     '<div style="font-size:19px;font-weight:800;color:var(--text-1)">Νέα παραγγελία</div>'+
     '<div style="color:var(--text-2);font-size:12.5px;margin-bottom:12px">Τεμάχια + Κούτες · έκπτωση B2B αυτόματα</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:10px">🔎<input id="znB2Bq" value="'+String(st.q||'').replace(/"/g,'&quot;')+'" oninput="_znB2BSearch(this.value)" placeholder="Αναζήτηση προϊόντος / barcode…" style="flex:1;background:none;border:none;outline:none;color:var(--text-1);font-size:15px"></div>'+
     '<div style="display:flex;gap:7px;overflow-x:auto;padding-bottom:12px">'+tabs+'</div>'+
     rows+
     '<div style="position:sticky;bottom:0;background:var(--bg-1);border:1px solid var(--border);border-radius:14px;padding:13px;margin-top:6px;box-shadow:0 -6px 20px rgba(0,0,0,.3)">'+
@@ -16866,6 +16867,14 @@ async function _znB2BLoadDocs(custId){
     }).join('')+'</div>' : '<div style="color:var(--text-2);font-size:12px;text-align:center;padding:12px;background:var(--bg-2);border:1px dashed var(--border);border-radius:12px">Κανένα έγγραφο ακόμη — πάτα «Επισύναψη».</div>';
     box.innerHTML=head+rows;
   }catch(e){ console.error('[docs]',e); box.innerHTML=head+'<div style="color:var(--text-2);font-size:12px;text-align:center;padding:10px">Σφάλμα (έλεγξε SQL: b2b_documents).</div>'; }
+}
+
+
+/* searchPhase2 */
+function _znB2BSearch(v){
+  if(!window._znB2B) return;
+  window._znB2B.q=(v||'').toLowerCase();
+  if(typeof _znB2BRender==='function'){ _znB2BRender(); var el=document.getElementById('znB2Bq'); if(el){ try{ el.focus(); var L=el.value.length; el.setSelectionRange(L,L); }catch(e){} } }
 }
 
 
