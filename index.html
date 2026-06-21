@@ -16772,14 +16772,14 @@ async function renderB2BCustomerCard(id){ /* b2bCustCardP2 */
       '</div>'+
       '<div style="font-size:11.5px;color:var(--text-2);margin-top:10px">Όροι πληρωμής: <b style="color:var(--text-1)">'+(meta.payment_terms||'—')+'</b></div>'+
     '</div>'+
-    '<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;padding:11px;margin-top:12px;font-size:12px;color:var(--text-2)">📎 Παραστατικά (Τιμολόγιο/Δελτίο/RMA/Εγγύηση) με ασφαλή αποθήκευση — έρχονται στο επόμενο chunk. ℹ️ Receivables/ληξιπρόθεσμα από Ισοζύγια συνδέονται επίσης.</div>'+
+    '<div id="znB2BDocs" style="margin-top:12px"></div>'+
     '<div id="znB2BCustOrders" style="margin-top:12px"></div>'+
     '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="renderSalesOrderGrid(\''+cu.id+'\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία</button>'+
     '<button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="_znB2BEditCust(\''+cu.id+'\')">✏️ '+(cu.customer_type==='wholesale'?'Επεξεργασία B2B στοιχείων':'Μετατροπή σε χονδρικής')+'</button>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   try{
-    if(typeof sb!=='undefined'){ var r=await sb.from('b2b_orders').select('id,total,created_at,status').eq('shop_id',SHOP_ID).eq('customer_id',id).order('created_at',{ascending:false}).limit(5);
+    if(typeof sb!=='undefined'){ _znB2BLoadDocs(id); var r=await sb.from('b2b_orders').select('id,total,created_at,status').eq('shop_id',SHOP_ID).eq('customer_id',id).order('created_at',{ascending:false}).limit(5);
       var os=(r&&r.data)?r.data:[]; var box=document.getElementById('znB2BCustOrders'); if(box&&os.length){
         box.innerHTML='<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Τελευταίες B2B παραγγελίες</div><div style="background:var(--bg-2);border:1px solid var(--border);border-radius:13px;padding:4px 13px">'+os.map(function(o,i){ var dd=new Date(Date.parse(o.created_at)).toLocaleDateString('el-GR',{day:'numeric',month:'short'}); var st=o.status==='delivered'?'Παραδόθηκε':(o.status==='preparing'?'Προς Προετοιμασία':o.status); return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;'+(i<os.length-1?'border-bottom:1px solid var(--border)':'')+'"><div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--text-1)">#B2B-'+o.id+' · '+dd+'</div><div style="font-size:11px;color:var(--text-2)">'+st+'</div></div><b style="color:#fbbf24">'+_znCustEur(o.total)+'</b></div>'; }).join('')+'</div>';
       }
@@ -16798,6 +16798,74 @@ async function _znB2BEditCust(id){
     if(typeof toast==='function') toast('Αποθηκεύτηκε ως πελάτης χονδρικής','success');
     renderB2BCustomerCard(id);
   }catch(e){ if(typeof toast==='function') toast('Αποτυχία (έλεγξε SQL: customer_type/meta).','error'); }
+}
+
+
+
+function _znB2BDocUpload(custId){
+  var t=prompt('Τύπος εγγράφου:\ninvoice / delivery_note / rma / warranty / credit_note / other','invoice'); if(!t) return; t=t.trim().toLowerCase();
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='application/pdf,image/*';
+  inp.onchange=function(){ var f=inp.files&&inp.files[0]; if(f) _znB2BDoDocUpload(custId,t,f); };
+  inp.click();
+}
+async function _znB2BDoDocUpload(custId,doc_type,f){ /* docVaultP2 */
+  if(typeof sb==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
+  if(typeof toast==='function') toast('Ανέβασμα εγγράφου…','info');
+  try{
+    var buf=await f.arrayBuffer(); var hashHex='';
+    try{ var h=await crypto.subtle.digest('SHA-256',buf); hashHex=Array.from(new Uint8Array(h)).map(function(b){return b.toString(16).padStart(2,'0');}).join(''); }catch(e){}
+    var uuid=(crypto.randomUUID?crypto.randomUUID():(Date.now()+'-'+Math.random().toString(16).slice(2)));
+    var safe=String(f.name||'file').replace(/[^\w.\-]+/g,'_');
+    var path=SHOP_ID+'/b2b/'+custId+'/'+doc_type+'/'+uuid+'-'+safe;
+    var up=await sb.storage.from('vault').upload(path,f,{upsert:false,contentType:(f.type||undefined)});
+    if(up.error) throw up.error;
+    var uid=((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null);
+    var ins=await sb.from('b2b_documents').insert({shop_id:SHOP_ID,customer_id:custId,doc_type:doc_type,file_name:f.name,file_path:path,mime:f.type,size_bytes:f.size,sha256:hashHex,uploaded_by:uid}).select().single();
+    if(ins.error||!ins.data) throw (ins.error||new Error('no id'));
+    try{ await sb.from('b2b_document_log').insert({shop_id:SHOP_ID,document_id:ins.data.id,action:'upload',by_user:uid}); }catch(e){}
+    if(typeof toast==='function') toast('Έγγραφο αποθηκεύτηκε ασφαλώς ✓','success');
+    _znB2BLoadDocs(custId);
+  }catch(e){ console.error('[doc upload]',e); if(typeof toast==='function') toast('Αποτυχία (έλεγξε SQL b2b_documents & bucket vault).','error'); }
+}
+async function _znB2BDocDownload(path,docId){
+  try{
+    var r=await sb.storage.from('vault').createSignedUrl(path,120);
+    if(r.error||!r.data) throw (r.error||new Error('no url'));
+    var uid=((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null);
+    try{ await sb.from('b2b_document_log').insert({shop_id:SHOP_ID,document_id:docId,action:'download',by_user:uid}); }catch(e){}
+    window.open(r.data.signedUrl,'_blank');
+  }catch(e){ if(typeof toast==='function') toast('Αποτυχία λήψης.','error'); }
+}
+async function _znB2BDocDelete(docId,custId){
+  var reason=prompt('Λόγος αφαίρεσης (το αρχείο ΔΕΝ διαγράφεται — μόνο αποκρύπτεται, μένει στο αρχείο):',''); if(reason===null) return;
+  try{
+    var uid=((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null);
+    var r=await sb.from('b2b_documents').update({deleted_at:new Date().toISOString(),deleted_by:uid,delete_reason:reason}).eq('id',docId); if(r&&r.error) throw r.error;
+    try{ await sb.from('b2b_document_log').insert({shop_id:SHOP_ID,document_id:docId,action:'soft_delete',by_user:uid,meta:{reason:reason}}); }catch(e){}
+    _znB2BLoadDocs(custId);
+  }catch(e){ if(typeof toast==='function') toast('Αποτυχία.','error'); }
+}
+async function _znB2BLoadDocs(custId){
+  var box=document.getElementById('znB2BDocs'); if(!box) return;
+  var TYP={invoice:['ΤΙΜΟΛΟΓΙΟ','#fbbf24','rgba(251,191,36,.16)'],delivery_note:['ΔΕΛΤΙΟ ΑΠ.','#22d3ee','rgba(34,211,238,.16)'],rma:['RMA','#ff9d9d','rgba(239,68,68,.16)'],warranty:['ΕΓΓΥΗΣΗ','#86efac','rgba(34,197,94,.16)'],credit_note:['ΠΙΣΤΩΤΙΚΟ','#c9b8ff','rgba(139,92,246,.18)'],other:['ΕΓΓΡΑΦΟ','#8a96b8','rgba(255,255,255,.07)']};
+  var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-2);font-weight:700">📎 Παραστατικά & Έγγραφα</div><span style="font-size:10px;color:#86efac">🔒 ασφαλές</span><button onclick="_znB2BDocUpload(\''+custId+'\')" style="margin-left:auto;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.35);border-radius:9px;padding:6px 10px;font-weight:800;font-size:11.5px;cursor:pointer">＋ Επισύναψη</button></div>';
+  box.innerHTML=head+'<div style="color:var(--text-2);font-size:12px;text-align:center;padding:10px">Φόρτωση…</div>';
+  try{
+    if(typeof sb==='undefined'){ box.innerHTML=head; return; }
+    var r=await sb.from('b2b_documents').select('id,doc_type,file_name,file_path,size_bytes,sha256,created_at').eq('shop_id',SHOP_ID).eq('customer_id',custId).is('deleted_at',null).order('created_at',{ascending:false});
+    var docs=(r&&r.data)?r.data:[];
+    var rows= docs.length? '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:13px;padding:4px 13px">'+docs.map(function(d,i){
+      var ty=TYP[d.doc_type]||TYP.other; var dd=new Date(Date.parse(d.created_at)).toLocaleDateString('el-GR',{day:'numeric',month:'short'});
+      var kb=d.size_bytes?(Math.max(1,Math.round(d.size_bytes/1024))+' KB'):''; var hh=d.sha256?(' · ✓'+String(d.sha256).slice(0,8)):'';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(i<docs.length-1?'border-bottom:1px solid var(--border)':'')+'">'+
+        '<div style="font-size:9px;font-weight:800;padding:4px 7px;border-radius:7px;background:'+ty[2]+';color:'+ty[1]+';flex:0 0 auto">'+ty[0]+'</div>'+
+        '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.file_name+'</div><div style="font-size:11px;color:var(--text-2)">'+dd+(kb?(' · '+kb):'')+' · 🔒'+hh+'</div></div>'+
+        '<button onclick="_znB2BDocDownload(\''+String(d.file_path).replace(/'/g,"")+'\','+d.id+')" style="background:none;border:none;font-size:18px;cursor:pointer">⬇️</button>'+
+        '<button onclick="_znB2BDocDelete('+d.id+',\''+custId+'\')" style="background:none;border:1px solid var(--border);border-radius:7px;color:var(--text-2);cursor:pointer;width:28px;height:28px">✕</button>'+
+      '</div>';
+    }).join('')+'</div>' : '<div style="color:var(--text-2);font-size:12px;text-align:center;padding:12px;background:var(--bg-2);border:1px dashed var(--border);border-radius:12px">Κανένα έγγραφο ακόμη — πάτα «Επισύναψη».</div>';
+    box.innerHTML=head+rows;
+  }catch(e){ console.error('[docs]',e); box.innerHTML=head+'<div style="color:var(--text-2);font-size:12px;text-align:center;padding:10px">Σφάλμα (έλεγξε SQL: b2b_documents).</div>'; }
 }
 
 
