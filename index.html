@@ -16776,11 +16776,13 @@ async function renderB2BCustomerCard(id){ /* b2bCustCardP2 */
     '<div id="znB2BDocs" style="margin-top:12px"></div>'+
     '<div id="znB2BCustOrders" style="margin-top:12px"></div>'+
     '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="renderSalesOrderGrid(\''+cu.id+'\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία</button>'+
+    '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:11px;margin-top:12px"><div id="znCustPlan" style="flex:1;font-size:12.5px;color:var(--text-2)">🏷️ Πλάνο: …</div><button onclick="_znPlanPicker(\''+cu.id+'\')" style="background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.35);border-radius:9px;padding:6px 10px;font-weight:800;font-size:11.5px;cursor:pointer">Αλλαγή</button></div>'+
+    '<button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="renderDiscountPlans()">🏷️ Διαχείριση πλάνων</button>'+
     '<button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="_znB2BEditCust(\''+cu.id+'\')">✏️ '+(cu.customer_type==='wholesale'?'Επεξεργασία B2B στοιχείων':'Μετατροπή σε χονδρικής')+'</button>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   try{
-    if(typeof sb!=='undefined'){ _znB2BLoadDocs(id); var r=await sb.from('b2b_orders').select('id,total,created_at,status').eq('shop_id',SHOP_ID).eq('customer_id',id).order('created_at',{ascending:false}).limit(5);
+    if(typeof sb!=='undefined'){ _znB2BLoadDocs(id); _znB2BLoadPlanLine(id); var r=await sb.from('b2b_orders').select('id,total,created_at,status').eq('shop_id',SHOP_ID).eq('customer_id',id).order('created_at',{ascending:false}).limit(5);
       var os=(r&&r.data)?r.data:[]; var box=document.getElementById('znB2BCustOrders'); if(box&&os.length){
         box.innerHTML='<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Τελευταίες B2B παραγγελίες</div><div style="background:var(--bg-2);border:1px solid var(--border);border-radius:13px;padding:4px 13px">'+os.map(function(o,i){ var dd=new Date(Date.parse(o.created_at)).toLocaleDateString('el-GR',{day:'numeric',month:'short'}); var st=o.status==='delivered'?'Παραδόθηκε':(o.status==='preparing'?'Προς Προετοιμασία':o.status); return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;'+(i<os.length-1?'border-bottom:1px solid var(--border)':'')+'"><div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--text-1)">#B2B-'+o.id+' · '+dd+'</div><div style="font-size:11px;color:var(--text-2)">'+st+'</div></div><b style="color:#fbbf24">'+_znCustEur(o.total)+'</b></div>'; }).join('')+'</div>';
       }
@@ -16898,6 +16900,83 @@ function _znB2BActivePlanTiers(){
   if(!plan) return null;
   var tiers=plan.tiers; if(typeof tiers==='string'){ try{ tiers=JSON.parse(tiers); }catch(e){ tiers=[]; } }
   return Array.isArray(tiers)?tiers:null;
+}
+
+
+
+async function _znFetchPlans(){ try{ if(typeof sb==='undefined') return []; var r=await sb.from('discount_plans').select('id,name,basis,tiers,is_default,active').eq('shop_id',SHOP_ID).order('id'); return (r&&r.data)?r.data:[]; }catch(e){ return []; } }
+function _znNormPlan(p){ var t=p.tiers; if(typeof t==='string'){ try{t=JSON.parse(t);}catch(e){t=[];} } p.tiers=Array.isArray(t)?t:[]; return p; }
+async function renderDiscountPlans(){ /* discMgrP2c5 */
+  var c=document.getElementById('content'); if(!c) return;
+  c.innerHTML='<div style="max-width:560px;margin:0 auto"><button class="btn btn-ghost" style="margin-bottom:10px;width:auto;padding:8px 14px" onclick="_znSetCustTab(\'b2b\')"><i data-lucide="chevron-left" size="16"></i> Πελάτες χονδρικής</button><div style="font-size:18px;font-weight:800;color:var(--text-1)">Εκπτωτικά πλάνα</div><div style="color:var(--text-2);font-size:12px;margin-bottom:12px">Βαθμίδες ανά αξία παραγγελίας (καθαρή αξία)</div><div id="znPlansBody" style="color:var(--text-2);text-align:center;padding:20px">Φόρτωση…</div></div>';
+  if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
+  var plans=await _znFetchPlans(); window.DISCOUNT_PLANS=plans;
+  window._znPlans=JSON.parse(JSON.stringify(plans)).map(_znNormPlan);
+  _znPlansRender();
+}
+function _znPlanSet(i,f,v){ if(window._znPlans[i]) window._znPlans[i][f]=v; }
+function _znPlanTierSet(i,j,f,v){ var p=window._znPlans[i]; if(p&&p.tiers[j]) p.tiers[j][f]=(parseFloat(v)||0); }
+function _znPlanAddTier(i){ var p=window._znPlans[i]; if(p){ p.tiers.push({min:0,pct:0}); _znPlansRender(); } }
+function _znPlanDelTier(i,j){ var p=window._znPlans[i]; if(p){ p.tiers.splice(j,1); _znPlansRender(); } }
+function _znPlanNew(){ window._znPlans.push({name:'Νέο πλάνο',basis:'amount',tiers:[{min:0,pct:0}],is_default:false,active:true}); _znPlansRender(); }
+function _znPlanDefault(i){ window._znPlans.forEach(function(p,k){ p.is_default=(k===i); }); _znPlansRender(); }
+function _znPlansRender(){
+  var box=document.getElementById('znPlansBody'); if(!box) return; var plans=window._znPlans||[];
+  var html=plans.map(function(p,i){
+    var tiers=(p.tiers||[]).map(function(t,j){
+      return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0"><span style="font-size:12px;color:var(--text-2)">από</span><input type="number" inputmode="numeric" value="'+(t.min||0)+'" onchange="_znPlanTierSet('+i+','+j+',\'min\',this.value)" style="width:90px;background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:8px;color:var(--text-1);font-size:14px"><span style="color:var(--text-2)">€ →</span><input type="number" inputmode="numeric" value="'+(t.pct||0)+'" onchange="_znPlanTierSet('+i+','+j+',\'pct\',this.value)" style="width:64px;background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:8px;color:#86efac;font-weight:800;font-size:14px;text-align:center"><span style="color:var(--text-2)">%</span><button onclick="_znPlanDelTier('+i+','+j+')" style="margin-left:auto;width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--text-2);cursor:pointer">✕</button></div>';
+    }).join('');
+    return '<div style="background:var(--bg-2);border:1px solid '+(p.is_default?'rgba(251,191,36,.4)':'var(--border)')+';border-radius:14px;padding:13px;margin-bottom:12px">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input value="'+String(p.name||'').replace(/"/g,'&quot;')+'" onchange="_znPlanSet('+i+',\'name\',this.value)" style="flex:1;background:var(--bg-1);border:1px solid var(--border);border-radius:9px;padding:9px;color:var(--text-1);font-weight:700;font-size:14px">'+
+        '<button onclick="_znPlanDefault('+i+')" style="font-size:10.5px;font-weight:800;padding:7px 10px;border-radius:9px;cursor:pointer;border:1px solid '+(p.is_default?'#fbbf24':'var(--border)')+';background:'+(p.is_default?'rgba(251,191,36,.16)':'transparent')+';color:'+(p.is_default?'#fbbf24':'var(--text-2)')+'">'+(p.is_default?'★ Προεπιλογή':'Ορισμός default')+'</button></div>'+
+      tiers+
+      '<button onclick="_znPlanAddTier('+i+')" style="width:100%;border:1px dashed var(--border);border-radius:10px;padding:9px;color:var(--text-2);background:rgba(255,255,255,.02);font-weight:700;font-size:12.5px;cursor:pointer;margin:6px 0 10px">＋ Βαθμίδα</button>'+
+      '<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="_znPlanSave('+i+')">💾 Αποθήκευση</button>'+(p.id?'<button class="btn btn-ghost" style="width:auto;padding:12px 14px" onclick="_znPlanDelete('+i+')">🗑</button>':'')+'</div>'+
+    '</div>';
+  }).join('');
+  box.outerHTML='<div id="znPlansBody">'+html+'<button class="btn btn-ghost" style="width:100%" onclick="_znPlanNew()">＋ Νέο πλάνο</button></div>';
+}
+async function _znPlanSave(i){
+  var p=window._znPlans[i]; if(!p) return; if(typeof sb==='undefined'){ if(typeof toast==='function')toast('Σφάλμα σύνδεσης','error'); return; }
+  var payload={shop_id:SHOP_ID,name:(p.name||'Πλάνο'),basis:(p.basis||'amount'),tiers:(p.tiers||[]),is_default:!!p.is_default,active:(p.active!==false)};
+  try{
+    var savedId=p.id;
+    if(p.id){ var u=await sb.from('discount_plans').update(payload).eq('id',p.id); if(u&&u.error) throw u.error; }
+    else { var ins=await sb.from('discount_plans').insert(payload).select().single(); if(ins.error||!ins.data) throw (ins.error||new Error('no id')); savedId=ins.data.id; }
+    if(p.is_default&&savedId!=null){ try{ await sb.from('discount_plans').update({is_default:false}).eq('shop_id',SHOP_ID).neq('id',savedId); }catch(e){} }
+    if(typeof toast==='function')toast('Το πλάνο αποθηκεύτηκε','success');
+    window.DISCOUNT_PLANS=null; renderDiscountPlans();
+  }catch(e){ console.error('[plan save]',e); if(typeof toast==='function')toast('Αποτυχία (έλεγξε SQL discount_plans).','error'); }
+}
+async function _znPlanDelete(i){
+  var p=window._znPlans[i]; if(!p||!p.id) { window._znPlans.splice(i,1); _znPlansRender(); return; }
+  if(!confirm('Διαγραφή πλάνου «'+(p.name||'')+'»;')) return;
+  try{ var r=await sb.from('discount_plans').delete().eq('id',p.id); if(r&&r.error) throw r.error; window.DISCOUNT_PLANS=null; renderDiscountPlans(); }
+  catch(e){ if(typeof toast==='function')toast('Αποτυχία διαγραφής.','error'); }
+}
+async function _znPlanPicker(custId){
+  var c=document.getElementById('content'); if(!c) return;
+  var plans=await _znFetchPlans(); window.DISCOUNT_PLANS=plans;
+  var cu=(CUSTOMERS||[]).find(function(x){return x.id==custId;})||{}; var cur=(cu.meta&&cu.meta.discount_plan_id)||null;
+  function opt(label,sub,sel,onc){ return '<div onclick="'+onc+'" style="display:flex;align-items:center;gap:10px;background:var(--bg-2);border:1px solid '+(sel?'#fbbf24':'var(--border)')+';border-radius:13px;padding:13px;margin-bottom:9px;cursor:pointer"><div style="flex:1"><div style="font-weight:700;font-size:14px;color:var(--text-1)">'+label+'</div><div style="font-size:11.5px;color:var(--text-2)">'+sub+'</div></div>'+(sel?'<span style="color:#fbbf24;font-weight:800">✓</span>':'')+'</div>'; }
+  var rows=opt('Προεπιλογή συστήματος','Χρησιμοποιεί το default πλάνο', cur==null, '_znAssignPlan(\''+custId+'\',null)');
+  rows+=plans.filter(function(p){return p.active!==false;}).map(function(p){ var pv=(_znNormPlan(p).tiers||[]).map(function(t){return (t.min||0)+'€→'+(t.pct||0)+'%';}).join(' · '); return opt(p.name+(p.is_default?' (default)':''), pv||'—', cur==p.id, '_znAssignPlan(\''+custId+'\','+p.id+')'); }).join('');
+  c.innerHTML='<div style="max-width:560px;margin:0 auto"><button class="btn btn-ghost" style="margin-bottom:10px;width:auto;padding:8px 14px" onclick="renderB2BCustomerCard(\''+custId+'\')"><i data-lucide="chevron-left" size="16"></i> Καρτέλα</button><div style="font-size:18px;font-weight:800;color:var(--text-1)">Πλάνο για '+(cu.name||'')+'</div><div style="color:var(--text-2);font-size:12px;margin-bottom:12px">Διάλεξε εκπτωτικό πλάνο</div>'+rows+'</div>';
+  if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
+}
+async function _znAssignPlan(custId,planId){
+  var cu=(CUSTOMERS||[]).find(function(x){return x.id==custId;}); if(!cu) return; var meta=Object.assign({},cu.meta||{});
+  if(planId==null) delete meta.discount_plan_id; else meta.discount_plan_id=planId;
+  try{ var r=await sb.from('customers').update({meta:meta}).eq('id',custId); if(r&&r.error) throw r.error; cu.meta=meta; if(typeof toast==='function')toast('Το πλάνο ανατέθηκε','success'); renderB2BCustomerCard(custId); }
+  catch(e){ if(typeof toast==='function')toast('Αποτυχία (έλεγξε meta στους πελάτες).','error'); }
+}
+async function _znB2BLoadPlanLine(custId){
+  var box=document.getElementById('znCustPlan'); if(!box) return;
+  try{ if(window.DISCOUNT_PLANS===null){ window.DISCOUNT_PLANS=await _znFetchPlans(); } }catch(e){}
+  var plans=window.DISCOUNT_PLANS||[]; var cu=(CUSTOMERS||[]).find(function(x){return x.id==custId;});
+  var pid=(cu&&cu.meta&&cu.meta.discount_plan_id)||null; var plan=null;
+  if(pid!=null) plan=plans.find(function(p){return p.id==pid;}); var isDef=false; if(!plan){ plan=plans.find(function(p){return p.is_default;}); isDef=true; }
+  box.innerHTML='🏷️ Πλάνο: <b style="color:var(--text-1)">'+(plan?plan.name:'Προεπιλογή')+'</b>'+(isDef&&plan?' <span style="font-size:10px;color:var(--text-2)">(default)</span>':'');
 }
 
 
