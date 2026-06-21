@@ -17554,6 +17554,7 @@ async function clockIn(){
   const tasksJson = roleTasks.map(t=>({
     text: t.text,
     phase: t.phase || 'during',
+    type: t.type || 'simple',
     scheduledTime: t.scheduledTime || null,
     done: false
   }));
@@ -17667,7 +17668,7 @@ async function clockOut(){
           <label style="display:flex;gap:8px;align-items:center;padding:7px 10px;background:var(--bg-1);border-radius:8px;cursor:pointer;${t.done?'opacity:0.5':''}">
             <input type="checkbox" ${t.done?'checked':''} onchange="_toggleClockOutTask(${active.id}, ${i}, this.checked)" style="cursor:pointer">
             <span class="text-sm" style="${t.done?'text-decoration:line-through':''}">${t.text}</span>
-          </label>`).join('')}
+          </label>${(t.type==='vehicle'&&!t.done)?('<button id="znVehBtn_'+i+'" onclick="_znVehHandover('+active.id+','+i+')" style="margin:4px 0 6px 26px;background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:6px 10px;font-weight:700;font-size:12px;cursor:pointer;display:block">🚐 Καταχώρηση παράδοσης οχήματος</button>'):''}`).join('')}
       </div>
     </div>
 

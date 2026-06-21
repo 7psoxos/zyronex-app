@@ -17058,6 +17058,24 @@ function _znB2BFreeBadge(p){
 }
 
 
+
+function _znVehHandover(shiftId, idx){ /* vehDutyP2c9 */
+  var km=prompt('🚐 Παράδοση οχήματος\n\nΧιλιόμετρα παράδοσης:',''); if(km===null) return;
+  var cond=confirm('Όχημα χωρίς εμφανή βλάβη;\n\nOK = Χωρίς βλάβη   ·   Άκυρο = Με βλάβη')?'ok':'damage';
+  var rec={km:String(km||'').trim(), condition:cond, at:new Date().toISOString(), gps:null};
+  function finish(){
+    try{ var shift=(typeof SHIFTS_CACHE!=='undefined'?SHIFTS_CACHE:[]).find(function(s){return s.id===shiftId;}); if(shift&&shift.tasks&&shift.tasks[idx]){ shift.tasks[idx].handover=rec; } }catch(e){}
+    var cb=document.querySelector('input[type=checkbox][onchange*="_toggleClockOutTask('+shiftId+', '+idx+'"]');
+    if(cb){ cb.checked=true; try{ cb.dispatchEvent(new Event('change')); }catch(e){ if(typeof _toggleClockOutTask==='function') _toggleClockOutTask(shiftId, idx, true); } }
+    else if(typeof _toggleClockOutTask==='function'){ _toggleClockOutTask(shiftId, idx, true); }
+    var bt=document.getElementById('znVehBtn_'+idx); if(bt){ bt.textContent='✓ Παράδοση καταχωρήθηκε'+(rec.condition==='damage'?' (με βλάβη)':''); bt.disabled=true; bt.style.opacity='0.6'; }
+    if(typeof toast==='function') toast('Παράδοση οχήματος καταχωρήθηκε','success');
+  }
+  if(navigator.geolocation){ try{ navigator.geolocation.getCurrentPosition(function(p){ rec.gps={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}; finish(); }, function(){ finish(); }, {timeout:6000,maximumAge:60000}); }catch(e){ finish(); } }
+  else finish();
+}
+
+
 function showPage(p, _navOpts) {
   // 🛡️ Validate page parameter
   if (!p || typeof p !== 'string') {
