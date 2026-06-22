@@ -16469,6 +16469,7 @@ function renderSalesHub(){ /* saleshubChunk1 */
     '</div>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
+  _znFanInject();
 }
 
 function openSalesClient(id){ /* salesClientChunk2 */
@@ -17363,6 +17364,74 @@ async function _znLoadVanSave(){
   window._znVehId=vehId; window._znVanLoad=[];
   if(typeof toast==='function') toast('Φορτώθηκαν '+ok+' προϊόντα'+(fail?(' ('+fail+' απέτυχαν)'):''), fail?'warn':'success');
   if(typeof renderSalesHub==='function') renderSalesHub();
+}
+
+
+/* salesFanP9 — self-contained floating Fan Menu for the seller saleshub (does NOT touch #znFan) */
+function _znFanEsc(s){ return (typeof _znEscNote==='function')?_znEscNote(s):String(s==null?'':s); }
+function _znFanInject(){
+  var c=document.getElementById('content'); if(!c) return;
+  if(document.getElementById('znFanFab')) return;
+  var IT='position:fixed;bottom:104px;left:50%;width:48px;height:48px;border-radius:50%;background:var(--bg-2,#1d2740);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:799;opacity:0;pointer-events:none;transition:.28s cubic-bezier(.2,1.2,.4,1);transform:translateX(-50%);box-shadow:0 4px 14px rgba(0,0,0,.35)';
+  var w=document.createElement('div'); w.id='znFanWrap';
+  w.innerHTML=
+    '<div id="znFanScrim" onclick="_znFanClose()" style="position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:.2s;z-index:798"></div>'+
+    '<div id="znFanI0" onclick="_znFanOrder()" style="'+IT+'">🛒</div>'+
+    '<div id="znFanI1" onclick="_znFanPhoto()" style="'+IT+'">📸</div>'+
+    '<div id="znFanI2" onclick="_znFanNote()" style="'+IT+'">📝</div>'+
+    '<div id="znFanI3" onclick="_znFanCheckin()" style="'+IT+'">📍</div>'+
+    '<input type="file" id="znAuditFile" accept="image/*" capture="environment" style="display:none" onchange="_znAuditPhoto(this)">'+
+    '<button id="znFanFab" data-open="0" onclick="_znFanToggle()" style="position:fixed;bottom:98px;left:50%;transform:translateX(-50%);width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#fbbf24,#d9961a);border:none;color:#1a1206;font-size:30px;font-weight:800;box-shadow:0 8px 24px rgba(251,191,36,.45);cursor:pointer;z-index:800;transition:transform .25s">＋</button>';
+  c.appendChild(w);
+}
+function _znFanToggle(){ var f=document.getElementById('znFanFab'); if(!f) return; if(f.dataset.open==='1') _znFanClose(); else _znFanOpen(); }
+function _znFanOpen(){
+  var f=document.getElementById('znFanFab'); if(f){ f.dataset.open='1'; f.style.transform='translateX(-50%) rotate(45deg)'; }
+  var sc=document.getElementById('znFanScrim'); if(sc){ sc.style.opacity='1'; sc.style.pointerEvents='auto'; }
+  var pos=[[-120,-40],[-44,-92],[44,-92],[120,-40]];
+  for(var i=0;i<4;i++){ var el=document.getElementById('znFanI'+i); if(el){ el.style.transform='translate(calc(-50% + '+pos[i][0]+'px), '+pos[i][1]+'px)'; el.style.opacity='1'; el.style.pointerEvents='auto'; } }
+}
+function _znFanClose(){
+  var f=document.getElementById('znFanFab'); if(f){ f.dataset.open='0'; f.style.transform='translateX(-50%)'; }
+  var sc=document.getElementById('znFanScrim'); if(sc){ sc.style.opacity='0'; sc.style.pointerEvents='none'; }
+  for(var i=0;i<4;i++){ var el=document.getElementById('znFanI'+i); if(el){ el.style.transform='translateX(-50%)'; el.style.opacity='0'; el.style.pointerEvents='none'; } }
+}
+function _znFanOrder(){ _znFanClose(); if(typeof showPage==='function') showPage('customers'); }
+function _znFanNote(){ _znFanClose(); _znQuickNoteOpen(); }
+function _znFanPhoto(){ _znFanClose(); var el=document.getElementById('znAuditFile'); if(el) el.click(); }
+function _znFanCheckin(){ _znFanClose(); _znVisitCheckin(); }
+function _znQuickNotesGet(){ try{ return JSON.parse(localStorage.getItem('zn_quicknotes')||'[]'); }catch(e){ return []; } }
+function _znQuickNotesSet(a){ try{ localStorage.setItem('zn_quicknotes', JSON.stringify(a)); }catch(e){} }
+function _znQuickNoteOpen(){
+  var notes=_znQuickNotesGet();
+  var list=notes.length?notes.map(function(n,i){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+_znFanEsc(n.t)+'<div style="font-size:10px;color:var(--text-2);margin-top:2px">'+_znFanEsc(n.d)+'</div></span><span onclick="_znQuickNoteDel('+i+')" style="cursor:pointer;color:var(--text-2);font-weight:800">✕</span></div>'; }).join(''):'<div style="font-size:12px;color:var(--text-2)">Καμία σημείωση ακόμη.</div>';
+  var html='<h3 style="margin:0 0 12px;font-size:17px;font-weight:800;color:var(--text-1)">📝 Γρήγορη σημείωση</h3>'+
+    '<textarea id="znQNote" rows="3" placeholder="Γράψε κάτι..." style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);font-size:14px;margin-bottom:10px"></textarea>'+
+    '<button onclick="_znQuickNoteSave()" style="width:100%;background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer">Αποθήκευση</button>'+
+    '<div style="margin-top:14px">'+list+'</div>'+
+    '<button onclick="closeModal()" style="width:100%;margin-top:14px;background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer">Κλείσιμο</button>';
+  if(typeof openModal==='function') openModal(html);
+}
+function _znQuickNoteSave(){ var el=document.getElementById('znQNote'); var t=(el?el.value:'').trim(); if(!t) return; var a=_znQuickNotesGet(); a.unshift({t:t,d:new Date().toLocaleString('el-GR')}); _znQuickNotesSet(a); if(typeof toast==='function') toast('Σημείωση αποθηκεύτηκε','success'); _znQuickNoteOpen(); }
+function _znQuickNoteDel(i){ var a=_znQuickNotesGet(); a.splice(i,1); _znQuickNotesSet(a); _znQuickNoteOpen(); }
+async function _znAuditPhoto(input){
+  var f=input.files[0]; input.value=''; if(!f) return;
+  if(typeof sb==='undefined'||typeof SHOP_ID==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
+  if(typeof toast==='function') toast('📸 Ανέβασμα...','info');
+  try{
+    var up=await sb.storage.from('vault').upload(SHOP_ID+'/store-audits/'+Date.now()+'.jpg', f, {upsert:true,contentType:f.type||'image/jpeg'});
+    if(up.error) throw up.error;
+    if(typeof toast==='function') toast('📸 Φωτογραφία ραφιού αποθηκεύτηκε','success');
+  }catch(e){ if(typeof toast==='function') toast('Σφάλμα αποθήκευσης φωτό','error'); }
+}
+function _znVisitCheckin(){
+  if(!navigator.geolocation){ if(typeof toast==='function') toast('GPS μη διαθέσιμο (κυρίως Android)','warn'); return; }
+  if(typeof toast==='function') toast('📍 Λήψη τοποθεσίας...','info');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var rec={lat:pos.coords.latitude,lng:pos.coords.longitude,ts:new Date().toISOString()};
+    try{ var a=JSON.parse(localStorage.getItem('zn_checkins')||'[]'); a.unshift(rec); localStorage.setItem('zn_checkins',JSON.stringify(a)); }catch(e){}
+    if(typeof toast==='function') toast('📍 Check-in: '+rec.lat.toFixed(4)+', '+rec.lng.toFixed(4),'success');
+  }, function(){ if(typeof toast==='function') toast('Δεν δόθηκε τοποθεσία','warn'); }, {timeout:6000,maximumAge:60000});
 }
 
 function showPage(p, _navOpts) {
