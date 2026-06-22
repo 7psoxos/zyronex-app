@@ -16779,7 +16779,7 @@ async function renderB2BCustomerCard(id){ /* b2bCustCardP2 */
       '<div style="font-size:11.5px;color:var(--text-2);margin-top:10px">Όροι πληρωμής: <b style="color:var(--text-1)">'+(meta.payment_terms||'—')+'</b></div>'+
     '</div>'+
     '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-top:12px">'+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+'<div style="font-size:12.5px;font-weight:800;color:var(--text-1)">📝 Smart Notes</div>'+'<button onclick="_znB2BAddNote(\''+cu.id+'\')" style="background:var(--amber);color:#1a1206;border:none;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">＋ νέα</button>'+'</div>'+_znB2BNotesHTML(cu)+'</div>'+'<div id="znB2BDocs" style="margin-top:12px"></div>'+
-    '<div id="znB2BCustOrders" style="margin-top:12px"></div>'+
+    '<div id="znB2BCustOrders" style="margin-top:12px"></div>'+'<div id="znB2BRestock" style="margin-top:12px"></div>'+
     '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="renderSalesOrderGrid(\''+cu.id+'\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία</button>'+
     '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:11px;margin-top:12px"><div id="znCustPlan" style="flex:1;font-size:12.5px;color:var(--text-2)">🏷️ Πλάνο: …</div><button onclick="_znPlanPicker(\''+cu.id+'\')" style="background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.35);border-radius:9px;padding:6px 10px;font-weight:800;font-size:11.5px;cursor:pointer">Αλλαγή</button></div>'+
     '<button class="btn btn-ghost" style="width:100%;margin-top:10px" onclick="renderDiscountPlans()">🏷️ Διαχείριση πλάνων</button>'+
@@ -16787,7 +16787,7 @@ async function renderB2BCustomerCard(id){ /* b2bCustCardP2 */
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   try{
-    if(typeof sb!=='undefined'){ _znB2BLoadDocs(id); _znB2BLoadPlanLine(id); var r=await sb.from('b2b_orders').select('id,total,created_at,status').eq('shop_id',SHOP_ID).eq('customer_id',id).order('created_at',{ascending:false}).limit(5);
+    if(typeof sb!=='undefined'){ _znB2BLoadDocs(id); _znB2BLoadPlanLine(id); _znB2BRestock(id); var r=await sb.from('b2b_orders').select('id,total,created_at,status').eq('shop_id',SHOP_ID).eq('customer_id',id).order('created_at',{ascending:false}).limit(5);
       var os=(r&&r.data)?r.data:[]; var box=document.getElementById('znB2BCustOrders'); if(box&&os.length){
         box.innerHTML='<div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Τελευταίες B2B παραγγελίες</div><div style="background:var(--bg-2);border:1px solid var(--border);border-radius:13px;padding:4px 13px">'+os.map(function(o,i){ var dd=new Date(Date.parse(o.created_at)).toLocaleDateString('el-GR',{day:'numeric',month:'short'}); var st=o.status==='delivered'?'Παραδόθηκε':(o.status==='preparing'?'Προς Προετοιμασία':o.status); return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;'+(i<os.length-1?'border-bottom:1px solid var(--border)':'')+'"><div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--text-1)">#B2B-'+o.id+' · '+dd+'</div><div style="font-size:11px;color:var(--text-2)">'+st+'</div></div><b style="color:#fbbf24">'+_znCustEur(o.total)+'</b></div>'; }).join('')+'</div>';
       }
@@ -17176,6 +17176,44 @@ async function _znSigUpload(oid){
     await sb.storage.from('vault').upload(SHOP_ID+'/signatures/'+oid+'.json',mblob,{upsert:true,contentType:'application/json'});
   }catch(_e){ /* non-fatal: order already committed */ }
   window._znB2BSig=null; window._znB2BSigGeo=null;
+}
+
+
+/* predRestockP4 — Predictive Restock suggestion (read-only from b2b history) */
+async function _znB2BRestock(custId){
+  var box=document.getElementById('znB2BRestock'); if(!box||typeof sb==='undefined') return;
+  try{
+    var ro=await sb.from('b2b_orders').select('id').eq('customer_id',custId).order('created_at',{ascending:false}).limit(10);
+    var ids=((ro&&ro.data)||[]).map(function(o){return o.id;});
+    if(!ids.length){ box.innerHTML=''; return; }
+    var ri=await sb.from('b2b_order_items').select('product_id,product_name,qty,unit_price').in('order_id',ids);
+    var rows=(ri&&ri.data)||[]; var agg={};
+    rows.forEach(function(r){
+      var q=parseFloat(r.qty)||0; if(!r.product_id||q<=0) return;
+      if((parseFloat(r.unit_price)||0)<=0) return;
+      var a=agg[r.product_id]||(agg[r.product_id]={name:r.product_name,sum:0,cnt:0});
+      a.sum+=q; a.cnt++;
+    });
+    var sug=Object.keys(agg).map(function(pid){ var a=agg[pid]; return {pid:pid,name:a.name,cnt:a.cnt,avg:Math.max(1,Math.round(a.sum/a.cnt))}; })
+              .filter(function(x){ return x.cnt>=2; })
+              .sort(function(a,b){ return b.cnt-a.cnt; }).slice(0,6);
+    if(!sug.length){ box.innerHTML=''; return; }
+    window._znB2BRestockSug=window._znB2BRestockSug||{}; window._znB2BRestockSug[custId]=sug;
+    var esc=(typeof _znEscNote==='function')?_znEscNote:function(s){return s;};
+    var list=sug.map(function(x){ return '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+esc(x.name||'—')+'</span><b>'+x.avg+' τμχ</b></div>'; }).join('');
+    box.innerHTML='<div style="background:linear-gradient(135deg,rgba(251,191,36,.10),rgba(139,124,246,.08));border:1px solid rgba(251,191,36,.22);border-radius:14px;padding:14px">'+
+      '<div style="font-size:12.5px;font-weight:800;color:var(--text-1);margin-bottom:2px">🔮 Προτεινόμενη αναπλήρωση</div>'+
+      '<div style="font-size:11px;color:var(--text-2);margin-bottom:8px">Βάσει του ιστορικού του πελάτη (μέσος όρος ανά παραγγελία).</div>'+
+      list+
+      '<button onclick="_znB2BApplyRestock(\''+custId+'\')" style="margin-top:10px;width:100%;background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:11px;font-size:13.5px;font-weight:800;cursor:pointer">✓ Νέα παραγγελία με πρόταση</button></div>';
+  }catch(e){ try{ box.innerHTML=''; }catch(_){} }
+}
+function _znB2BApplyRestock(custId){
+  var sug=(window._znB2BRestockSug||{})[custId]||[]; if(!sug.length||!window._znB2B) return;
+  window._znB2B.cust=custId; window._znB2B.pcs={}; window._znB2B.bx={}; window._znB2B.box={};
+  sug.forEach(function(x){ if((PRODUCTS||[]).some(function(p){return p.id==x.pid;})) window._znB2B.pcs[x.pid]=x.avg; });
+  if(typeof renderSalesOrderGrid==='function') renderSalesOrderGrid(custId);
+  if(typeof toast==='function') toast('Καλάθι προ-συμπληρώθηκε','success');
 }
 
 function showPage(p, _navOpts) {
