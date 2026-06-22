@@ -16463,7 +16463,7 @@ function renderSalesHub(){ /* saleshubChunk1 */
     '<div style="color:var(--text-2);font-size:13px;margin-bottom:16px;text-transform:capitalize">'+dateStr+' · '+agenda.length+' επισκέψεις σήμερα</div>'+'<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+'<div><div style="font-weight:800;color:var(--text-1);font-size:14px">🌅 Ταμείο εκκίνησης</div>'+'<div style="font-size:13px;color:var(--text-2);margin-top:2px">'+(function(){ var s=((typeof SHIFTS_CACHE!=='undefined'&&SHIFTS_CACHE)||[]).find(function(x){return x.user_id===u.id&&!x.ended_at;}); return (s&&s.start_float!=null&&parseFloat(s.start_float)>0)?(parseFloat(s.start_float).toFixed(2).replace('.',',')+' €'):'Δεν έχει δηλωθεί'; })()+'</div></div>'+'<button onclick="_znStartDayFloat()" style="background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">Δήλωσε</button>'+'</div>'+
     '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Ατζέντα — δρομολόγιο επισκέψεων</div>'+
     rows+
-    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderCashClose()">🧮 Συμφωνία Ταμείου</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderReturnStock()">📤 Επιστροφή Στοκ</button>'+
+    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderCashClose()">🧮 Συμφωνία Ταμείου</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderReturnStock()">📤 Επιστροφή Στοκ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" id="znGeoBtn" onclick="_znGeoToggle()">📍 Auto-εντοπισμός πελατών: '+(window._znGeoWatch!=null?'ON':'OFF')+'</button>'+
     '<div onclick="renderMyZone()" style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-top:14px;cursor:pointer">'+
       '<div style="font-weight:800;color:'+AM+';margin-bottom:4px">📊 My Zone</div>'+
       '<div style="font-size:12.5px;color:var(--text-2)">Δες τα στατιστικά της ζώνης σου ›</div>'+
@@ -17629,6 +17629,41 @@ async function _znReturnStockDo(vehId){
   }catch(e){ if(typeof toast==='function') toast('Σφάλμα φόρτωσης στοκ','error'); return; }
   if(typeof toast==='function') toast('Επιστράφηκαν '+ok+' προϊόντα'+(fail?(' ('+fail+' απέτυχαν)'):''), fail?'warn':'success');
   if(typeof renderReturnStock==='function') renderReturnStock();
+}
+
+
+/* geofenceP10 — foreground opt-in geofence: watchPosition while ON, toast when near an agenda customer (Android-mainly). Reuses gpsDistance (meters). */
+function _znGeoSyncBtn(){ var b=document.getElementById('znGeoBtn'); if(b){ var on=window._znGeoWatch!=null; b.textContent='📍 Auto-εντοπισμός πελατών: '+(on?'ON':'OFF'); b.style.color=on?'#22c55e':''; } }
+function _znGeoTick(pos){
+  try{
+    if(typeof gpsDistance!=='function'||!pos||!pos.coords) return;
+    var la=pos.coords.latitude, lo=pos.coords.longitude;
+    var list=(typeof CUSTOMERS!=='undefined'?(CUSTOMERS||[]):[]);
+    if(!window._znGeoNotified) window._znGeoNotified={};
+    for(var i=0;i<list.length;i++){
+      var cu=list[i]; if(!cu) continue;
+      var cla=parseFloat(cu.lat), clo=parseFloat(cu.lng);
+      if(isNaN(cla)||isNaN(clo)) continue;
+      var d=gpsDistance(la,lo,cla,clo); var id=cu.id;
+      if(d<=150){
+        if(!window._znGeoNotified[id]){ window._znGeoNotified[id]=true; if(typeof toast==='function') toast('📍 Κοντά: '+(cu.name||cu.company||('#'+id))+' ('+Math.round(d)+'m)','info',4500); }
+      } else if(d>320){ if(window._znGeoNotified[id]) delete window._znGeoNotified[id]; }
+    }
+  }catch(e){}
+}
+function _znGeoToggle(){
+  if(!navigator.geolocation){ if(typeof toast==='function') toast('GPS μη διαθέσιμο (κυρίως Android)','warn'); return; }
+  if(window._znGeoWatch!=null){
+    try{ navigator.geolocation.clearWatch(window._znGeoWatch); }catch(_){}
+    window._znGeoWatch=null; _znGeoSyncBtn();
+    if(typeof toast==='function') toast('Auto-εντοπισμός: OFF','info'); return;
+  }
+  if(!window._znGeoNotified) window._znGeoNotified={};
+  try{
+    window._znGeoWatch=navigator.geolocation.watchPosition(_znGeoTick, function(){ if(typeof toast==='function') toast('Δεν δόθηκε τοποθεσία','warn'); }, {enableHighAccuracy:true,maximumAge:15000,timeout:20000});
+    _znGeoSyncBtn();
+    if(typeof toast==='function') toast('📍 Auto-εντοπισμός: ON','success');
+  }catch(e){ if(typeof toast==='function') toast('Σφάλμα GPS','error'); }
 }
 
 function showPage(p, _navOpts) {
