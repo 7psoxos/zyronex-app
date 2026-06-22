@@ -17711,6 +17711,74 @@ function _znEnqueueOrder(cuid, st, T, deliv){
   }catch(e){ window._znB2BBusy=false; if(typeof toast==='function') toast('Σφάλμα τοπικής αποθήκευσης','error'); if(typeof renderB2BCheckout==='function') renderB2BCheckout(); }
 }
 
+
+/* offlineSyncP11b — sync engine + status pill for the offline outbox (idempotent; no new SQL) */
+async function _znSyncOne(rec){
+  if(!rec||!rec.hdr) throw new Error('bad rec');
+  if(typeof sb==='undefined') throw new Error('no sb');
+  var oid=null;
+  // 1) header — idempotent via client_uuid unique index
+  var ins=await sb.from('b2b_orders').insert(rec.hdr).select().single();
+  if(ins.error||!ins.data){
+    var ex=await sb.from('b2b_orders').select('id').eq('client_uuid', rec.client_uuid).limit(1);
+    if(ex.error) throw (ins.error||ex.error);
+    if(ex.data&&ex.data.length){ oid=ex.data[0].id; } else { throw (ins.error||new Error('no id')); }
+  } else { oid=ins.data.id; }
+  // 2) items — only if none exist yet (insert is atomic per request)
+  if(rec.items&&rec.items.length){
+    var ic=await sb.from('b2b_order_items').select('id').eq('order_id',oid).limit(1);
+    if(!ic.error && (!ic.data||!ic.data.length)){
+      var items=rec.items.map(function(it){ var o={}; for(var k in it){ o[k]=it[k]; } o.order_id=oid; return o; });
+      var ii=await sb.from('b2b_order_items').insert(items); if(ii.error) throw ii.error;
+    }
+  }
+  // 3) vehicle_stock deltas — applied EXACTLY ONCE per product (persisted flag), only for fleet
+  if(rec.deliv==='fleet' && rec.hdr.vehicle_id && rec.stockDeltas && rec.stockDeltas.length){
+    if(!rec.stockDone) rec.stockDone={};
+    for(var j=0;j<rec.stockDeltas.length;j++){
+      var d=rec.stockDeltas[j]; var key=String(d.product_id);
+      if(rec.stockDone[key]) continue;
+      var pid=Number(d.product_id); var now=new Date().toISOString();
+      var vr=await sb.from('vehicle_stock').select('id,qty').eq('shop_id',rec.hdr.shop_id).eq('vehicle_id',rec.hdr.vehicle_id).eq('product_id',pid).limit(1);
+      if(vr.error) throw vr.error;
+      if(vr.data&&vr.data.length){ var nq=Math.max(0,Number(vr.data[0].qty)-Number(d.qty)); var uv=await sb.from('vehicle_stock').update({qty:nq,updated_at:now}).eq('id',vr.data[0].id); if(uv.error) throw uv.error; }
+      rec.stockDone[key]=true; try{ await _znOutboxAdd(rec); }catch(_){}
+    }
+  }
+  return 'done';
+}
+async function _znSyncOutbox(){
+  if(window._znSyncing) return; if(typeof sb==='undefined') return; if(typeof navigator!=='undefined' && navigator.onLine===false) return;
+  window._znSyncing=true; var synced=0;
+  try{
+    var all=[]; try{ all=await _znOutboxAll(); }catch(e){ all=[]; }
+    for(var i=0;i<all.length;i++){
+      var rec=all[i]; if(!rec) continue;
+      try{ await _znSyncOne(rec); await _znOutboxDel(rec.client_uuid); synced++; }
+      catch(e){ /* leave in queue; retry on next trigger */ }
+    }
+    if(synced>0 && typeof toast==='function') toast('✅ Συγχρονίστηκαν '+synced+' offline παραγγελίες','success');
+  } finally { window._znSyncing=false; try{ _znNetUI(); }catch(_){} }
+}
+async function _znNetUI(){
+  var el=document.getElementById('znNetBadge');
+  if(!el){ el=document.createElement('div'); el.id='znNetBadge'; el.style.cssText='position:fixed;left:12px;bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);z-index:805;border-radius:20px;padding:7px 13px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);display:none;color:#fff'; el.onclick=function(){ if(navigator.onLine){ if(typeof toast==='function') toast('Συγχρονισμός…','info'); _znSyncOutbox(); } }; document.body.appendChild(el); }
+  var on=(typeof navigator==='undefined')||navigator.onLine!==false;
+  var n=0; try{ n=await _znOutboxCount(); }catch(e){ n=0; }
+  if(!on){ el.style.display='block'; el.style.background='#ef4444'; el.textContent='📴 Offline'+(n>0?(' · '+n+' σε αναμονή'):''); }
+  else if(n>0){ el.style.display='block'; el.style.background='var(--accent,#8b5cf6)'; el.textContent='📤 '+n+' σε αναμονή — Sync'; }
+  else { el.style.display='none'; }
+}
+try{
+  if(typeof window!=='undefined' && !window._znOfflineWired){
+    window._znOfflineWired=true;
+    window.addEventListener('online', function(){ try{ _znNetUI(); }catch(_){} _znSyncOutbox(); });
+    window.addEventListener('offline', function(){ try{ _znNetUI(); }catch(_){} });
+    setTimeout(function(){ try{ _znNetUI(); }catch(_){} if(typeof navigator==='undefined'||navigator.onLine!==false) _znSyncOutbox(); }, 8000);
+    window._znSyncInterval=setInterval(function(){ if(typeof navigator==='undefined'||navigator.onLine!==false){ try{ _znNetUI(); }catch(_){} _znSyncOutbox(); } }, 60000);
+  }
+}catch(_){}
+
 function showPage(p, _navOpts) {
   try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
   // 🛡️ Validate page parameter
