@@ -16463,7 +16463,7 @@ function renderSalesHub(){ /* saleshubChunk1 */
     '<div style="color:var(--text-2);font-size:13px;margin-bottom:16px;text-transform:capitalize">'+dateStr+' · '+agenda.length+' επισκέψεις σήμερα</div>'+'<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+'<div><div style="font-weight:800;color:var(--text-1);font-size:14px">🌅 Ταμείο εκκίνησης</div>'+'<div style="font-size:13px;color:var(--text-2);margin-top:2px">'+(function(){ var s=((typeof SHIFTS_CACHE!=='undefined'&&SHIFTS_CACHE)||[]).find(function(x){return x.user_id===u.id&&!x.ended_at;}); return (s&&s.start_float!=null&&parseFloat(s.start_float)>0)?(parseFloat(s.start_float).toFixed(2).replace('.',',')+' €'):'Δεν έχει δηλωθεί'; })()+'</div></div>'+'<button onclick="_znStartDayFloat()" style="background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">Δήλωσε</button>'+'</div>'+
     '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Ατζέντα — δρομολόγιο επισκέψεων</div>'+
     rows+
-    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+
+    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderCashClose()">🧮 Συμφωνία Ταμείου</button>'+
     '<div onclick="renderMyZone()" style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-top:14px;cursor:pointer">'+
       '<div style="font-weight:800;color:'+AM+';margin-bottom:4px">📊 My Zone</div>'+
       '<div style="font-size:12.5px;color:var(--text-2)">Δες τα στατιστικά της ζώνης σου ›</div>'+
@@ -17500,6 +17500,70 @@ async function renderLiveTrunk(){
   var body=document.getElementById('ltBody'); if(!body) return;
   function sect(t,h){ return '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-2);font-weight:700;margin:18px 0 8px">'+t+'</div>'+h; }
   body.innerHTML=sumHTML+sect('🚐 Στοκ οχήματος',stockHTML)+sect('📋 Σημερινές παραγγελίες',ordersHTML);
+}
+
+
+/* cashCloseP8a — end-of-day cash reconciliation (Συμφωνία Ταμείου): expected = float + collections - expenses vs counted; mandatory note on discrepancy */
+function _znCcEur(n){ try{ return (Number(n)||0).toFixed(2).replace('.',',')+' €'; }catch(e){ return '0,00 €'; } }
+function _znCcActiveShift(){ var u=(typeof CURRENT_USER!=='undefined'&&CURRENT_USER)?CURRENT_USER:{}; return (window.SHIFTS_CACHE||[]).find(function(s){return s.user_id===u.id && !s.ended_at;}); }
+function renderCashClose(){
+  var c=document.getElementById('content'); if(!c) return;
+  var sh=_znCcActiveShift();
+  var floatv=(sh&&sh.start_float)?Number(sh.start_float):0;
+  var rev=(typeof getShiftStats==='function'&&sh)?(Number(getShiftStats(sh).revenue)||0):0;
+  var fld='padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);font-size:16px;font-weight:700;width:100%;text-align:right';
+  var lbl='font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-2);font-weight:700;margin-bottom:4px';
+  c.innerHTML='<div style="max-width:520px;margin:0 auto">'+
+    '<button class="btn btn-ghost" style="margin:4px 0 12px" onclick="renderSalesHub()">← Πίσω</button>'+
+    '<div style="font-size:20px;font-weight:800;color:var(--text-1);margin-bottom:2px">🧮 Συμφωνία Ταμείου</div>'+
+    '<div style="font-size:12px;color:var(--text-2);margin-bottom:16px">Καταμέτρησε τα μετρητά & δες τη διαφορά πριν το κλείσιμο.</div>'+
+    (sh? '' : '<div style="background:rgba(248,113,113,.12);color:#f87171;border-radius:10px;padding:12px;font-size:13px;margin-bottom:12px">Δεν βρέθηκε ενεργή βάρδια.</div>')+
+    '<div style="'+lbl+'">Ταμείο εκκίνησης</div><div style="'+fld+';background:rgba(251,191,36,.08);margin-bottom:12px" id="rcFloat">'+_znCcEur(floatv)+'</div>'+
+    '<div style="'+lbl+'">Εισπράξεις βάρδιας</div><input id="rcColl" type="number" inputmode="decimal" value="'+rev.toFixed(2)+'" oninput="_znReconCalc()" style="'+fld+';margin-bottom:12px">'+
+    '<div style="'+lbl+'">Έξοδα (μετρητά)</div><input id="rcExp" type="number" inputmode="decimal" value="0" oninput="_znReconCalc()" style="'+fld+';margin-bottom:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px"><span style="font-size:13px;color:var(--text-2);font-weight:700">Αναμενόμενα μετρητά</span><b id="rcExpected" style="font-size:18px;color:var(--text-1)">'+_znCcEur(floatv+rev)+'</b></div>'+
+    '<div style="'+lbl+'">Μετρητά στο χέρι (καταμέτρηση)</div><input id="rcCount" type="number" inputmode="decimal" value="" placeholder="0,00" oninput="_znReconCalc()" style="'+fld+';margin-bottom:12px">'+
+    '<div id="rcDiffBox" style="display:flex;justify-content:space-between;align-items:center;border-radius:10px;padding:12px;margin-bottom:12px;background:var(--bg-2);border:1px solid var(--border)"><span style="font-size:13px;color:var(--text-2);font-weight:700">Διαφορά</span><b id="rcDiff" style="font-size:18px;color:var(--text-2)">—</b></div>'+
+    '<div id="rcNoteWrap" style="display:none;margin-bottom:12px"><div style="'+lbl+';color:#f59e0b">⚠️ Σημείωση διαφοράς (υποχρεωτική)</div><textarea id="rcNote" rows="2" placeholder="Εξήγησε τη διαφορά..." style="width:100%;padding:11px;border-radius:10px;border:1px solid #f59e0b;background:var(--bg-1);color:var(--text-1);font-size:14px"></textarea></div>'+
+    '<button class="btn btn-primary" style="width:100%" onclick="_znReconSave()">✓ Κλείσιμο ταμείου</button>'+
+  '</div>';
+  _znReconCalc();
+}
+function _znReconCalc(){
+  var fEl=document.getElementById('rcFloat'); if(!fEl) return;
+  var sh=_znCcActiveShift(); var floatv=(sh&&sh.start_float)?Number(sh.start_float):0;
+  function num(id){ var e=document.getElementById(id); var v=e?parseFloat(e.value):0; return isNaN(v)?0:v; }
+  var coll=num('rcColl'), exp=num('rcExp');
+  var expected=floatv+coll-exp;
+  var expEl=document.getElementById('rcExpected'); if(expEl) expEl.textContent=_znCcEur(expected);
+  var countEl=document.getElementById('rcCount'); var hasCount=countEl && countEl.value.trim()!=='';
+  var diff=hasCount?(num('rcCount')-expected):null;
+  var dEl=document.getElementById('rcDiff'), box=document.getElementById('rcDiffBox'), nw=document.getElementById('rcNoteWrap');
+  if(diff===null){ if(dEl){dEl.textContent='—';dEl.style.color='var(--text-2)';} if(box){box.style.background='var(--bg-2)';box.style.borderColor='var(--border)';} if(nw) nw.style.display='none'; return; }
+  var off=Math.abs(diff)>=0.01;
+  if(dEl){ dEl.textContent=(diff>0?'+':'')+_znCcEur(diff); dEl.style.color=off?(diff<0?'#ef4444':'#f59e0b'):'#22c55e'; }
+  if(box){ box.style.background=off?'rgba(245,158,11,.10)':'rgba(34,197,94,.10)'; box.style.borderColor=off?'rgba(245,158,11,.4)':'rgba(34,197,94,.4)'; }
+  if(nw) nw.style.display=off?'block':'none';
+}
+async function _znReconSave(){
+  var sh=_znCcActiveShift();
+  if(!sh){ if(typeof toast==='function') toast('Δεν βρέθηκε ενεργή βάρδια','error'); return; }
+  var countEl=document.getElementById('rcCount');
+  if(!countEl || countEl.value.trim()===''){ if(typeof toast==='function') toast('Συμπλήρωσε τα μετρητά στο χέρι','warn'); return; }
+  var floatv=(sh.start_float)?Number(sh.start_float):0;
+  function num(id){ var e=document.getElementById(id); var v=e?parseFloat(e.value):0; return isNaN(v)?0:v; }
+  var coll=num('rcColl'), exp=num('rcExp'), count=num('rcCount');
+  var expected=floatv+coll-exp; var diff=count-expected;
+  var noteEl=document.getElementById('rcNote'); var note=noteEl?noteEl.value.trim():'';
+  if(Math.abs(diff)>=0.01 && !note){ if(typeof toast==='function') toast('Συμπλήρωσε σημείωση για τη διαφορά','warn'); return; }
+  if(typeof sb==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
+  try{
+    var up=await sb.from('shifts').update({counted_cash:count, recon_diff:diff, recon_note:note||null}).eq('id',sh.id);
+    if(up.error) throw up.error;
+    try{ sh.counted_cash=count; sh.recon_diff=diff; sh.recon_note=note||null; }catch(_){}
+    if(typeof toast==='function') toast('Ταμείο κλείστηκε'+(Math.abs(diff)>=0.01?(' · διαφορά '+_znCcEur(diff)):' · ισοσκελισμένο'), Math.abs(diff)>=0.01?'warn':'success');
+    if(typeof renderSalesHub==='function') renderSalesHub();
+  }catch(e){ if(typeof toast==='function') toast('Σφάλμα αποθήκευσης','error'); }
 }
 
 function showPage(p, _navOpts) {
