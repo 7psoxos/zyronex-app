@@ -16516,6 +16516,7 @@ function openSalesClient(id){ /* salesClientChunk2 */
 
 window._znB2B={cust:null,pcs:{},bx:{},box:{},cat:null};
 function renderSalesOrderGrid(custId){ /* orderGridChunk3 */
+  try{ window._znB2BSig=null; window._znB2BSigGeo=null; }catch(_){}
   var cu=(typeof CUSTOMERS!=='undefined'&&Array.isArray(CUSTOMERS))?CUSTOMERS.find(function(x){return x.id==custId;}):null;
   if(!cu){ if(typeof showPage==='function') showPage('saleshub'); return; }
   var st=window._znB2B;
@@ -16605,7 +16606,7 @@ function renderB2BCheckout(){ /* checkoutChunk5 */
       srow('Καθαρή αξία',_znB2BEur(T.net))+srow('Έκπτωση B2B '+T.t.p+'%','−'+_znB2BEur(T.disc),'g')+srow('ΦΠΑ 24%',_znB2BEur(T.after*0.24))+srow('Σύνολο',_znB2BEur(T.total),'big')+
     '</div>'+
     _znB2BNotifPreview()+
-    '<button class="btn btn-primary" style="width:100%" onclick="_znB2BSubmit()">'+(window._znB2BBusy?'Καταχωρείται…':'Καταχώρηση παραγγελίας')+'</button>'+
+    '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:15px;padding:14px;margin:12px 0">'+'<div style="font-size:12.5px;font-weight:800;color:var(--text-1);margin-bottom:3px">✍️ Υπογραφή παραλαβής (προαιρετικό)</div>'+'<div style="font-size:11px;color:var(--text-2);margin-bottom:8px">Ο πελάτης υπογράφει με το δάχτυλο · δένεται με GPS + ώρα.</div>'+'<div style="position:relative">'+'<canvas id="znSigPad" width="520" height="150" style="background:#fff;border-radius:12px;width:100%;height:150px;touch-action:none;display:block" ontouchstart="_znSigStart(event)" ontouchmove="_znSigMove(event)" ontouchend="_znSigEnd()" onmousedown="_znSigStart(event)" onmousemove="_znSigMove(event)" onmouseup="_znSigEnd()"></canvas>'+'<div id="znSigPh" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa;font-size:13px;pointer-events:none">✍️ Υπογραφή εδώ</div>'+'</div>'+'<button onclick="_znSigClear()" style="margin-top:8px;background:var(--bg-1);border:1px solid var(--border);color:var(--text-1);border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer">Καθάρισε</button>'+'</div>'+'<button class="btn btn-primary" style="width:100%" onclick="_znB2BSubmit()">'+(window._znB2BBusy?'Καταχωρείται…':'Καταχώρηση παραγγελίας')+'</button>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
 }
@@ -16626,7 +16627,7 @@ async function _znB2BSubmit(){
     var oid=ins.data.id;
     var items=[];
     var _offer=0; (PRODUCTS||[]).forEach(function(p){ var l=_znB2BLine(p); if(l.tq>0){ items.push({ order_id:oid, product_id:p.id, product_name:p.name, qty:l.tq, unit_price:(parseFloat(p.price)||0), line_total:l.total }); var _fu=_znB2BFreeUnits(p,l.tq); if(_fu>0){ items.push({ order_id:oid, product_id:p.id, product_name:(p.name||'')+' (δωρεάν bundle)', qty:_fu, unit_price:0, line_total:0 }); _offer+=_fu*(parseFloat(p.cost)||0); } } });
-    if(items.length){ var ii=await sb.from('b2b_order_items').insert(items); if(ii.error) throw ii.error; }
+    if(items.length){ var ii=await sb.from('b2b_order_items').insert(items); if(ii.error) throw ii.error; } try{ await _znSigUpload(oid); }catch(_sig){}
     if(typeof _offer!=='undefined' && _offer>0){ try{ await sb.from('b2b_orders').update({offer_cost:_offer}).eq('id',oid); }catch(e){} }
     if(deliv==='fleet' && window._znVehId && window.VEHICLE_STOCK){
       for(var k=0;k<items.length;k++){ var it=items[k]; var cur=(it.product_id in window.VEHICLE_STOCK)?window.VEHICLE_STOCK[it.product_id]:null; if(cur!=null){ var nq=Math.max(0,cur-it.qty); try{ await sb.from('vehicle_stock').update({qty:nq,updated_at:new Date().toISOString()}).eq('shop_id',SHOP_ID).eq('vehicle_id',window._znVehId).eq('product_id',it.product_id); window.VEHICLE_STOCK[it.product_id]=nq; }catch(e){} } }
@@ -17153,6 +17154,28 @@ async function _znB2BDelNote(id, idx){
   var meta=Object.assign({},cu.meta); var notes=meta.notes.slice(); notes.splice(idx,1); meta.notes=notes;
   try{ if(typeof sb!=='undefined'){ var r=await sb.from('customers').update({meta:meta}).eq('id',id); if(r&&r.error) throw r.error; } cu.meta=meta; renderB2BCustomerCard(id); }
   catch(e){ if(typeof toast==='function') toast('Σφάλμα','danger'); }
+}
+
+
+/* sigPodP3 — B2B Proof-of-Delivery signature (canvas -> vault, decoupled, no SQL) */
+var _znSigCtx=null, _znSigDrawing=false;
+function _znSigPad(){ return document.getElementById('znSigPad'); }
+function _znSigXY(e){ var cv=_znSigPad(); var r=cv.getBoundingClientRect(); var t=(e.touches&&e.touches[0])?e.touches[0]:e; return { x:(t.clientX-r.left)*(cv.width/r.width), y:(t.clientY-r.top)*(cv.height/r.height) }; }
+function _znSigStart(e){ var cv=_znSigPad(); if(!cv) return; _znSigCtx=cv.getContext('2d'); _znSigCtx.strokeStyle='#111'; _znSigCtx.lineWidth=2.6; _znSigCtx.lineCap='round'; _znSigCtx.lineJoin='round'; _znSigDrawing=true; var p=_znSigXY(e); _znSigCtx.beginPath(); _znSigCtx.moveTo(p.x,p.y); var ph=document.getElementById('znSigPh'); if(ph) ph.style.display='none'; if(e.cancelable) e.preventDefault(); _znSigGrabGeo(); }
+function _znSigMove(e){ if(!_znSigDrawing||!_znSigCtx) return; var p=_znSigXY(e); _znSigCtx.lineTo(p.x,p.y); _znSigCtx.stroke(); if(e.cancelable) e.preventDefault(); }
+function _znSigEnd(){ _znSigDrawing=false; var cv=_znSigPad(); if(cv){ try{ window._znB2BSig=cv.toDataURL('image/png'); }catch(_){} } }
+function _znSigClear(){ var cv=_znSigPad(); if(cv&&cv.getContext){ cv.getContext('2d').clearRect(0,0,cv.width,cv.height); } window._znB2BSig=null; var ph=document.getElementById('znSigPh'); if(ph) ph.style.display='flex'; }
+function _znSigGrabGeo(){ if(window._znB2BSigGeo||!navigator.geolocation) return; try{ navigator.geolocation.getCurrentPosition(function(pos){ window._znB2BSigGeo={lat:pos.coords.latitude,lng:pos.coords.longitude,ts:new Date().toISOString()}; },function(){},{timeout:4000,maximumAge:60000}); }catch(_){} }
+async function _znSigUpload(oid){
+  if(!window._znB2BSig||typeof sb==='undefined'||typeof SHOP_ID==='undefined') return;
+  try{
+    var resp=await fetch(window._znB2BSig); var blob=await resp.blob();
+    await sb.storage.from('vault').upload(SHOP_ID+'/signatures/'+oid+'.png',blob,{upsert:true,contentType:'image/png'});
+    var geo=window._znB2BSigGeo||{}; geo.signed=true; geo.order_id=oid; if(!geo.ts) geo.ts=new Date().toISOString();
+    var mblob=new Blob([JSON.stringify(geo)],{type:'application/json'});
+    await sb.storage.from('vault').upload(SHOP_ID+'/signatures/'+oid+'.json',mblob,{upsert:true,contentType:'application/json'});
+  }catch(_e){ /* non-fatal: order already committed */ }
+  window._znB2BSig=null; window._znB2BSigGeo=null;
 }
 
 function showPage(p, _navOpts) {
