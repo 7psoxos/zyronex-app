@@ -2812,6 +2812,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item" data-page="kiosk"><i data-lucide="monitor" size="18"></i> 🖥️ Kiosk &amp; Idle Screen</div>
   <div class="nav-item" data-page="plugins"><i data-lucide="puzzle" size="18"></i> 🧩 Plugin Market</div>
   <div class="nav-item" data-page="agents"><i data-lucide="bot" size="18"></i> 🤖 Εξειδικευμένοι Βοηθοί</div>
+  <div class="nav-item" data-page="salesactivity"><i data-lucide="activity" size="18"></i> 📊 Δραστηριότητα Πωλητών</div>
   <div class="nav-item" data-page="users"><i data-lucide="user-cog" size="18"></i> Χρήστες / Δικαιώματα</div>
   <div class="nav-item" data-page="data-cleanup"><i data-lucide="sparkles" size="18"></i> Data Cleanup <span class="badge-alert" id="cleanupBadge" style="display:none">0</span></div>
   <div class="nav-item" data-page="shop-changelog"><i data-lucide="history" size="18"></i> Ιστορικό Αλλαγών</div>
@@ -17797,6 +17798,63 @@ function _znTile(fn,emoji,title,sub,color){
     '<div style="font-size:10.5px;color:var(--text-2);margin-top:3px">'+sub+'</div>'+
   '</div>';
 }
+/* salesActivityP1 — Admin oversight panel: per-salesperson B2B orders, shifts, cash recon, location */
+async function renderSalesActivity(){
+  var c=document.getElementById('content'); if(!c) return;
+  var u=(typeof CURRENT_USER!=='undefined')?CURRENT_USER:null;
+  var isAdmin=u&&(((u.perms||[]).indexOf('*')>=0)||/admin|διαχειρ/i.test(u.role||''));
+  if(!isAdmin){ c.innerHTML='<div style="padding:48px;text-align:center;color:var(--text-2)">🔒 Μόνο για διαχειριστή.</div>'; return; }
+  if(!window._znSAPeriod) window._znSAPeriod=7;
+  var days=window._znSAPeriod;
+  var since=new Date(Date.now()-days*86400000).toISOString();
+  c.innerHTML='<div style="max-width:780px;margin:0 auto;padding:4px 0 28px">'+
+    '<div style="font-size:22px;font-weight:800;color:var(--text-1);margin-bottom:2px">📊 Δραστηριότητα Πωλητών</div>'+
+    '<div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">Επισκόπηση ανά πωλητή — παραγγελίες, τζίρος, βάρδιες, ταμείο.</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:16px">'+
+      _znSAChip(1,'Σήμερα')+_znSAChip(7,'7 ημέρες')+_znSAChip(30,'30 ημέρες')+
+    '</div>'+
+    '<div id="saBody"><div style="padding:34px;text-align:center;color:var(--text-2)">Φόρτωση…</div></div>'+
+  '</div>';
+  try{
+    var r=await sb.from('b2b_orders').select('id,total,created_at,status,created_by').eq('shop_id',SHOP_ID).gte('created_at',since).order('created_at',{ascending:false});
+    _znSARender((r&&r.data)?r.data:[], days);
+  }catch(e){ var b=document.getElementById('saBody'); if(b) b.innerHTML='<div style="padding:20px;color:#f87171">Σφάλμα: '+((e&&e.message)||e)+'</div>'; }
+}
+function _znSAChip(d,label){ var on=(window._znSAPeriod===d); return '<button onclick="_znSASetPeriod('+d+')" style="font-size:12.5px;font-weight:700;padding:7px 14px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:'+(on?'#fbbf24':'var(--bg-2)')+';color:'+(on?'#1a1206':'var(--text-1)')+'">'+label+'</button>'; }
+function _znSASetPeriod(d){ window._znSAPeriod=d; renderSalesActivity(); }
+function _znSAEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(ch){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[ch]; }); }
+function _znSAStat(val,lbl,color){ return '<div style="background:var(--bg-1);border-radius:10px;padding:10px 6px;text-align:center"><div style="font-size:17px;font-weight:800;color:'+color+'">'+val+'</div><div style="font-size:10px;color:var(--text-2);margin-top:2px">'+lbl+'</div></div>'; }
+function _znSARender(rows, days){
+  var b=document.getElementById('saBody'); if(!b) return;
+  var users=(typeof USERS!=='undefined'&&USERS)?USERS:[];
+  function uname(id){ for(var i=0;i<users.length;i++){ if(String(users[i].id)===String(id)) return users[i].name||('#'+id); } return id?('#'+id):'—'; }
+  var g={};
+  rows.forEach(function(o){ var k=(o.created_by!=null)?String(o.created_by):'_none'; if(!g[k]) g[k]={cnt:0,sum:0,delivered:0}; g[k].cnt++; g[k].sum+=(parseFloat(o.total)||0); if(o.status==='delivered') g[k].delivered++; });
+  var shifts=(typeof SHIFTS_CACHE!=='undefined'&&SHIFTS_CACHE)?SHIFTS_CACHE:[];
+  var sinceMs=Date.now()-days*86400000;
+  function shiftStats(uid){ var n=0,diff=0; shifts.forEach(function(s){ if(String(s.user_id)!==String(uid)) return; var t=s.started_at?Date.parse(s.started_at):0; if(t<sinceMs) return; n++; if(s.recon_diff!=null) diff+=parseFloat(s.recon_diff)||0; }); return {n:n,diff:diff}; }
+  var keys=Object.keys(g);
+  if(!keys.length){ b.innerHTML='<div style="padding:34px;text-align:center;color:var(--text-2)">Καμία B2B παραγγελία στην περίοδο.</div>'; return; }
+  keys.sort(function(a,cc){ return g[cc].sum-g[a].sum; });
+  var html='';
+  keys.forEach(function(k){
+    var nm=(k==='_none')?'Χωρίς πωλητή':uname(k);
+    var st=g[k]; var ss=(k!=='_none')?shiftStats(k):{n:0,diff:0};
+    var dcol=(ss.diff<0?'#f87171':'#22c55e');
+    html+='<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px">'+
+      '<div style="font-weight:800;color:var(--text-1);font-size:15px;margin-bottom:10px">'+_znSAEsc(nm)+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
+        _znSAStat(st.cnt,'Παραγγελίες','#3b82f6')+
+        _znSAStat('€'+st.sum.toFixed(0),'Τζίρος','#22c55e')+
+        _znSAStat(st.delivered,'Παραδόθηκαν','#8b5cf6')+
+        _znSAStat(ss.n,'Βάρδιες','#f59e0b')+
+        _znSAStat((ss.diff>=0?'+':'')+'€'+ss.diff.toFixed(0),'Διαφορά ταμείου',dcol)+
+        _znSAStat('—','Τοποθεσία','#a5b0c8')+
+      '</div>'+
+    '</div>';
+  });
+  b.innerHTML=html;
+}
 function showPage(p, _navOpts) {
   try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
   // 🛡️ Validate page parameter
@@ -18125,7 +18183,7 @@ function _showPageInternal(p){
   });
   // Sync desktop hub sidebar active state
   if(typeof _updateDesktopHubActive === 'function') _updateDesktopHubActive(p);
-  const renderers={dashboard:renderDashboard,saleshub:function(){return (typeof renderSalesHub==='function'?renderSalesHub:renderDashboard)();},security:renderSecurity,pos:renderPOS,inventory:renderInventory,
+  const renderers={dashboard:renderDashboard,salesactivity:renderSalesActivity,saleshub:function(){return (typeof renderSalesHub==='function'?renderSalesHub:renderDashboard)();},security:renderSecurity,pos:renderPOS,inventory:renderInventory,
     customers:_znCustomersWrapper,suppliers:renderSuppliers,cashbook:renderCashbook,reports:renderReports,
     vat:renderVAT,bi:renderBI,shipments:renderShipments,purchases:renderPurchases,shifts:renderShifts,competitors:renderCompetitors,waste:renderWaste,batches:renderBatches,hardware:renderHardware,warroom:renderWarRoom,kiosk:function(){renderKiosk('settings')},oracle:renderOracle,brain:renderBrain,
     'seasonal-intel':renderSeasonalIntel,
