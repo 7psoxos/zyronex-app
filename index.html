@@ -16619,8 +16619,10 @@ async function _znB2BSubmit(){
   if(typeof sb==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
   window._znB2BBusy=true; renderB2BCheckout();
   var deliv=window._znB2BDeliv;
+  var _cuid=(typeof _znUUID==='function')?_znUUID():(''+Date.now()+'-'+Math.floor(Math.random()*1e6));
+  if(typeof navigator!=='undefined' && navigator.onLine===false){ _znEnqueueOrder(_cuid, st, T, deliv); return; }
   try{
-    var hdr={ shop_id:SHOP_ID, customer_id:st.cust, vehicle_id:(window._znVehId||null),
+    var hdr={ client_uuid:_cuid, shop_id:SHOP_ID, customer_id:st.cust, vehicle_id:(window._znVehId||null),
       created_by:((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null),
       status:(deliv==='fleet'?'delivered':'preparing'), delivery_type:deliv,
       net:T.net, discount:T.disc, discount_pct:T.t.p, vat:(T.after*0.24), total:T.total, route:(deliv==='courier'?(window._znB2BRoute||null):null), courier:((deliv==='courier'&&window._znB2BRoute==='courier')?(window._znB2BCourier||null):null), doc_type:(window._znB2BDoc||'invoice'), note:null };
@@ -16639,6 +16641,7 @@ async function _znB2BSubmit(){
     window._znB2B.pcs={}; window._znB2B.bx={};
   }catch(e){
     window._znB2BBusy=false; console.error('[B2B submit]',e);
+    if(typeof navigator!=='undefined' && navigator.onLine===false){ _znEnqueueOrder(_cuid, st, T, deliv); return; }
     if(typeof toast==='function') toast('Αποτυχία καταχώρησης — έλεγξε ότι έτρεξε το SQL (b2b_orders).','error');
     renderB2BCheckout();
   }
@@ -17664,6 +17667,48 @@ function _znGeoToggle(){
     _znGeoSyncBtn();
     if(typeof toast==='function') toast('📍 Auto-εντοπισμός: ON','success');
   }catch(e){ if(typeof toast==='function') toast('Σφάλμα GPS','error'); }
+}
+
+
+/* offlineQueueP11a — IndexedDB outbox foundation for offline B2B orders (NO sync yet; sync = 11b) */
+function _znUUID(){ try{ if(window.crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){} return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);}); }
+function _znDbOpen(){ return new Promise(function(res,rej){ try{ var req=indexedDB.open('znOfflineDB',1); req.onupgradeneeded=function(e){ var db=e.target.result; if(!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox',{keyPath:'client_uuid'}); }; req.onsuccess=function(e){ res(e.target.result); }; req.onerror=function(){ rej(req.error); }; }catch(e){ rej(e); } }); }
+function _znOutboxAdd(rec){ return _znDbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('outbox','readwrite'); tx.objectStore('outbox').put(rec); tx.oncomplete=function(){ res(true); }; tx.onerror=function(){ rej(tx.error); }; }); }); }
+function _znOutboxAll(){ return _znDbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('outbox','readonly'); var rq=tx.objectStore('outbox').getAll(); rq.onsuccess=function(){ res(rq.result||[]); }; rq.onerror=function(){ rej(rq.error); }; }); }); }
+function _znOutboxDel(uuid){ return _znDbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('outbox','readwrite'); tx.objectStore('outbox').delete(uuid); tx.oncomplete=function(){ res(true); }; tx.onerror=function(){ rej(tx.error); }; }); }); }
+function _znOutboxCount(){ return _znOutboxAll().then(function(a){ return a.length; }).catch(function(){ return 0; }); }
+function _znEnqueueOrder(cuid, st, T, deliv){
+  try{
+    var _offer=0; var items=[]; var stockDeltas=[];
+    (typeof PRODUCTS!=='undefined'?(PRODUCTS||[]):[]).forEach(function(p){
+      var l=_znB2BLine(p);
+      if(l.tq>0){
+        items.push({ product_id:p.id, product_name:p.name, qty:l.tq, unit_price:(parseFloat(p.price)||0), line_total:l.total });
+        var _fu=_znB2BFreeUnits(p,l.tq);
+        if(_fu>0){ items.push({ product_id:p.id, product_name:(p.name||'')+' (δωρεάν bundle)', qty:_fu, unit_price:0, line_total:0 }); _offer+=_fu*(parseFloat(p.cost)||0); }
+        stockDeltas.push({ product_id:p.id, qty:l.tq+(_fu>0?_fu:0) });
+      }
+    });
+    var hdr={ client_uuid:cuid, shop_id:SHOP_ID, customer_id:st.cust, vehicle_id:(window._znVehId||null),
+      created_by:((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id)||null),
+      status:(deliv==='fleet'?'delivered':'preparing'), delivery_type:deliv,
+      net:T.net, discount:T.disc, discount_pct:T.t.p, vat:(T.after*0.24), total:T.total,
+      route:(deliv==='courier'?(window._znB2BRoute||null):null),
+      courier:((deliv==='courier'&&window._znB2BRoute==='courier')?(window._znB2BCourier||null):null),
+      doc_type:(window._znB2BDoc||'invoice'), note:null, offer_cost:_offer,
+      created_at:new Date().toISOString() };
+    var rec={ client_uuid:cuid, hdr:hdr, items:items, stockDeltas:stockDeltas, deliv:deliv, created_at:hdr.created_at, status:'pending', attempts:0 };
+    _znOutboxAdd(rec).then(function(){
+      if(deliv==='fleet' && window._znVehId && window.VEHICLE_STOCK){ stockDeltas.forEach(function(d){ var cur=(d.product_id in window.VEHICLE_STOCK)?window.VEHICLE_STOCK[d.product_id]:null; if(cur!=null) window.VEHICLE_STOCK[d.product_id]=Math.max(0,cur-d.qty); }); }
+      window._znB2BBusy=false; try{ window._znB2B.pcs={}; window._znB2B.bx={}; }catch(_){}
+      if(typeof toast==='function') toast('📴 Αποθηκεύτηκε offline — θα συγχρονιστεί όταν επανέλθει το δίκτυο','info',4500);
+      if(typeof renderSalesHub==='function') renderSalesHub();
+    }).catch(function(){
+      window._znB2BBusy=false;
+      if(typeof toast==='function') toast('Σφάλμα τοπικής αποθήκευσης','error');
+      if(typeof renderB2BCheckout==='function') renderB2BCheckout();
+    });
+  }catch(e){ window._znB2BBusy=false; if(typeof toast==='function') toast('Σφάλμα τοπικής αποθήκευσης','error'); if(typeof renderB2BCheckout==='function') renderB2BCheckout(); }
 }
 
 function showPage(p, _navOpts) {
