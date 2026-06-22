@@ -17803,11 +17803,16 @@ async function _doClockOut(active, stats, dur, pendingReason){
     if(!_isAdmin){
       toast('✅ Βάρδια έκλεισε. Αποσύνδεση...', 'success', 2000);
       setTimeout(function(){
-        if(typeof doLogout === 'function') doLogout();
+        /* logoutFixP1: doLogout() never existed -> the fallback skipped clearSession()+renderLogin(), leaving the session in localStorage (refresh restored the user) and a profile-less "half" login. Route through the complete _doLogout(). */
+        if(typeof _doLogout === 'function'){ _doLogout(); }
         else {
           CURRENT_USER = null;
+          try{ clearSession(); }catch(_){}
+          try{ var _zcLO=document.getElementById('content'); if(_zcLO) _zcLO.innerHTML=''; }catch(_){}
+          try{ window._pageHistory = []; }catch(_){}
           document.getElementById('appWrap').classList.add('hidden');
           document.getElementById('loginScreen').classList.remove('hidden');
+          if(typeof renderLogin === 'function') renderLogin();
         }
       }, 2000);
     }
