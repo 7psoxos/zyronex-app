@@ -16777,7 +16777,7 @@ async function renderB2BCustomerCard(id){ /* b2bCustCardP2 */
       '</div>'+
       '<div style="font-size:11.5px;color:var(--text-2);margin-top:10px">Όροι πληρωμής: <b style="color:var(--text-1)">'+(meta.payment_terms||'—')+'</b></div>'+
     '</div>'+
-    '<div id="znB2BDocs" style="margin-top:12px"></div>'+
+    '<div style="background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-top:12px">'+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+'<div style="font-size:12.5px;font-weight:800;color:var(--text-1)">📝 Smart Notes</div>'+'<button onclick="_znB2BAddNote(\''+cu.id+'\')" style="background:var(--amber);color:#1a1206;border:none;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">＋ νέα</button>'+'</div>'+_znB2BNotesHTML(cu)+'</div>'+'<div id="znB2BDocs" style="margin-top:12px"></div>'+
     '<div id="znB2BCustOrders" style="margin-top:12px"></div>'+
     '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="renderSalesOrderGrid(\''+cu.id+'\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία</button>'+
     '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:12px;padding:11px;margin-top:12px"><div id="znCustPlan" style="flex:1;font-size:12.5px;color:var(--text-2)">🏷️ Πλάνο: …</div><button onclick="_znPlanPicker(\''+cu.id+'\')" style="background:rgba(251,191,36,.14);color:#fbbf24;border:1px solid rgba(251,191,36,.35);border-radius:9px;padding:6px 10px;font-weight:800;font-size:11.5px;cursor:pointer">Αλλαγή</button></div>'+
@@ -17129,6 +17129,30 @@ function _znRenderMyOT(){
     if(ot>0){ total+=ot; rows+='<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+d.toLocaleDateString('el-GR',{weekday:'short',day:'2-digit',month:'2-digit'})+'</span><b>+'+_znHM(ot)+'</b></div>'; }
   });
   box.innerHTML='<div class="card" style="padding:14px"><div style="font-weight:800;margin-bottom:2px">\u03a5\u03c0\u03b5\u03c1\u03c9\u03c1\u03af\u03b5\u03c2 \u03bc\u03ae\u03bd\u03b1</div><div style="font-size:26px;font-weight:800;color:#22d3ee;margin:4px 0">'+_znHM(total)+'</div><div style="font-size:11.5px;color:var(--text-2);margin-bottom:6px">\u03a0\u03ac\u03bd\u03c9 \u03b1\u03c0\u03c2 8\u03c9/\u03b7\u03bc\u03ae\u03c1\u03b1</div>'+(rows||'<div style="color:var(--text-2);font-size:13px;padding:8px 0">\u039a\u03b1\u03bc\u03af\u03b1 \u03c5\u03c0\u03b5\u03c1\u03c9\u03c1\u03af\u03b1 \u03b1\u03c5\u03c4\u03cc\u03bd \u03c4\u03bf\u03bd \u03bc\u03ae\u03bd\u03b1.</div>')+'<div style="font-size:10.5px;color:var(--text-2);margin-top:8px">\u03a5\u03c0\u03bf\u03bb\u03bf\u03b3\u03af\u03b6\u03b5\u03c4\u03b1\u03b9 \u03b1\u03c5\u03c4\u03cc\u03bc\u03b1\u03c4\u03b1 \u03b1\u03c0\u03cc \u03ad\u03bd\u03b1\u03c1\u03be\u03b7/\u03bb\u03ae\u03be\u03b7 \u03b2\u03ac\u03c1\u03b4\u03b9\u03b1\u03c2.</div></div>';
+}
+
+
+/* smartNotesP2 — Micro-CRM tags on B2B customer card (uses existing customer.meta) */
+function _znEscNote(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _znB2BNotesHTML(cu){
+  var notes=(cu && cu.meta && Array.isArray(cu.meta.notes))?cu.meta.notes:[];
+  if(!notes.length) return '<div style="font-size:11.5px;color:var(--text-2)">Καμία σημείωση — πρόσθεσε «σκονάκι» για την επόμενη επίσκεψη.</div>';
+  return '<div style="display:flex;flex-wrap:wrap;gap:6px">'+notes.map(function(t,i){
+    return '<span style="display:inline-flex;align-items:center;gap:7px;background:var(--bg-1);border:1px solid var(--border);border-radius:999px;padding:6px 11px;font-size:12px">'+_znEscNote(t)+'<span onclick="_znB2BDelNote(\''+cu.id+'\','+i+')" style="cursor:pointer;color:var(--text-2);font-weight:800">✕</span></span>';
+  }).join('')+'</div>';
+}
+async function _znB2BAddNote(id){
+  var cu=(CUSTOMERS||[]).find(function(x){return x.id==id;}); if(!cu) return;
+  var t=prompt('Νέα σημείωση (π.χ. 🕒 Επισκέψεις μετά τις 12:00):',''); if(t===null) return; t=t.trim(); if(!t) return;
+  var meta=Object.assign({},cu.meta||{}); var notes=Array.isArray(meta.notes)?meta.notes.slice():[]; notes.push(t); meta.notes=notes;
+  try{ if(typeof sb!=='undefined'){ var r=await sb.from('customers').update({meta:meta}).eq('id',id); if(r&&r.error) throw r.error; } cu.meta=meta; if(typeof toast==='function') toast('Σημείωση προστέθηκε','success'); renderB2BCustomerCard(id); }
+  catch(e){ if(typeof toast==='function') toast('Σφάλμα αποθήκευσης','danger'); }
+}
+async function _znB2BDelNote(id, idx){
+  var cu=(CUSTOMERS||[]).find(function(x){return x.id==id;}); if(!cu||!cu.meta||!Array.isArray(cu.meta.notes)) return;
+  var meta=Object.assign({},cu.meta); var notes=meta.notes.slice(); notes.splice(idx,1); meta.notes=notes;
+  try{ if(typeof sb!=='undefined'){ var r=await sb.from('customers').update({meta:meta}).eq('id',id); if(r&&r.error) throw r.error; } cu.meta=meta; renderB2BCustomerCard(id); }
+  catch(e){ if(typeof toast==='function') toast('Σφάλμα','danger'); }
 }
 
 function showPage(p, _navOpts) {
