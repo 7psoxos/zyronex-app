@@ -16508,7 +16508,7 @@ function openSalesClient(id){ /* salesClientChunk2 */
         '<div style="font-size:16px">🧿</div><div><div style="font-size:12.5px;font-weight:700;color:var(--text-1)">Τελευταία παραγγελία</div><div style="font-size:11.5px;color:var(--text-2)">'+lastTxt+'</div></div></div>'+
     '</div>'+
     '<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:12px;padding:11px;margin-top:12px;font-size:12px;color:var(--text-2)">ℹ️ Το <b style="color:var(--text-1)">B2B υπόλοιπο/λθξιπρόθεσμο</b> (receivables) και η <b style="color:var(--text-1)">παραγγελία χονδρικής</b> (Order Grid) έρχονται στα chunks 3-4.</div>'+
-    '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="renderSalesOrderGrid(\''+id+'\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία</button>'+
+    '<button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="renderSalesOrderGrid(\''+id+'\')"><i data-lucide="plus" size="18"></i> Νέα παραγγελία</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="_znB2BSampleOpen(\''+cu.id+'\')">🎁 Δειγματισμός</button>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
 }
@@ -17214,6 +17214,50 @@ function _znB2BApplyRestock(custId){
   sug.forEach(function(x){ if((PRODUCTS||[]).some(function(p){return p.id==x.pid;})) window._znB2B.pcs[x.pid]=x.avg; });
   if(typeof renderSalesOrderGrid==='function') renderSalesOrderGrid(custId);
   if(typeof toast==='function') toast('Καλάθι προ-συμπληρώθηκε','success');
+}
+
+
+/* samplingP5 — free product sampling -> samples table + vehicle_stock decrement */
+function _znB2BSampleOpen(custId){
+  var prods=(typeof PRODUCTS!=='undefined'&&PRODUCTS)?PRODUCTS:[];
+  if(!prods.length){ if(typeof toast==='function') toast('Δεν υπάρχουν προϊόντα','warn'); return; }
+  var esc=(typeof _znEscNote==='function')?_znEscNote:function(s){return s;};
+  var opts=prods.map(function(p){ return '<option value="'+p.id+'">'+esc(p.name||('#'+p.id))+'</option>'; }).join('');
+  var html='<h3 style="margin:0 0 4px;font-size:17px;font-weight:800;color:var(--text-1)">🎁 Δειγματισμός</h3>'+
+    '<div style="font-size:12px;color:var(--text-2);margin-bottom:14px">Δωρεάν δείγμα — αφαιρείται από το όχημα & καταγράφεται στα έξοδα marketing.</div>'+
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-2);font-weight:700;margin-bottom:4px">Προϊόν</div>'+
+    '<select id="znSampProd" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);font-size:15px;margin-bottom:12px">'+opts+'</select>'+
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-2);font-weight:700;margin-bottom:4px">Ποσότητα</div>'+
+    '<input id="znSampQty" type="number" min="1" value="2" inputmode="numeric" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--bg-1);color:var(--text-1);font-size:16px;font-weight:700;margin-bottom:16px">'+
+    '<div style="display:flex;gap:8px">'+
+      '<button onclick="closeModal()" style="flex:1;background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">Άκυρο</button>'+
+      '<button onclick="_znB2BSampleSubmit(\''+custId+'\')" style="flex:2;background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer">Καταγραφή δείγματος</button>'+
+    '</div>';
+  if(typeof openModal==='function') openModal(html);
+}
+async function _znB2BSampleSubmit(custId){
+  var sel=document.getElementById('znSampProd'), qel=document.getElementById('znSampQty');
+  if(!sel||!qel) return;
+  var pid=sel.value; var qty=parseInt(qel.value,10)||0;
+  if(qty<=0){ if(typeof toast==='function') toast('Άκυρη ποσότητα','warn'); return; }
+  var p=(PRODUCTS||[]).find(function(x){return x.id==pid;}); if(!p){ if(typeof toast==='function') toast('Διάλεξε προϊόν','warn'); return; }
+  var unit=parseFloat(p.cost)||0; var total=Math.round(unit*qty*100)/100;
+  if(typeof sb==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
+  try{
+    var rec={ shop_id:String((typeof SHOP_ID!=='undefined')?SHOP_ID:''), customer_id:(custId!=null?String(custId):null),
+      product_id:String(pid), product_name:(p.name||null), qty:qty, unit_cost:unit, total_cost:total,
+      user_id:((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.id!=null)?String(CURRENT_USER.id):null) };
+    var ins=await sb.from('samples').insert(rec); if(ins.error) throw ins.error;
+  }catch(e){ if(typeof toast==='function') toast('Σφάλμα καταγραφής (έλεγξε τον πίνακα samples)','error'); return; }
+  try{
+    if(window._znVehId && window.VEHICLE_STOCK && (pid in window.VEHICLE_STOCK)){
+      var cur=parseFloat(window.VEHICLE_STOCK[pid])||0; var nq=Math.max(0,cur-qty);
+      await sb.from('vehicle_stock').update({qty:nq,updated_at:new Date().toISOString()}).eq('shop_id',SHOP_ID).eq('vehicle_id',window._znVehId).eq('product_id',pid);
+      window.VEHICLE_STOCK[pid]=nq;
+    }
+  }catch(_e){}
+  if(typeof closeModal==='function') closeModal();
+  if(typeof toast==='function') toast('🎁 Δείγμα καταγράφηκε ('+qty+' τμχ)','success');
 }
 
 function showPage(p, _navOpts) {
