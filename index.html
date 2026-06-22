@@ -16463,10 +16463,17 @@ function renderSalesHub(){ /* saleshubChunk1 */
     '<div style="color:var(--text-2);font-size:13px;margin-bottom:16px;text-transform:capitalize">'+dateStr+' · '+agenda.length+' επισκέψεις σήμερα</div>'+'<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+'<div><div style="font-weight:800;color:var(--text-1);font-size:14px">🌅 Ταμείο εκκίνησης</div>'+'<div style="font-size:13px;color:var(--text-2);margin-top:2px">'+(function(){ var s=((typeof SHIFTS_CACHE!=='undefined'&&SHIFTS_CACHE)||[]).find(function(x){return x.user_id===u.id&&!x.ended_at;}); return (s&&s.start_float!=null&&parseFloat(s.start_float)>0)?(parseFloat(s.start_float).toFixed(2).replace('.',',')+' €'):'Δεν έχει δηλωθεί'; })()+'</div></div>'+'<button onclick="_znStartDayFloat()" style="background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">Δήλωσε</button>'+'</div>'+
     '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Ατζέντα — δρομολόγιο επισκέψεων</div>'+
     rows+
-    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderCashClose()">🧮 Συμφωνία Ταμείου</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderReturnStock()">📤 Επιστροφή Στοκ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" id="znGeoBtn" onclick="_znGeoToggle()">📍 Auto-εντοπισμός πελατών: '+(window._znGeoWatch!=null?'ON':'OFF')+'</button>'+
-    '<div onclick="renderMyZone()" style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-top:14px;cursor:pointer">'+
-      '<div style="font-weight:800;color:'+AM+';margin-bottom:4px">📊 My Zone</div>'+
-      '<div style="font-size:12.5px;color:var(--text-2)">Δες τα στατιστικά της ζώνης σου ›</div>'+
+    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<div data-zn="sellerTilesP1" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">'+
+      _znTile('renderLoadVan()','📥','Φόρτωση','όχημα','#3b82f6')+
+      _znTile('renderLiveTrunk()','🚐','Live Πορτ-μπαγκάζ','στοκ & ταμείο','#14b8a6')+
+      _znTile('renderCashClose()','🧮','Συμφωνία','καταμέτρηση','#f59e0b')+
+      _znTile('renderReturnStock()','📤','Επιστροφή Στοκ','στην αποθήκη','#22c55e')+
+      '<div onclick="_znGeoToggle()" style="background:#141c30;border:1px solid rgba(255,255,255,.08);border-top:3px solid #8b5cf6;border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center">'+
+        '<div style="font-size:26px;line-height:1;margin-bottom:7px">📍</div>'+
+        '<div style="font-size:13px;font-weight:800;color:#f1f3f9">Auto-εντοπισμός</div>'+
+        '<div id="znGeoBtn" style="font-size:10.5px;color:#9aa3b8;margin-top:3px">'+(window._znGeoWatch!=null?'🟢 Ενεργό':'⚪ Ανενεργό')+'</div>'+
+      '</div>'+
+      _znTile('renderMyZone()','📊','My Zone','στατιστικά ζώνης','#ec4899')+
     '</div>'+
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
@@ -17636,7 +17643,7 @@ async function _znReturnStockDo(vehId){
 
 
 /* geofenceP10 — foreground opt-in geofence: watchPosition while ON, toast when near an agenda customer (Android-mainly). Reuses gpsDistance (meters). */
-function _znGeoSyncBtn(){ var b=document.getElementById('znGeoBtn'); if(b){ var on=window._znGeoWatch!=null; b.textContent='📍 Auto-εντοπισμός πελατών: '+(on?'ON':'OFF'); b.style.color=on?'#22c55e':''; } }
+function _znGeoSyncBtn(){ var b=document.getElementById('znGeoBtn'); if(b){ var on=window._znGeoWatch!=null; b.textContent=(on?'🟢 Ενεργό':'⚪ Ανενεργό'); b.style.color=on?'#22c55e':'#9aa3b8'; } }
 function _znGeoTick(pos){
   try{
     if(typeof gpsDistance!=='function'||!pos||!pos.coords) return;
@@ -17779,6 +17786,13 @@ try{
   }
 }catch(_){}
 
+function _znTile(fn,emoji,title,sub,color){
+  return '<div onclick="'+fn+'" style="background:#141c30;border:1px solid rgba(255,255,255,.08);border-top:3px solid '+color+';border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center">'+
+    '<div style="font-size:26px;line-height:1;margin-bottom:7px">'+emoji+'</div>'+
+    '<div style="font-size:13px;font-weight:800;color:#f1f3f9">'+title+'</div>'+
+    '<div style="font-size:10.5px;color:#9aa3b8;margin-top:3px">'+sub+'</div>'+
+  '</div>';
+}
 function showPage(p, _navOpts) {
   try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
   // 🛡️ Validate page parameter
