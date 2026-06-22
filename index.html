@@ -15653,6 +15653,7 @@ function hideBootLoader(){
   },260);
 }
 function renderLogin(){
+  try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
   const up=document.getElementById('userPick');
   up.innerHTML = USERS.map(u=>{
     const iconHtml = getRoleIconHtml(u.role, 64);
@@ -17369,10 +17370,11 @@ async function _znLoadVanSave(){
 
 /* salesFanP9 — self-contained floating Fan Menu for the seller saleshub (does NOT touch #znFan) */
 function _znFanEsc(s){ return (typeof _znEscNote==='function')?_znEscNote(s):String(s==null?'':s); }
-function _znFanInject(){
-  var c=document.getElementById('content'); if(!c) return;
+function _znFanInject(){ /* salesFanP9b: body-append (fixed was caught by transformed ancestor -> appeared mid-screen); smaller; purple; pinned above browser nav bar */
   if(document.getElementById('znFanFab')) return;
-  var IT='position:fixed;bottom:104px;left:50%;width:48px;height:48px;border-radius:50%;background:var(--bg-2,#1d2740);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;z-index:799;opacity:0;pointer-events:none;transition:.28s cubic-bezier(.2,1.2,.4,1);transform:translateX(-50%);box-shadow:0 4px 14px rgba(0,0,0,.35)';
+  var BF='calc(env(safe-area-inset-bottom, 0px) + 14px)';
+  var BI='calc(env(safe-area-inset-bottom, 0px) + 17px)';
+  var IT='position:fixed;bottom:'+BI+';left:50%;width:42px;height:42px;border-radius:50%;background:var(--bg-2,#1d2740);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;z-index:799;opacity:0;pointer-events:none;transition:.28s cubic-bezier(.2,1.2,.4,1);transform:translateX(-50%);box-shadow:0 4px 14px rgba(0,0,0,.35)';
   var w=document.createElement('div'); w.id='znFanWrap';
   w.innerHTML=
     '<div id="znFanScrim" onclick="_znFanClose()" style="position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:.2s;z-index:798"></div>'+
@@ -17381,8 +17383,8 @@ function _znFanInject(){
     '<div id="znFanI2" onclick="_znFanNote()" style="'+IT+'">📝</div>'+
     '<div id="znFanI3" onclick="_znFanCheckin()" style="'+IT+'">📍</div>'+
     '<input type="file" id="znAuditFile" accept="image/*" capture="environment" style="display:none" onchange="_znAuditPhoto(this)">'+
-    '<button id="znFanFab" data-open="0" onclick="_znFanToggle()" style="position:fixed;bottom:98px;left:50%;transform:translateX(-50%);width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#fbbf24,#d9961a);border:none;color:#1a1206;font-size:30px;font-weight:800;box-shadow:0 8px 24px rgba(251,191,36,.45);cursor:pointer;z-index:800;transition:transform .25s">＋</button>';
-  c.appendChild(w);
+    '<button id="znFanFab" data-open="0" onclick="_znFanToggle()" style="position:fixed;bottom:'+BF+';left:50%;transform:translateX(-50%);width:48px;height:48px;border-radius:50%;background:var(--accent,#8b5cf6);border:none;color:#fff;font-size:26px;font-weight:700;line-height:1;box-shadow:0 6px 18px rgba(139,92,246,.5);cursor:pointer;z-index:800;transition:transform .25s;display:flex;align-items:center;justify-content:center">＋</button>';
+  document.body.appendChild(w);
 }
 function _znFanToggle(){ var f=document.getElementById('znFanFab'); if(!f) return; if(f.dataset.open==='1') _znFanClose(); else _znFanOpen(); }
 function _znFanOpen(){
@@ -17435,6 +17437,7 @@ function _znVisitCheckin(){
 }
 
 function showPage(p, _navOpts) {
+  try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
   // 🛡️ Validate page parameter
   if (!p || typeof p !== 'string') {
     console.warn('⚠️ Invalid page parameter, fallback to dashboard:', p);
