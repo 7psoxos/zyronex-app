@@ -17315,6 +17315,11 @@ async function renderLoadVan(){
   var c=document.getElementById('content'); if(!c) return;
   if(window.FLEET&&FLEET.CACHE&&FLEET.CACHE.vehicles&&!FLEET.CACHE.vehicles.length&&typeof FLEET.load==='function'){ try{ await FLEET.load(); }catch(e){} }
   if(!window._znVanLoad) window._znVanLoad=[];
+  if(typeof sb!=='undefined' && (typeof PRODUCTS==='undefined' || !Array.isArray(PRODUCTS) || PRODUCTS.length<2)){
+    try{ var _vp=await sb.from('products').select('id,barcode,name,category,price,cost,stock,min_stock,vat_rate').order('name').limit(2000);
+      if(_vp&&_vp.data&&_vp.data.length){ if(typeof window.PRODUCTS==='undefined'||!Array.isArray(window.PRODUCTS)) window.PRODUCTS=[]; PRODUCTS.length=0; _vp.data.forEach(function(p){ PRODUCTS.push({id:p.id,barcode:p.barcode,name:p.name,category:p.category,price:parseFloat(p.price)||0,cost:parseFloat(p.cost)||0,stock:p.stock,min_stock:p.min_stock,vat_rate:p.vat_rate}); }); }
+    }catch(_e){}
+  } /* vanProdFixP1 */
   var vopts=_znVanVehicleOptions();
   c.innerHTML='<div style="max-width:560px;margin:0 auto">'+
     '<button class="btn btn-ghost" style="margin:4px 0 12px" onclick="renderSalesHub()">← Πίσω</button>'+

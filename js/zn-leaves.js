@@ -4285,7 +4285,7 @@ function _renderLoyaltyMemberProfile(cid){
   html += '<div style="padding:16px;max-width:600px;margin:0 auto">';
 
   // ── 1) Header card ──────────────────────────────────────────────────────────
-  html += '<div style="background:linear-gradient(135deg,'+tm.color+'22 0%,'+tm.color+'08 100%);'
+  html += '<div style="background:linear-gradient(135deg,'+tm.color+'22 0%,'+tm.color+'08 100%),var(--bg-2);'
     +'border:1px solid '+tm.color+'40;border-radius:14px;padding:20px;margin-bottom:14px;text-align:center">'
     +'<div style="display:flex;justify-content:center;margin-bottom:12px">'+avHTML(cust.name,tm.color,56)+'</div>'
     +'<div style="font-size:20px;font-weight:800;margin-bottom:4px">'+esc(cust.name||'—')+'</div>'
