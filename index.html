@@ -16699,7 +16699,7 @@ function renderMyZone(){ /* myZoneChunk7 */
     '<button class="btn btn-ghost" style="margin-bottom:12px;width:auto;padding:8px 14px" onclick="showPage(\'saleshub\')"><i data-lucide="chevron-left" size="16"></i> Ατζέντα</button>'+
     '<div style="font-size:19px;font-weight:800;color:var(--text-1)">My Zone</div>'+
     '<div style="color:var(--text-2);font-size:12.5px;margin-bottom:14px">Μόνο τα δικά σου νούμερα</div>'+
-    '<div id="znMzTabs" style="display:flex;gap:6px;margin:0 0 12px">'+'<button id="mzT_perf" onclick="_znMyZoneTab(\'perf\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--amber);color:#1a1206">Απόδοση</button>'+'<button id="mzT_shifts" onclick="_znMyZoneTab(\'shifts\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--bg-2);color:var(--text-2)">Βάρδιες</button>'+'<button id="mzT_ot" onclick="_znMyZoneTab(\'ot\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--bg-2);color:var(--text-2)">Υπερωρίες</button>'+'</div>'+'<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div>'+'<div id="znZoneShifts" style="display:none"></div>'+'<div id="znZoneOT" style="display:none"></div></div>';
+    '<div id="znMzTabs" style="display:flex;gap:6px;margin:0 0 12px">'+'<button id="mzT_perf" onclick="_znMyZoneTab(\'perf\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--amber);color:#1a1206">Απόδοση</button>'+'<button id="mzT_shifts" onclick="_znMyZoneTab(\'shifts\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#ffffff;color:#444444">Βάρδιες</button>'+'<button id="mzT_ot" onclick="_znMyZoneTab(\'ot\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#ffffff;color:#444444">Υπερωρίες</button>'+'</div>'+'<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div>'+'<div id="znZoneShifts" style="display:none"></div>'+'<div id="znZoneOT" style="display:none"></div></div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   _znLoadMyZone();
 }
@@ -17092,7 +17092,7 @@ function _znMyZoneTab(t){
   Object.keys(map).forEach(function(k){
     var el=document.getElementById(map[k]); if(el) el.style.display=(k===t)?'block':'none';
     var btn=document.getElementById('mzT_'+k);
-    if(btn){ btn.style.background=(k===t)?'var(--amber)':'var(--bg-2)'; btn.style.color=(k===t)?'#1a1206':'var(--text-2)'; }
+    if(btn){ btn.style.background=(k===t)?'var(--amber)':'#ffffff'; btn.style.color=(k===t)?'#1a1206':'#444444'; /* sellerCorrA1 */ }
   });
   if(t==='shifts') _znRenderMyShifts();
   if(t==='ot') _znRenderMyOT();
@@ -17424,10 +17424,10 @@ async function _znAuditPhoto(input){
   if(typeof sb==='undefined'||typeof SHOP_ID==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
   if(typeof toast==='function') toast('📸 Ανέβασμα...','info');
   try{
-    var up=await sb.storage.from('vault').upload(SHOP_ID+'/store-audits/'+Date.now()+'.jpg', f, {upsert:true,contentType:f.type||'image/jpeg'});
+    var up=await sb.storage.from('vault').upload(SHOP_ID+'/store-audits/'+Date.now()+'.jpg', f, {upsert:true});
     if(up.error) throw up.error;
     if(typeof toast==='function') toast('📸 Φωτογραφία ραφιού αποθηκεύτηκε','success');
-  }catch(e){ if(typeof toast==='function') toast('Σφάλμα αποθήκευσης φωτό','error'); }
+  }catch(e){ if(typeof toast==='function') toast('Σφάλμα φωτό: '+((e&&e.message)||e||''),'error'); }
 }
 function _znVisitCheckin(){
   if(!navigator.geolocation){ if(typeof toast==='function') toast('GPS μη διαθέσιμο (κυρίως Android)','warn'); return; }
