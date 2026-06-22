@@ -16463,7 +16463,7 @@ function renderSalesHub(){ /* saleshubChunk1 */
     '<div style="color:var(--text-2);font-size:13px;margin-bottom:16px;text-transform:capitalize">'+dateStr+' · '+agenda.length+' επισκέψεις σήμερα</div>'+'<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'+'<div><div style="font-weight:800;color:var(--text-1);font-size:14px">🌅 Ταμείο εκκίνησης</div>'+'<div style="font-size:13px;color:var(--text-2);margin-top:2px">'+(function(){ var s=((typeof SHIFTS_CACHE!=='undefined'&&SHIFTS_CACHE)||[]).find(function(x){return x.user_id===u.id&&!x.ended_at;}); return (s&&s.start_float!=null&&parseFloat(s.start_float)>0)?(parseFloat(s.start_float).toFixed(2).replace('.',',')+' €'):'Δεν έχει δηλωθεί'; })()+'</div></div>'+'<button onclick="_znStartDayFloat()" style="background:var(--amber,#fbbf24);color:#1a1206;border:none;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">Δήλωσε</button>'+'</div>'+
     '<div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-2);font-weight:700;margin-bottom:8px">Ατζέντα — δρομολόγιο επισκέψεων</div>'+
     rows+
-    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderCashClose()">🧮 Συμφωνία Ταμείου</button>'+
+    '<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="showPage(\'customers\')"><i data-lucide="users" size="18"></i> Όλοι οι πελάτες</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLoadVan()">📥 Φόρτωση οχήματος</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderLiveTrunk()">🚐 Live Πορτ-μπαγκάζ</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderCashClose()">🧮 Συμφωνία Ταμείου</button>'+'<button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="renderReturnStock()">📤 Επιστροφή Στοκ</button>'+
     '<div onclick="renderMyZone()" style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:14px;margin-top:14px;cursor:pointer">'+
       '<div style="font-weight:800;color:'+AM+';margin-bottom:4px">📊 My Zone</div>'+
       '<div style="font-size:12.5px;color:var(--text-2)">Δες τα στατιστικά της ζώνης σου ›</div>'+
@@ -17564,6 +17564,71 @@ async function _znReconSave(){
     if(typeof toast==='function') toast('Ταμείο κλείστηκε'+(Math.abs(diff)>=0.01?(' · διαφορά '+_znCcEur(diff)):' · ισοσκελισμένο'), Math.abs(diff)>=0.01?'warn':'success');
     if(typeof renderSalesHub==='function') renderSalesHub();
   }catch(e){ if(typeof toast==='function') toast('Σφάλμα αποθήκευσης','error'); }
+}
+
+
+/* returnStockP8b — return remaining vehicle_stock to central products.stock (read-then-write + stock_movements audit) */
+function _znRsEsc(s){ return (typeof _znEscNote==='function')?_znEscNote(s):String(s==null?'':s); }
+async function renderReturnStock(){
+  var c=document.getElementById('content'); if(!c) return;
+  c.innerHTML='<div style="max-width:520px;margin:0 auto">'+
+    '<button class="btn btn-ghost" style="margin:4px 0 12px" onclick="renderSalesHub()">← Πίσω</button>'+
+    '<div style="font-size:20px;font-weight:800;color:var(--text-1);margin-bottom:2px">📤 Επιστροφή Στοκ</div>'+
+    '<div style="font-size:12px;color:var(--text-2);margin-bottom:14px">Ό,τι έμεινε στο όχημα επιστρέφει στην κεντρική αποθήκη.</div>'+
+    '<div id="rsBody"><div style="text-align:center;color:var(--text-2);padding:20px">Φόρτωση…</div></div>'+
+  '</div>';
+  var vehId=window._znVehId?Number(window._znVehId):null;
+  var body=document.getElementById('rsBody'); if(!body) return;
+  if(!vehId){ body.innerHTML='<div style="font-size:12.5px;color:var(--text-2)">Δεν έχει φορτωθεί όχημα.</div>'; return; }
+  if(typeof sb==='undefined'){ body.innerHTML='<div style="font-size:12.5px;color:#f87171">Σφάλμα σύνδεσης.</div>'; return; }
+  try{
+    var vs=await sb.from('vehicle_stock').select('product_id,qty').eq('shop_id',SHOP_ID).eq('vehicle_id',vehId);
+    var rows=(vs&&vs.data)?vs.data.filter(function(r){return Number(r.qty)>0;}):[];
+    if(!rows.length){ body.innerHTML='<div style="font-size:12.5px;color:var(--text-2)">Το όχημα είναι ήδη άδειο.</div>'; return; }
+    rows.sort(function(a,b){return Number(b.qty)-Number(a.qty);});
+    var tot=rows.reduce(function(a,r){return a+Number(r.qty);},0);
+    var list=rows.map(function(r){ var p=(typeof PRODUCTS!=='undefined'?(PRODUCTS||[]):[]).find(function(x){return x.id==r.product_id;}); var nm=p?(p.name||('#'+r.product_id)):('#'+r.product_id); return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px"><span>'+_znRsEsc(nm)+'</span><b>'+r.qty+' τμχ</b></div>'; }).join('');
+    body.innerHTML=list+
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-weight:800;font-size:14px"><span>Σύνολο</span><span>'+tot+' τμχ</span></div>'+
+      '<button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="_znReturnStockConfirm('+vehId+')">📤 Επιστροφή όλων στην αποθήκη</button>';
+  }catch(e){ body.innerHTML='<div style="font-size:12.5px;color:#f87171">Σφάλμα φόρτωσης στοκ.</div>'; }
+}
+function _znReturnStockConfirm(vehId){
+  var html='<h3 style="margin:0 0 10px;font-size:17px;font-weight:800;color:var(--text-1)">Επιβεβαίωση</h3>'+
+    '<div style="font-size:13.5px;color:var(--text-2);margin-bottom:16px">Όλο το υπόλοιπο στοκ του οχήματος θα προστεθεί στην κεντρική αποθήκη και το όχημα θα αδειάσει. Συνέχεια;</div>'+
+    '<div style="display:flex;gap:8px"><button onclick="closeModal()" style="flex:1;background:var(--bg-2);border:1px solid var(--border);color:var(--text-1);border-radius:10px;padding:11px;font-weight:700;cursor:pointer">Άκυρο</button>'+
+    '<button onclick="closeModal();_znReturnStockDo('+Number(vehId)+')" style="flex:1;background:var(--accent,#8b5cf6);border:none;color:#fff;border-radius:10px;padding:11px;font-weight:800;cursor:pointer">Επιστροφή</button></div>';
+  if(typeof openModal==='function') openModal(html);
+}
+async function _znReturnStockDo(vehId){
+  vehId=Number(vehId);
+  if(typeof sb==='undefined'){ if(typeof toast==='function') toast('Σφάλμα σύνδεσης','error'); return; }
+  if(typeof toast==='function') toast('Επιστροφή σε εξέλιξη…','info');
+  var u=(typeof CURRENT_USER!=='undefined'&&CURRENT_USER)?CURRENT_USER:{};
+  var ok=0, fail=0;
+  try{
+    var vs=await sb.from('vehicle_stock').select('id,product_id,qty').eq('shop_id',SHOP_ID).eq('vehicle_id',vehId);
+    var rows=(vs&&vs.data)?vs.data.filter(function(r){return Number(r.qty)>0;}):[];
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i]; var pid=Number(r.product_id); var qty=Number(r.qty); var now=new Date().toISOString();
+      try{
+        // read current central stock (DB) then add
+        var pr=await sb.from('products').select('stock').eq('id',pid).limit(1);
+        var cur=(pr&&pr.data&&pr.data.length&&pr.data[0].stock!=null)?Number(pr.data[0].stock):0;
+        var newStock=cur+qty;
+        var us=await sb.from('products').update({stock:newStock}).eq('id',pid); if(us.error) throw us.error;
+        // zero the vehicle row only after central update succeeded
+        var uv=await sb.from('vehicle_stock').update({qty:0,updated_at:now}).eq('id',r.id); if(uv.error) throw uv.error;
+        // in-memory + audit (best-effort)
+        try{ var p=(PRODUCTS||[]).find(function(x){return x.id==pid;}); if(p) p.stock=newStock; }catch(_){}
+        try{ if(window.VEHICLE_STOCK) window.VEHICLE_STOCK[String(r.product_id)]=0; }catch(_){}
+        try{ await sb.from('stock_movements').insert({product_id:pid,change:qty,reason:'Επιστροφή οχήματος',user_id:u.id||null}); }catch(_){}
+        ok++;
+      }catch(e){ fail++; }
+    }
+  }catch(e){ if(typeof toast==='function') toast('Σφάλμα φόρτωσης στοκ','error'); return; }
+  if(typeof toast==='function') toast('Επιστράφηκαν '+ok+' προϊόντα'+(fail?(' ('+fail+' απέτυχαν)'):''), fail?'warn':'success');
+  if(typeof renderReturnStock==='function') renderReturnStock();
 }
 
 function showPage(p, _navOpts) {
