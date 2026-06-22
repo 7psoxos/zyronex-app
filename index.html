@@ -19095,6 +19095,7 @@ async function runSecurityAudit(){
       _appReady = true;
       history.replaceState({ page: _startPage }, '', '#' + _startPage);
       showPage(_startPage);
+      try{ var _znLandPg=_startPage; setTimeout(function(){ try{ var _zc=document.getElementById('content'); if(typeof _appReady!=='undefined' && _appReady && _zc && _zc.innerHTML.replace(/\s/g,'').length<40){ showPage(_znLandPg); } }catch(_){} }, 700); }catch(_){} /* landingFixP1 */
       // Only prompt for clock-in AFTER shifts are loaded and page is shown
       checkAndPromptClockIn();
       // Schedule reminders if already clocked in
