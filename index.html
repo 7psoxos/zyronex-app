@@ -2813,7 +2813,6 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item" data-page="plugins"><i data-lucide="puzzle" size="18"></i> 🧩 Plugin Market</div>
   <div class="nav-item" data-page="agents"><i data-lucide="bot" size="18"></i> 🤖 Εξειδικευμένοι Βοηθοί</div>
   <div class="nav-item" data-page="users"><i data-lucide="user-cog" size="18"></i> Χρήστες / Δικαιώματα</div>
-  <div class="nav-item" data-page="shifts"><i data-lucide="clock" size="18"></i> Βάρδιες</div>
   <div class="nav-item" data-page="data-cleanup"><i data-lucide="sparkles" size="18"></i> Data Cleanup <span class="badge-alert" id="cleanupBadge" style="display:none">0</span></div>
   <div class="nav-item" data-page="shop-changelog"><i data-lucide="history" size="18"></i> Ιστορικό Αλλαγών</div>
   <div class="nav-item" data-page="age-log"><i data-lucide="shield-check" size="18"></i> 🔞 Μητρώο Ηλικίας</div>
@@ -16468,10 +16467,10 @@ function renderSalesHub(){ /* saleshubChunk1 */
       _znTile('renderLiveTrunk()','🚐','Live Πορτ-μπαγκάζ','στοκ & ταμείο','#14b8a6')+
       _znTile('renderCashClose()','🧮','Συμφωνία','καταμέτρηση','#f59e0b')+
       _znTile('renderReturnStock()','📤','Επιστροφή Στοκ','στην αποθήκη','#22c55e')+
-      '<div onclick="_znGeoToggle()" style="background:#141c30;border:1px solid rgba(255,255,255,.08);border-top:3px solid #8b5cf6;border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center">'+
+      '<div onclick="_znGeoToggle()" style="background:var(--bg-2);border:1px solid var(--border);border-top:3px solid #8b5cf6;border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center">'+
         '<div style="font-size:26px;line-height:1;margin-bottom:7px">📍</div>'+
-        '<div style="font-size:13px;font-weight:800;color:#f1f3f9">Auto-εντοπισμός</div>'+
-        '<div id="znGeoBtn" style="font-size:10.5px;color:#9aa3b8;margin-top:3px">'+(window._znGeoWatch!=null?'🟢 Ενεργό':'⚪ Ανενεργό')+'</div>'+
+        '<div style="font-size:13px;font-weight:800;color:var(--text-1)">Auto-εντοπισμός</div>'+
+        '<div id="znGeoBtn" style="font-size:10.5px;color:var(--text-2);margin-top:3px">'+(window._znGeoWatch!=null?'🟢 Ενεργό':'⚪ Ανενεργό')+'</div>'+
       '</div>'+
       _znTile('renderMyZone()','📊','My Zone','στατιστικά ζώνης','#ec4899')+
     '</div>'+
@@ -16706,7 +16705,7 @@ function renderMyZone(){ /* myZoneChunk7 */
     '<button class="btn btn-ghost" style="margin-bottom:12px;width:auto;padding:8px 14px" onclick="showPage(\'saleshub\')"><i data-lucide="chevron-left" size="16"></i> Ατζέντα</button>'+
     '<div style="font-size:19px;font-weight:800;color:var(--text-1)">My Zone</div>'+
     '<div style="color:var(--text-2);font-size:12.5px;margin-bottom:14px">Μόνο τα δικά σου νούμερα</div>'+
-    '<div id="znMzTabs" style="display:flex;gap:6px;margin:0 0 12px">'+'<button id="mzT_perf" onclick="_znMyZoneTab(\'perf\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:var(--amber);color:#1a1206">Απόδοση</button>'+'<button id="mzT_shifts" onclick="_znMyZoneTab(\'shifts\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#ffffff;color:#444444">Βάρδιες</button>'+'<button id="mzT_ot" onclick="_znMyZoneTab(\'ot\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#ffffff;color:#444444">Υπερωρίες</button>'+'</div>'+'<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div>'+'<div id="znZoneShifts" style="display:none"></div>'+'<div id="znZoneOT" style="display:none"></div></div>';
+    '<div id="znMzTabs" style="display:flex;gap:6px;margin:0 0 12px">'+'<button id="mzT_perf" onclick="_znMyZoneTab(\'perf\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#fbbf24;color:#1a1206">Απόδοση</button>'+'<button id="mzT_shifts" onclick="_znMyZoneTab(\'shifts\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#ffffff;color:#444444">Βάρδιες</button>'+'<button id="mzT_ot" onclick="_znMyZoneTab(\'ot\')" style="font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:999px;border:1px solid var(--border);cursor:pointer;background:#ffffff;color:#444444">Υπερωρίες</button>'+'</div>'+'<div id="znZoneBody" style="color:var(--text-2);text-align:center;padding:24px">Φόρτωση…</div>'+'<div id="znZoneShifts" style="display:none"></div>'+'<div id="znZoneOT" style="display:none"></div></div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   _znLoadMyZone();
 }
@@ -17099,7 +17098,7 @@ function _znMyZoneTab(t){
   Object.keys(map).forEach(function(k){
     var el=document.getElementById(map[k]); if(el) el.style.display=(k===t)?'block':'none';
     var btn=document.getElementById('mzT_'+k);
-    if(btn){ btn.style.background=(k===t)?'var(--amber)':'#ffffff'; btn.style.color=(k===t)?'#1a1206':'#444444'; /* sellerCorrA1 */ }
+    if(btn){ btn.style.background=(k===t)?'#fbbf24':'#ffffff'; btn.style.color=(k===t)?'#1a1206':'#444444'; /* sellerCorrA1 */ }
   });
   if(t==='shifts') _znRenderMyShifts();
   if(t==='ot') _znRenderMyOT();
@@ -17787,10 +17786,10 @@ try{
 }catch(_){}
 
 function _znTile(fn,emoji,title,sub,color){
-  return '<div onclick="'+fn+'" style="background:#141c30;border:1px solid rgba(255,255,255,.08);border-top:3px solid '+color+';border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center">'+
+  return '<div onclick="'+fn+'" style="background:var(--bg-2);border:1px solid var(--border);border-top:3px solid '+color+';border-radius:14px;padding:16px 10px;cursor:pointer;text-align:center">'+
     '<div style="font-size:26px;line-height:1;margin-bottom:7px">'+emoji+'</div>'+
-    '<div style="font-size:13px;font-weight:800;color:#f1f3f9">'+title+'</div>'+
-    '<div style="font-size:10.5px;color:#9aa3b8;margin-top:3px">'+sub+'</div>'+
+    '<div style="font-size:13px;font-weight:800;color:var(--text-1)">'+title+'</div>'+
+    '<div style="font-size:10.5px;color:var(--text-2);margin-top:3px">'+sub+'</div>'+
   '</div>';
 }
 function showPage(p, _navOpts) {
