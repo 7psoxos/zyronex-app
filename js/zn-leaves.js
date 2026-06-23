@@ -838,7 +838,7 @@ async function loadAllData(){
     
     console.log('Querying customers...');
     const custRes = await sb.from('customers')
-      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified,loyalty_lifetime_points,loyalty_elite,customer_type,meta')
+      .select('id,name,email,phone,address,city,postal_code,birthday,total_spent,visits,preferred_nicotine,loyalty_points,loyalty_tier,store_credit,loyalty_qr_token,last_visit,created_at,notes,age_verified,loyalty_lifetime_points,loyalty_elite,customer_type,meta,floor,doorbell_name,delivery_notes,company,work_address,work_postal,work_city,work_phone')
       .order('name')
       .limit(2000);
     
@@ -946,7 +946,7 @@ async function loadAllData(){
       notes: c.notes||null,
       ageVerified: c.age_verified||null,
       loyaltyLifetimePoints: Number(c.loyalty_lifetime_points)||0,
-      loyaltyElite: c.loyalty_elite||false
+      loyaltyElite: c.loyalty_elite||false, company:c.company||null, workAddress:c.work_address||null, workPostal:c.work_postal||null, workCity:c.work_city||null, workPhone:c.work_phone||null
     }));
     console.log('✓ CUSTOMERS mapped:', CUSTOMERS.length);
     
@@ -1069,7 +1069,7 @@ async function reloadProducts(){
 }
 async function reloadCustomers(){
   const {data,error} = await sb.from('customers')
-    .select('id,name,phone,email,total_spent,visits,last_visit,preferred_nicotine,loyalty_points,loyalty_tier,birthday,store_credit,address,postal_code,city,notes,loyalty_qr_token,loyalty_lifetime_points,loyalty_elite')
+    .select('id,name,phone,email,total_spent,visits,last_visit,preferred_nicotine,loyalty_points,loyalty_tier,birthday,store_credit,address,postal_code,city,notes,loyalty_qr_token,loyalty_lifetime_points,loyalty_elite,floor,doorbell_name,delivery_notes,company,work_address,work_postal,work_city,work_phone')
     .order('name');
   if(error) return;
   CUSTOMERS = (data||[]).map(c=>({
@@ -1089,7 +1089,7 @@ async function reloadCustomers(){
     city: c.city||null,
     floor: c.floor||null,
     doorbellName: c.doorbell_name||null,
-    deliveryNotes: c.delivery_notes||null
+    deliveryNotes: c.delivery_notes||null, company:c.company||null, workAddress:c.work_address||null, workPostal:c.work_postal||null, workCity:c.work_city||null, workPhone:c.work_phone||null
   }));
 }
 async function loadPluginSubscriptions(){
