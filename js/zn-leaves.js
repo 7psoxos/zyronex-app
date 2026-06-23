@@ -1121,7 +1121,6 @@ async function renderBanking(){
   document.getElementById('content').innerHTML = `<div class="page-head"><div class="page-title">Τράπεζες</div></div><div class="muted" style="padding:40px;text-align:center">Φόρτωση...</div>`;
   await loadBankingData();
   _renderBankingPage();
-  try{ if(typeof _znIrisCard==='function'){ var _bc=document.getElementById('content'); if(_bc) _bc.insertAdjacentHTML('beforeend', _znIrisCard()); } }catch(_e){}
 }
 
 function _renderBankingPage(){
@@ -1440,10 +1439,25 @@ function _renderBankingAggregatorTab(){
 // και τα ακριβή fields που χρειάζεται το API του όταν ενεργοποιηθεί.
 function _renderBankingPaymentAPIsTab(){
   // Load saved config per provider from localStorage
-  function getCfg(id){ try{ return JSON.parse(localStorage.getItem('payapi_'+id)||'{}'); }catch(_){ return {}; } }
+  function getCfg(id){ try{ var _c=JSON.parse(localStorage.getItem('payapi_'+id)||'{}'); if(id==='iris'){ var _ic=JSON.parse(localStorage.getItem('iris_config')||'{}'); _c.phone=_ic.phone||_c.phone||''; _c.vat=_ic.vat||_c.vat||''; _c.name=_ic.name||_c.name||''; } return _c; }catch(_){ return {}; } } /* irisProviderP1 */
   function saveCfg(id){ return `_savePayApi('${id}')`; }
 
   const providers = [
+    {
+      id: 'iris',
+      name: 'IRIS Pay',
+      icon: '📱',
+      color: '#00d4a8',
+      desc: 'Άμεση πληρωμή IRIS — ο πελάτης πληρώνει από το mobile banking του με το τηλέφωνο/ΑΦΜ που δηλώνεις εδώ.',
+      docsUrl: 'https://www.irispayments.gr',
+      fields: [
+        {id:'phone', label:'Τηλέφωνο (IRIS Alias)', type:'tel',  ph:'π.χ. 6912345678'},
+        {id:'vat',   label:'ΑΦΜ Επιχείρησης',        type:'text', ph:'9 ψηφία'},
+        {id:'name',  label:'Επωνυμία Επιχείρησης',    type:'text', ph:'Όπως στην τράπεζα'}
+      ],
+      webhookEvents: [],
+      sandboxNote: 'Δεν χρειάζεται API. Ο πελάτης πληρώνει άμεσα από το mobile banking με αυτά τα στοιχεία· επιβεβαιώνεις όταν δεις το ποσό στον λογαριασμό σου.'
+    },
     // ── ΕΛΛΗΝΙΚΕΣ ΠΛΑΤΦΟΡΜΕΣ ────────────────────────────────────────────
     {
       id: 'viva',
@@ -1639,7 +1653,7 @@ function _renderBankingPaymentAPIsTab(){
   // Check if a provider has any meaningful credentials saved
   function isConnected(cfg){
     if(!cfg || !cfg.enabled) return false;
-    return !!(cfg.api_key || cfg.secret_key || cfg.client_id || cfg.merchant_id || cfg.publishable_key);
+    return !!(cfg.phone || cfg.api_key || cfg.secret_key || cfg.client_id || cfg.merchant_id || cfg.publishable_key);
   }
 
   const accentColor = 'var(--accent)';
@@ -1784,6 +1798,7 @@ function _savePayApi(id){
       cfg[key] = el.value;
     });
     localStorage.setItem('payapi_'+id, JSON.stringify(cfg));
+    if(id==='iris'){ try{ var _pic=JSON.parse(localStorage.getItem('iris_config')||'{}'); _pic.phone=cfg.phone||''; _pic.vat=cfg.vat||''; _pic.name=cfg.name||''; localStorage.setItem('iris_config', JSON.stringify(_pic)); }catch(_){} }
     toast('✅ '+id+' αποθηκεύτηκε','success');
   }catch(e){ toast('Σφάλμα: '+e.message,'danger'); }
 }
