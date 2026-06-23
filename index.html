@@ -16478,6 +16478,7 @@ function renderSalesHub(){ /* saleshubChunk1 */
   '</div>';
   if(typeof lucide!=='undefined'){ try{ lucide.createIcons(); }catch(e){} }
   _znFanInject();
+  _znShiftGeoInit();
 }
 
 function openSalesClient(id){ /* salesClientChunk2 */
@@ -17817,6 +17818,9 @@ async function renderSalesActivity(){
   '</div>';
   try{
     var r=await sb.from('b2b_orders').select('id,total,created_at,status,created_by').eq('shop_id',SHOP_ID).gte('created_at',since).order('created_at',{ascending:false});
+    window._znSALoc={};
+    try{ var lr=await sb.from('salesperson_locations').select('user_id,lat,lng,recorded_at').eq('shop_id',SHOP_ID).order('recorded_at',{ascending:false}).limit(400);
+      ((lr&&lr.data)||[]).forEach(function(p){ var lk=String(p.user_id); if(!window._znSALoc[lk]) window._znSALoc[lk]={lat:p.lat,lng:p.lng,t:p.recorded_at}; }); }catch(_e){}
     _znSARender((r&&r.data)?r.data:[], days);
   }catch(e){ var b=document.getElementById('saBody'); if(b) b.innerHTML='<div style="padding:20px;color:#f87171">Σφάλμα: '+((e&&e.message)||e)+'</div>'; }
 }
@@ -17849,11 +17853,63 @@ function _znSARender(rows, days){
         _znSAStat(st.delivered,'Παραδόθηκαν','#8b5cf6')+
         _znSAStat(ss.n,'Βάρδιες','#f59e0b')+
         _znSAStat((ss.diff>=0?'+':'')+'€'+ss.diff.toFixed(0),'Διαφορά ταμείου',dcol)+
-        _znSAStat('—','Τοποθεσία','#a5b0c8')+
+        _znSALocStat(k)+
       '</div>'+
     '</div>';
   });
   b.innerHTML=html;
+}
+/* shiftGeoP1 — opt-in location sharing during shift (self-managed indicator) + panel location display */
+function _znShiftGeoOptIn(){ try{ return localStorage.getItem('_znShiftGeoOptIn')==='1'; }catch(_){ return false; } }
+function _znShiftGeoSetOptIn(v){ try{ localStorage.setItem('_znShiftGeoOptIn', v?'1':'0'); }catch(_){} }
+function _znShiftGeoIsSeller(){ try{ var u=(typeof CURRENT_USER!=='undefined')?CURRENT_USER:null; if(!u) return false; if((u.perms||[]).indexOf('*')>=0) return false; return true; }catch(_){ return false; } }
+function _znShiftGeoClockedIn(){ try{ var u=(typeof CURRENT_USER!=='undefined')?CURRENT_USER:null; if(!u) return false; if(typeof isUserClockedIn==='function') return !!isUserClockedIn(u.id); return true; }catch(_){ return false; } }
+function _znShiftGeoPing(){
+  if(!_znShiftGeoOptIn() || !_znShiftGeoClockedIn()) return;
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    try{
+      if(typeof sb==='undefined'||typeof SHOP_ID==='undefined'||!pos||!pos.coords) return;
+      var u=(typeof CURRENT_USER!=='undefined')?CURRENT_USER:{};
+      sb.from('salesperson_locations').insert({ shop_id:SHOP_ID, user_id:String(u.id||''), user_name:(u.name||''), lat:pos.coords.latitude, lng:pos.coords.longitude, accuracy:(pos.coords.accuracy||null) });
+    }catch(_){}
+  }, function(){}, {enableHighAccuracy:false, maximumAge:60000, timeout:15000});
+}
+function _znShiftGeoIndicator(show, active){
+  var el=document.getElementById('znShiftGeoDot');
+  if(!show){ if(el&&el.parentNode) el.parentNode.removeChild(el); return; }
+  if(!el){
+    el=document.createElement('div'); el.id='znShiftGeoDot';
+    el.onclick=_znShiftGeoToggle;
+    document.body.appendChild(el);
+    if(!document.getElementById('znpulseKf')){ var stx=document.createElement('style'); stx.id='znpulseKf'; stx.textContent='@keyframes znpulse{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}'; document.head.appendChild(stx); }
+  }
+  if(active){
+    el.style.cssText='position:fixed;left:12px;bottom:76px;z-index:9998;background:rgba(34,197,94,.16);border:1px solid rgba(34,197,94,.55);color:#16a34a;font-size:11.5px;font-weight:800;padding:6px 11px;border-radius:999px;display:flex;align-items:center;gap:6px;font-family:-apple-system,sans-serif;cursor:pointer';
+    el.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;animation:znpulse 1.4s infinite"></span> 📍 Θέση κοινοποιείται';
+  } else {
+    el.style.cssText='position:fixed;left:12px;bottom:76px;z-index:9998;background:rgba(120,130,150,.16);border:1px solid rgba(120,130,150,.45);color:#8a94a8;font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:999px;display:flex;align-items:center;gap:6px;font-family:-apple-system,sans-serif;cursor:pointer';
+    el.innerHTML='📍 Κοινοποίηση θέσης';
+  }
+}
+function _znShiftGeoEnsure(){
+  var seller=_znShiftGeoIsSeller(), clocked=_znShiftGeoClockedIn(), opt=_znShiftGeoOptIn();
+  if(seller && clocked && opt){ if(!window._znShiftGeoIv){ _znShiftGeoPing(); window._znShiftGeoIv=setInterval(_znShiftGeoPing, 240000); } }
+  else { if(window._znShiftGeoIv){ clearInterval(window._znShiftGeoIv); window._znShiftGeoIv=null; } }
+  _znShiftGeoIndicator(seller && clocked, opt);
+}
+function _znShiftGeoToggle(){
+  if(!_znShiftGeoOptIn()){ _znShiftGeoSetOptIn(true); if(typeof toast==='function') toast('📍 Κοινοποίηση θέσης ενεργή κατά τη βάρδια','success'); }
+  else { _znShiftGeoSetOptIn(false); if(typeof toast==='function') toast('Κοινοποίηση θέσης απενεργοποιήθηκε','info'); }
+  _znShiftGeoEnsure();
+}
+function _znShiftGeoInit(){ try{ if(!_znShiftGeoIsSeller()) return; _znShiftGeoEnsure(); if(!window._znShiftGeoWatch){ window._znShiftGeoWatch=setInterval(_znShiftGeoEnsure, 60000); } }catch(_){} }
+function _znSAAgo(t){ if(!t) return '—'; var d=Date.now()-Date.parse(t); if(isNaN(d)) return '—'; var m=Math.round(d/60000); if(m<1) return 'τώρα'; if(m<60) return 'πριν '+m+'λ'; var h=Math.round(m/60); if(h<24) return 'πριν '+h+'ω'; return 'πριν '+Math.round(h/24)+'μ'; }
+function _znSALocStat(k){
+  var loc=(window._znSALoc&&window._znSALoc[k])?window._znSALoc[k]:null;
+  if(!loc||loc.lat==null) return _znSAStat('—','Τοποθεσία','#a5b0c8');
+  var url='https://www.google.com/maps?q='+loc.lat+','+loc.lng;
+  return '<a href="'+url+'" target="_blank" rel="noopener" style="text-decoration:none;background:var(--bg-1);border-radius:10px;padding:10px 6px;text-align:center;display:block"><div style="font-size:14px;font-weight:800;color:#3b82f6">📍 Χάρτης</div><div style="font-size:10px;color:var(--text-2);margin-top:2px">'+_znSAAgo(loc.t)+'</div></a>';
 }
 function showPage(p, _navOpts) {
   try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
