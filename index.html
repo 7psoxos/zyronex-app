@@ -17911,6 +17911,43 @@ function _znSALocStat(k){
   var url='https://www.google.com/maps?q='+loc.lat+','+loc.lng;
   return '<a href="'+url+'" target="_blank" rel="noopener" style="text-decoration:none;background:var(--bg-1);border-radius:10px;padding:10px 6px;text-align:center;display:block"><div style="font-size:14px;font-weight:800;color:#3b82f6">📍 Χάρτης</div><div style="font-size:10px;color:var(--text-2);margin-top:2px">'+_znSAAgo(loc.t)+'</div></a>';
 }
+function _znIrisCard(){ return `<div class="card" style="margin-bottom:16px;border-color:rgba(0,212,168,0.3);background:linear-gradient(135deg,rgba(0,212,168,0.04),transparent)">
+    <div class="section-title">📱 IRIS Pay - Στοιχεία Επιχείρησης</div>
+    <div class="text-sm muted mt-2 mb-3">Στοιχεία που εμφανίζονται στους πελάτες όταν πληρώνουν με IRIS. Ο πελάτης τα χρησιμοποιεί στο mobile banking για να σε πληρώσει.</div>
+    
+    <div style="display:grid;gap:12px;margin-top:12px">
+      <div>
+        <label class="form-label">📞 Τηλέφωνο Επιχείρησης (IRIS Alias)</label>
+        <input type="tel" class="form-input" id="irisPhone" placeholder="π.χ. 6912345678" value="${JSON.parse(localStorage.getItem('iris_config')||'{}').phone || ''}">
+        <div class="text-xs muted mt-1">Το τηλέφωνο που έχεις δηλώσει στην τράπεζα για IRIS payments.</div>
+      </div>
+      
+      <div>
+        <label class="form-label">🆔 ΑΦΜ Επιχείρησης</label>
+        <input type="text" class="form-input" id="irisVat" placeholder="9 ψηφία" maxlength="9" value="${JSON.parse(localStorage.getItem('iris_config')||'{}').vat || ''}">
+        <div class="text-xs muted mt-1">Εναλλακτικός τρόπος πληρωμής μέσω IRIS (αντί τηλεφώνου).</div>
+      </div>
+      
+      <div>
+        <label class="form-label">🏪 Επωνυμία (όπως εμφανίζεται στον πελάτη)</label>
+        <input type="text" class="form-input" id="irisName" placeholder="π.χ. Το Κατάστημά μου ΑΕ" value="${JSON.parse(localStorage.getItem('iris_config')||'{}').name || ''}">
+      </div>
+      
+      <button class="btn btn-primary" onclick="saveIrisConfig()" style="background:#00d4a8;color:#000;font-weight:700">
+        💾 Αποθήκευση IRIS Settings
+      </button>
+      
+      <div style="padding:10px;background:rgba(0,212,168,0.1);border-left:3px solid #00d4a8;border-radius:4px">
+        <div class="text-xs" style="color:var(--text-2);line-height:1.6">
+          <b style="color:#00d4a8">ℹ️ Σημειώσεις:</b><br>
+          • Το IRIS λειτουργεί <b>χωρίς API integration</b> — αρκεί να έχεις ενεργό IRIS account στην τράπεζά σου<br>
+          • Ο πελάτης σαρώνει το QR code που εμφανίζεται και πληρώνει από το mobile banking του<br>
+          • Επιβεβαιώνεις την πληρωμή <b>όταν δεις το ποσό στον λογαριασμό σου</b> (instant)<br>
+          • Από 1/12/2025 είναι υποχρεωτικό για όλες τις επιχειρήσεις λιανικής
+        </div>
+      </div>
+    </div>
+  </div>`; } /* irisBankingP1 */
 function showPage(p, _navOpts) {
   try{ var _fwz=document.getElementById('znFanWrap'); if(_fwz) _fwz.remove(); }catch(_){}
   // 🛡️ Validate page parameter
@@ -28241,44 +28278,7 @@ function renderSettings(){
     <div class="text-sm muted mt-2 mb-3">Αποστολή αποδείξεων, birthday wishes και stock alerts μέσω WhatsApp.</div>
     <button class="btn btn-ghost" onclick="renderWASettings()"><i data-lucide="settings" size="14"></i> Ρυθμίσεις WhatsApp</button>
   </div>
-  <!-- 📱 IRIS Payment Configuration -->
-  <div class="card" style="margin-bottom:16px;border-color:rgba(0,212,168,0.3);background:linear-gradient(135deg,rgba(0,212,168,0.04),transparent)">
-    <div class="section-title">📱 IRIS Pay - Στοιχεία Επιχείρησης</div>
-    <div class="text-sm muted mt-2 mb-3">Στοιχεία που εμφανίζονται στους πελάτες όταν πληρώνουν με IRIS. Ο πελάτης τα χρησιμοποιεί στο mobile banking για να σε πληρώσει.</div>
-    
-    <div style="display:grid;gap:12px;margin-top:12px">
-      <div>
-        <label class="form-label">📞 Τηλέφωνο Επιχείρησης (IRIS Alias)</label>
-        <input type="tel" class="form-input" id="irisPhone" placeholder="π.χ. 6912345678" value="${JSON.parse(localStorage.getItem('iris_config')||'{}').phone || ''}">
-        <div class="text-xs muted mt-1">Το τηλέφωνο που έχεις δηλώσει στην τράπεζα για IRIS payments.</div>
-      </div>
-      
-      <div>
-        <label class="form-label">🆔 ΑΦΜ Επιχείρησης</label>
-        <input type="text" class="form-input" id="irisVat" placeholder="9 ψηφία" maxlength="9" value="${JSON.parse(localStorage.getItem('iris_config')||'{}').vat || ''}">
-        <div class="text-xs muted mt-1">Εναλλακτικός τρόπος πληρωμής μέσω IRIS (αντί τηλεφώνου).</div>
-      </div>
-      
-      <div>
-        <label class="form-label">🏪 Επωνυμία (όπως εμφανίζεται στον πελάτη)</label>
-        <input type="text" class="form-input" id="irisName" placeholder="π.χ. Το Κατάστημά μου ΑΕ" value="${JSON.parse(localStorage.getItem('iris_config')||'{}').name || ''}">
-      </div>
-      
-      <button class="btn btn-primary" onclick="saveIrisConfig()" style="background:#00d4a8;color:#000;font-weight:700">
-        💾 Αποθήκευση IRIS Settings
-      </button>
-      
-      <div style="padding:10px;background:rgba(0,212,168,0.1);border-left:3px solid #00d4a8;border-radius:4px">
-        <div class="text-xs" style="color:var(--text-2);line-height:1.6">
-          <b style="color:#00d4a8">ℹ️ Σημειώσεις:</b><br>
-          • Το IRIS λειτουργεί <b>χωρίς API integration</b> — αρκεί να έχεις ενεργό IRIS account στην τράπεζά σου<br>
-          • Ο πελάτης σαρώνει το QR code που εμφανίζεται και πληρώνει από το mobile banking του<br>
-          • Επιβεβαιώνεις την πληρωμή <b>όταν δεις το ποσό στον λογαριασμό σου</b> (instant)<br>
-          • Από 1/12/2025 είναι υποχρεωτικό για όλες τις επιχειρήσεις λιανικής
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- IRIS Pay moved to Banking (irisBankingP1) -->
 
   <!-- Onboarding & Tours -->
   <div class="card" style="margin-bottom:16px;border-color:rgba(0,212,168,0.3);background:linear-gradient(135deg,rgba(0,212,168,0.04),transparent)">

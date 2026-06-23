@@ -1121,6 +1121,7 @@ async function renderBanking(){
   document.getElementById('content').innerHTML = `<div class="page-head"><div class="page-title">Τράπεζες</div></div><div class="muted" style="padding:40px;text-align:center">Φόρτωση...</div>`;
   await loadBankingData();
   _renderBankingPage();
+  try{ if(typeof _znIrisCard==='function'){ var _bc=document.getElementById('content'); if(_bc) _bc.insertAdjacentHTML('beforeend', _znIrisCard()); } }catch(_e){}
 }
 
 function _renderBankingPage(){
