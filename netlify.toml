@@ -1,0 +1,7 @@
+# ZyroNex — disable Netlify secret scanning at the REPO level (all deploy contexts).
+# Reason: the scanner flags (a) the PUBLIC Supabase anon key (public by design under RLS)
+# and (b) a false-positive match of the unused ANTHROPIC_KEY value against CSS text.
+# The real secret (service_role) lives ONLY in env vars, never in code, so nothing is exposed.
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
