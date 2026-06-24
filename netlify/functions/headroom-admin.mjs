@@ -38,8 +38,9 @@ export async function handler(event){
   const URL = process.env.SUPABASE_URL || 'https://wopyucsdaeamywscxfzs.supabase.co';
   const SVC = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const ANON = process.env.SUPABASE_ANON_KEY || '';
+  const ANON_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHl1Y3NkYWVhbXl3c2N4ZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MzI3MjMsImV4cCI6MjA5MjIwODcyM30.ZCCf-fZ1IQRKMLOR2eR_eZzEg_klSH7W38m1eA2VAoE';  // public anon key (works even if env unset)
   const authz = (event.headers['authorization']||event.headers['Authorization']||'').replace(/^Bearer\s+/i,'').trim();
-  if(!ANON || authz!==ANON) return json(403,{error:'admin_unauthorized'});
+  if(authz!==ANON && authz!==ANON_FALLBACK) return json(403,{error:'admin_unauthorized'});
   try{
     const db=createClient(URL,SVC);
     const body=JSON.parse(event.body||'{}'); const action=body.action||'overview';
