@@ -13166,7 +13166,38 @@ async function znShopLogin(email, password){
    SHOP ISOLATION — Multi-tenant security
    Κάθε query φιλτράρει αυτόματα ανά shop_id.
    ============================================================ */
-var SHOP_ID = 'c162329a-ecd9-44d3-b3fc-f107fe101590'; // Updated on login
+var SHOP_ID = 'c162329a-ecd9-44d3-b3fc-f107fe101590';
+/* ZyroNex Headroom interceptor — routes claude-proxy AI calls through Headroom.
+   Fail-open: if Headroom errors/blocks, the original claude-proxy call runs, so AI never breaks.
+   iOS Safari safe: var-only, no const/let at top level. Idempotent. */
+;(function(){
+  if(window.__znHeadroomWrap) return; window.__znHeadroomWrap=true;
+  try{ if(typeof SHOP_ID!=='undefined' && !window.SHOP_ID) window.SHOP_ID=SHOP_ID; }catch(e){}
+  var _of = window.fetch ? window.fetch.bind(window) : null;
+  if(!_of) return;
+  var PROXY='/functions/v1/claude-proxy';
+  var HR='/.netlify/functions/headroom';
+  window.fetch=function(input, init){
+    try{
+      var url=(typeof input==='string')?input:(input&&input.url)||'';
+      if(!url || url.indexOf(PROXY)===-1) return _of(input, init);
+      var sid=window.SHOP_ID||'';
+      if(!sid) return _of(input, init);
+      var hi={};
+      if(init){ for(var k in init){ if(Object.prototype.hasOwnProperty.call(init,k)) hi[k]=init[k]; } }
+      var hd={};
+      if(init&&init.headers){ for(var h in init.headers){ if(Object.prototype.hasOwnProperty.call(init.headers,h)) hd[h]=init.headers[h]; } }
+      hd['X-Store-ID']=sid;
+      hi.headers=hd;
+      return _of(HR, hi).then(function(resp){
+        var pass=false; try{ pass=resp&&resp.headers&&resp.headers.get('X-Headroom')==='pass'; }catch(e){}
+        if(pass) return resp;
+        return _of(input, init);
+      }).catch(function(){ return _of(input, init); });
+    }catch(e){ return _of(input, init); }
+  };
+})();
+ // Updated on login
 
 // ── Hardware Compatibility Matrix ──
 // Map: device_product_id → Set of compatible consumable_product_ids
