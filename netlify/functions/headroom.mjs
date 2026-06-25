@@ -12,6 +12,7 @@ var COMPRESS_ACTIVE = false;
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wopyucsdaeamywscxfzs.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const ANON_KEY     = process.env.SUPABASE_ANON_KEY || '';
+const ANON_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHl1Y3NkYWVhbXl3c2N4ZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MzI3MjMsImV4cCI6MjA5MjIwODcyM30.ZCCf-fZ1IQRKMLOR2eR_eZzEg_klSH7W38m1eA2VAoE'; // public anon key (records even if env unset)
 const CORS = { 'Access-Control-Allow-Origin':'*',
   'Access-Control-Allow-Headers':'authorization, x-store-id, content-type, apikey',
   'Access-Control-Allow-Methods':'POST, OPTIONS' };
@@ -32,7 +33,7 @@ export async function handler(event){
     // multi-tenant per-user login lands, those calls carry a user JWT -> strict path
     // below verifies the signature AND that the JWT shop_id matches X-Store-ID.
     let storeId;
-    if(ANON_KEY && token === ANON_KEY){
+    if((ANON_KEY && token === ANON_KEY) || token === ANON_FALLBACK){
       if(!storeHeader) return json(400,{error:'no_store_header'});
       storeId = String(storeHeader);
     } else {
