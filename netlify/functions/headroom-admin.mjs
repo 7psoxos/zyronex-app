@@ -67,6 +67,13 @@ export async function handler(event){
       const { data:usage } = await db.from('ai_proxy_usage').select('*').order('updated_at',{ascending:false}).limit(10);
       return json(200,{ logs:logs||[], usage:usage||[] });
     }
+    if(action==='series'){
+      const since=body.since || new Date(Date.now()-365*864e5).toISOString().slice(0,10);
+      const { data:rows } = await db.from('ai_proxy_usage')
+        .select('store_id,model,usage_day,calls,raw_input_tokens,raw_output_tokens,compressed_input_tokens,raw_cost_usd,actual_cost_usd')
+        .gte('usage_day',since).limit(5000);
+      return json(200,{ rows:rows||[] });
+    }
     return json(400,{error:'unknown_action'});
   }catch(err){ return json(500,{error:'admin_error',detail:String(err&&err.message||err)}); }
 }
