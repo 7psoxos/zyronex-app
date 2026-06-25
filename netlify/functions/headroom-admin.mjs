@@ -62,6 +62,11 @@ export async function handler(event){
       if(error) throw error;
       return json(200,{ ok:true });
     }
+    if(action==='recent'){
+      const { data:logs } = await db.from('ai_proxy_log').select('*').order('created_at',{ascending:false}).limit(10);
+      const { data:usage } = await db.from('ai_proxy_usage').select('*').order('updated_at',{ascending:false}).limit(10);
+      return json(200,{ logs:logs||[], usage:usage||[] });
+    }
     return json(400,{error:'unknown_action'});
   }catch(err){ return json(500,{error:'admin_error',detail:String(err&&err.message||err)}); }
 }
