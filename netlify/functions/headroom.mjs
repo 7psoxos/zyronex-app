@@ -86,19 +86,23 @@ export async function handler(event){
     const sentInTokens = COMPRESS_ACTIVE ? comp.compInTokens : comp.rawInTokens;
     const rawCost    = priceUsd(model, comp.rawInTokens, outTokens);  // baseline (no Headroom)
     const actualCost = priceUsd(model, sentInTokens,     outTokens);  // what we actually sent
+    let recErr=null;
     try{
-      await db.rpc('headroom_record_usage',{ p_store:storeId, p_model:model,
+      const _u = await db.rpc('headroom_record_usage',{ p_store:storeId, p_model:model,
         p_raw_in:comp.rawInTokens, p_raw_out:outTokens, p_comp_in:sentInTokens,
         p_raw_cost:rawCost, p_actual_cost:actualCost });
-      await db.from('ai_proxy_log').insert({ store_id:storeId, model, event:'call',
+      if(_u && _u.error) recErr='rpc:'+(_u.error.message||_u.error.code||'?');
+      const _l = await db.from('ai_proxy_log').insert({ store_id:storeId, model, event:(recErr?'error':'call'),
         raw_tokens:comp.rawInTokens, comp_tokens:sentInTokens,
         detail:{ mode: COMPRESS_ACTIVE?'compress':'passthrough',
-                 projected_saved: comp.savedTokens, raw_cost:rawCost, actual_cost:actualCost } });
-    }catch(_){ /* never block the AI response on a stats failure */ }
+                 projected_saved: comp.savedTokens, raw_cost:rawCost, actual_cost:actualCost, rec_error:recErr } });
+      if(_l && _l.error) recErr=(recErr?recErr+'; ':'')+'log:'+(_l.error.message||_l.error.code||'?');
+    }catch(e){ recErr='throw:'+String(e&&e.message||e); }
 
     // Return claude-proxy's response VERBATIM (zero behavioral change for the app).
     return { statusCode: aiResp.status,
-      headers:{ ...CORS, 'Access-Control-Expose-Headers':'X-Headroom', 'X-Headroom':'pass',
+      headers:{ ...CORS, 'Access-Control-Expose-Headers':'X-Headroom, X-HR-Rec', 'X-Headroom':'pass',
+        'X-HR-Rec': (recErr?('err '+recErr):'ok').slice(0,250),
         'Content-Type': aiResp.headers.get('content-type')||'application/json' },
       body: aiText };
   }catch(err){
