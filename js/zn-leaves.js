@@ -3491,6 +3491,39 @@ window._detectGender = _detectGender;
 window._AV_MALE     = _AV_MALE;
 window._AV_FEMALE   = _AV_FEMALE;
 
+/* ZyroNex courier covers — double filter (vehicle x gender), self-contained inline SVG.
+ * _courierCover(fullName, vehicle) -> data-URI. vehicle: 'scooter' | 'van' (default 'scooter').
+ * scooter+male=yellow Vespa, scooter+female=pink scooter, van+male=blue+van, van+female=red+van.
+ * Safe fallback: unknown vehicle -> existing gender avatar (no behaviour change). */
+function _courierCover(fullName, vehicle){
+  var g = (typeof _detectGender === 'function') ? _detectGender(fullName) : 'male';
+  var female = (g === 'female' || g === 'f');
+  var v = (vehicle === 'van' || vehicle === 'car') ? 'van' : (vehicle === 'scooter' ? 'scooter' : null);
+  if(!v){ return female ? _AV_FEMALE : _AV_MALE; }
+  var col, body;
+  if(v === 'scooter'){
+    col = female ? '#ff6fae' : '#f5c518';
+    body = '<path d="M70 168h70l16-26h28" fill="none" stroke="#1b2435" stroke-width="9" stroke-linecap="round"/>'
+         + '<rect x="120" y="120" width="56" height="34" rx="10" fill="'+col+'"/>'
+         + '<circle cx="82" cy="178" r="20" fill="#1b2435"/><circle cx="82" cy="178" r="8" fill="#fff"/>'
+         + '<circle cx="178" cy="178" r="20" fill="#1b2435"/><circle cx="178" cy="178" r="8" fill="#fff"/>';
+  } else {
+    col = female ? '#e03b3b' : '#2f6fed';
+    body = '<rect x="60" y="118" width="140" height="56" rx="12" fill="'+col+'"/>'
+         + '<rect x="150" y="118" width="50" height="30" rx="8" fill="#cfe0ff" opacity="0.55"/>'
+         + '<circle cx="96" cy="180" r="20" fill="#1b2435"/><circle cx="96" cy="180" r="8" fill="#fff"/>'
+         + '<circle cx="178" cy="180" r="20" fill="#1b2435"/><circle cx="178" cy="180" r="8" fill="#fff"/>';
+  }
+  var rider = '<circle cx="128" cy="78" r="26" fill="#f1c9a5"/>'
+            + '<path d="M128 104c-26 0-40 18-40 40h80c0-22-14-40-40-40z" fill="'+col+'"/>'
+            + '<rect x="104" y="52" width="48" height="20" rx="10" fill="#1b2435"/>';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 220">'
+          + '<rect width="256" height="220" rx="18" fill="#0f1830"/>'
+          + body + rider + '</svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+window._courierCover = _courierCover;
+
 async function openCustomerDetail(id){
   const c=CUSTOMERS.find(x=>x.id===id);
   const custSales=SALES.filter(s=>s.customerId===id);
@@ -4353,7 +4386,7 @@ function _renderLoyaltyMemberProfile(cid){
   var html = '';
 
   // ── Sticky top bar ──────────────────────────────────────────────────────────
-  html += '<div style="position:sticky;top:0;z-index:10;background:#f4f5f7;'
+  html += '<div style="position:sticky;top:0;z-index:10;background:var(--bg-1,#0f1830);'
     +'padding:12px 16px;border-bottom:1px solid var(--border,#e5e7eb);'
     +'display:flex;align-items:center;gap:12px">'
     +'<button id="loyProfileBack" style="min-width:44px;min-height:44px;border:none;background:none;'
@@ -4531,7 +4564,7 @@ function _renderLoyaltyMemberProfile(cid){
   // Build and inject overlay
   var overlay = document.createElement('div');
   overlay.id = 'loyMemberProfileOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:#f4f5f7;z-index:99999;'
+  overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg-0,#0a1020);color:var(--text-0,#e8edf8);z-index:99999;'
     +'overflow-y:auto;-webkit-overflow-scrolling:touch;'
     +'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
   overlay.innerHTML = html;
