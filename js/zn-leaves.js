@@ -3299,7 +3299,8 @@ function renderCustomers(){
   </div>
 
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr));width:100%;max-width:100%;box-sizing:border-box">
-    ${CUSTOMERS.map(c=>`<div class="cust-card" onclick="openCustomerDetail(${c.id})">
+    ${CUSTOMERS.map(c=>`<div class="cust-card">
+      <div onclick="openCustomerDetail(${c.id})" style="cursor:pointer">
       <div class="flex gap-3 items-center">${custAvatarHTML(c.name, 46, tierEmoji[c.loyaltyTier||'bronze'], null)}
       <div style="flex:1"><div class="fw-700">${c.name}</div><div class="text-xs muted">${c.phone||'—'}</div></div>
       <div class="text-right"><div class="fw-800" style="color:var(--accent)">${eur(c.totalSpent)}</div><div class="text-xs muted">${c.visits} επισκ.</div></div></div>
@@ -3308,6 +3309,37 @@ function renderCustomers(){
       ${(c.storeCredit||0) > 0 ? `<div class="flex justify-between text-xs mt-1"><span class="muted">Store Credit</span><span class="fw-700" style="color:#4aa3ff">🏦 ${eur(c.storeCredit)}</span></div>` : ''}
       <div class="flex justify-between text-xs mt-2"><span class="muted">Τελ. επίσκεψη</span><span>${dateGR(c.lastVisit)}</span></div>
       ${c.preferredNicotine!=null?`<div class="flex justify-between text-xs mt-2"><span class="muted">Νικοτίνη προτίμ.</span><span class="chip chip-info">${c.preferredNicotine} mg</span></div>`:''}
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+        <div class="flex justify-between items-center" style="cursor:pointer" onclick="event.stopPropagation();_custCardInfoToggle(${c.id})">
+          <span class="text-xs muted" style="font-weight:700">📋 Στοιχεία & Αποστολή</span>
+          <i data-lucide="chevron-down" id="cciChev_${c.id}" style="transition:transform .2s;width:16px;height:16px"></i>
+        </div>
+        <div id="cciBody_${c.id}" style="display:none;margin-top:8px" onclick="event.stopPropagation()">
+          <div class="text-xs muted mt-2 mb-1" style="font-weight:700">ΕΠΙΚΟΙΝΩΝΙΑ & ΑΠΟΣΤΟΛΗ</div>
+          <div class="form-row"><label class="form-label">ΑΦΜ</label><input class="form-input" id="cci_afm_${c.id}" value="${(c.afm||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          <div class="form-row"><label class="form-label">Διεύθυνση</label><input class="form-input" id="cci_address_${c.id}" value="${(c.address||'').replace(/"/g,'&quot;')}" placeholder="π.χ. Σταδίου 30"></div>
+          <div class="form-grid">
+            <div class="form-row"><label class="form-label">ΤΚ</label><input class="form-input" id="cci_postal_${c.id}" value="${(c.postalCode||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+            <div class="form-row"><label class="form-label">Πόλη</label><input class="form-input" id="cci_city_${c.id}" value="${(c.city||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-row"><label class="form-label">Όροφος</label><input class="form-input" id="cci_floor_${c.id}" value="${(c.floor||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+            <div class="form-row"><label class="form-label">Κουδούνι</label><input class="form-input" id="cci_doorbell_${c.id}" value="${(c.doorbellName||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          </div>
+          <div class="form-row"><label class="form-label">Σημ. Παράδοσης</label><input class="form-input" id="cci_delivery_notes_${c.id}" value="${(c.deliveryNotes||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          <div class="text-xs muted mt-3 mb-1" style="font-weight:700">ΕΡΓΑΣΙΑ</div>
+          <div class="form-row"><label class="form-label">Επωνυμία</label><input class="form-input" id="cci_company_${c.id}" value="${(c.company||'').replace(/"/g,'&quot;')}" placeholder="π.χ. ABC ΕΠΕ"></div>
+          <div class="form-row"><label class="form-label">Διεύθυνση Εργασίας</label><input class="form-input" id="cci_work_address_${c.id}" value="${(c.workAddress||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          <div class="form-grid">
+            <div class="form-row"><label class="form-label">ΤΚ Εργ.</label><input class="form-input" id="cci_work_postal_${c.id}" value="${(c.workPostal||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+            <div class="form-row"><label class="form-label">Πόλη Εργ.</label><input class="form-input" id="cci_work_city_${c.id}" value="${(c.workCity||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          </div>
+          <div class="form-row"><label class="form-label">Τηλ. Εργασίας</label><input class="form-input" id="cci_work_phone_${c.id}" value="${(c.workPhone||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          <div class="form-row"><label class="form-label">Σημειώσεις</label><input class="form-input" id="cci_notes_${c.id}" value="${(c.notes||'').replace(/"/g,'&quot;')}" placeholder="—"></div>
+          <button class="btn btn-primary mt-3" style="width:100%" onclick="event.stopPropagation();_custCardInfoSave(${c.id})"><i data-lucide="save" size="16"></i> Αποθήκευση Στοιχείων</button>
+        </div>
+      </div>
     </div>`).join('')}
   </div>`;
   document.getElementById('content').innerHTML=html;lucide.createIcons();
@@ -3449,6 +3481,35 @@ function _custAvatarSVG(name, size, tierEmoji, tierColor){
 
 // Returns full avatar div with tier badge — uses real photo avatars
 function _znTierFromPoints(p){ p=Number(p)||0; return p>=700?'platinum':p>=300?'gold':p>=100?'silver':'bronze'; }
+function _custCardInfoToggle(id){
+  var b=document.getElementById('cciBody_'+id); var ch=document.getElementById('cciChev_'+id);
+  if(!b) return;
+  var open = b.style.display==='none';
+  b.style.display = open ? 'block' : 'none';
+  if(ch) ch.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+async function _custCardInfoSave(id){
+  function _v(k){ var el=document.getElementById('cci_'+k+'_'+id); return el ? (el.value.trim()||null) : null; }
+  try{
+    await _dbInvalidate('customers_');
+    var res = await sb.from('customers').update({
+      afm:_v('afm'), notes:_v('notes'),
+      address:_v('address'), postal_code:_v('postal'), city:_v('city'),
+      floor:_v('floor'), doorbell_name:_v('doorbell'), delivery_notes:_v('delivery_notes'),
+      company:_v('company'), work_address:_v('work_address'), work_postal:_v('work_postal'),
+      work_city:_v('work_city'), work_phone:_v('work_phone')
+    }).eq('id', id);
+    if(res && res.error) throw res.error;
+    var c=(CUSTOMERS||[]).find(function(x){return x.id===id;});
+    if(c){ c.afm=_v('afm'); c.notes=_v('notes'); c.address=_v('address'); c.postalCode=_v('postal'); c.city=_v('city'); c.floor=_v('floor'); c.doorbellName=_v('doorbell'); c.deliveryNotes=_v('delivery_notes'); c.company=_v('company'); c.workAddress=_v('work_address'); c.workPostal=_v('work_postal'); c.workCity=_v('work_city'); c.workPhone=_v('work_phone'); }
+    toast('Τα στοιχεία αποθηκεύτηκαν','success');
+  }catch(err){
+    toast('Σφάλμα: '+(err && err.message ? err.message : err),'danger');
+  }
+}
+window._custCardInfoToggle=_custCardInfoToggle;
+window._custCardInfoSave=_custCardInfoSave;
+
 function _znCustInfoToggle(){
   var b=document.getElementById('znCustInfoBody'); var ch=document.getElementById('znCustInfoChev');
   if(!b) return;
