@@ -245,17 +245,44 @@ async function renderFleetLive(){
   document.body.appendChild(wrap);
   if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
 
+  // iOS Safari μετράει λάθος το inset:0/100% τη στιγμή του init → δίνουμε ΡΗΤΕΣ px διαστάσεις
+  // από το viewport ώστε το Leaflet να διαβάσει συγκεκριμένο μέγεθος και να γεμίσει όλη την οθόνη.
+  function _setDims(){
+    var w = window.innerWidth, h = window.innerHeight;
+    var wEl = document.getElementById('znFleetWrap');
+    var mEl = document.getElementById('znMap');
+    if (wEl){ wEl.style.width = w + 'px'; wEl.style.height = h + 'px'; }
+    if (mEl){ mEl.style.width = w + 'px'; mEl.style.height = h + 'px'; }
+  }
+  _setDims();
+
   var map = L.map('znMap', { zoomControl:false, attributionControl:true }).setView([39.6390, 22.4191], 14); // Λάρισα default
   ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true;
   znMakeProviderManager(map);
 
-  // Leaflet συχνά αρχικοποιείται πριν το container πάρει τελικές διαστάσεις →
-  // χωρίς invalidateSize ο χάρτης μένει σε λάθος/μικρό μέγεθος. Refresh size πολλαπλά.
-  requestAnimationFrame(function(){ try { map.invalidateSize(); } catch(e){} });
-  setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 150);
-  setTimeout(function(){ try { map.invalidateSize(); _znFit(); } catch(e){} }, 450);
-  ZN_FLEET._onResize = function(){ if (ZN_FLEET.map){ try { ZN_FLEET.map.invalidateSize(); } catch(e){} } };
+  // Leaflet στο iOS Safari συχνά αρχικοποιείται με λάθος/μικρό μέγεθος ΚΑΙ δεν ξανακεντράρει
+  // το pane μετά το invalidateSize → ο χάρτης μένει σε κομμάτι της οθόνης με μετατοπισμένα tiles.
+  // _fix: invalidateSize + re-setView (recompute pixel origin) ώστε να απλωθεί σε όλη την οθόνη.
+  function _fixSize(){
+    if (!ZN_FLEET.map) return;
+    try {
+      _setDims();
+      var c = ZN_FLEET.map.getCenter(), z = ZN_FLEET.map.getZoom();
+      ZN_FLEET.map.invalidateSize(false);
+      ZN_FLEET.map.setView(c, z, { animate:false });
+    } catch(e){}
+  }
+  requestAnimationFrame(_fixSize);
+  setTimeout(_fixSize, 150);
+  setTimeout(_fixSize, 450);
+  setTimeout(_fixSize, 900);
+  ZN_FLEET._onResize = function(){ _fixSize(); };
   window.addEventListener('resize', ZN_FLEET._onResize);
+  // ResizeObserver: πυροδοτεί ακριβώς όταν το #znMap πάρει το τελικό του μέγεθος (iOS-safe).
+  if (window.ResizeObserver){
+    ZN_FLEET._ro = new ResizeObserver(function(){ _fixSize(); });
+    try { ZN_FLEET._ro.observe(document.getElementById('znMap')); } catch(e){}
+  }
 
   map.on('dragstart', function(){ ZN_FLEET.follow = false; }); // χειροκίνητο pan → σταμάτα follow
 
@@ -328,6 +355,7 @@ async function renderFleetLive(){
     try { if (ZN_FLEET.ch) window.sb.removeChannel(ZN_FLEET.ch); } catch(e){}
     if (ZN_FLEET.timer){ clearInterval(ZN_FLEET.timer); ZN_FLEET.timer = null; }
     if (ZN_FLEET._onResize){ try { window.removeEventListener('resize', ZN_FLEET._onResize); } catch(e){} ZN_FLEET._onResize = null; }
+    if (ZN_FLEET._ro){ try { ZN_FLEET._ro.disconnect(); } catch(e){} ZN_FLEET._ro = null; }
     try { Object.keys(ZN_FLEET.couriers).forEach(function(k){ ZN_FLEET.couriers[k].sm.destroy(); }); } catch(e){}
     ZN_FLEET.couriers = {};
     try { if (ZN_FLEET.map){ ZN_FLEET.map.remove(); ZN_FLEET.map = null; } } catch(e){}
