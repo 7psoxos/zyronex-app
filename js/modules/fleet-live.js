@@ -4,7 +4,7 @@
 // ZyroNex rules: var at top-level (iOS Safari TDZ-safe); const/let only inside functions;
 //                no inline onclick (addEventListener only); globals via window.* for safety.
 
-var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true, _tl:null };
+var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true };
 
 /* ============================ Leaflet lazy loader ============================ */
 function znEnsureLeaflet(){
@@ -55,63 +55,42 @@ function _znEsc(s){
 }
 
 /* ====================== Tile engine: load-balance + 429 failover ====================== */
-// Stadia: domain-auth free (whitelist το domain στο dashboard → κανένα key στον κώδικα).
-// CARTO: εντελώς keyless. MapTiler: μόνο με paid key (raster = paid) — προαιρετικό.
+// CARTO: εντελώς keyless → δουλεύει ΑΜΕΣΩΣ, primary.
+// Stadia: domain-auth (θέλει whitelist του Netlify domain στο dashboard) → failover.
+// MapTiler: μόνο με paid key (raster = paid) — προαιρετικό.
+// Σημ.: χρησιμοποιούμε ΚΑΝΟΝΙΚΑ <img> tiles (όχι fetch) — το fetch απαιτεί CORS headers
+//       που οι tile servers δεν δίνουν, και έσπαγε εντελώς τον χάρτη.
 var ZN_TILE_PROVIDERS = [
-  { id:'stadia', url:'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
-    opts:{ maxZoom:20, attribution:'&copy; Stadia Maps &copy; OpenMapTiles &copy; OSM' } },
   { id:'carto',  url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    opts:{ maxZoom:20, subdomains:'abcd', attribution:'&copy; CARTO &copy; OSM' } }
+    opts:{ maxZoom:20, subdomains:'abcd', attribution:'&copy; CARTO &copy; OSM' } },
+  { id:'stadia', url:'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+    opts:{ maxZoom:20, attribution:'&copy; Stadia Maps &copy; OpenMapTiles &copy; OSM' } }
 ];
-
-function _znTileLayerClass(){
-  if (ZN_FLEET._tl) return ZN_FLEET._tl;
-  var L = window.L;
-  // 429-aware tile layer: fetch αντί για <img src> ώστε να διαβάζουμε το πραγματικό HTTP status.
-  ZN_FLEET._tl = L.TileLayer.extend({
-    createTile: function (coords, done){
-      var img = document.createElement('img');
-      var self = this;
-      var url = this.getTileUrl(coords);
-      var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
-      img._abort = ctrl;
-      fetch(url, ctrl ? { signal: ctrl.signal } : undefined).then(function (res){
-        if (res.status === 429){ self.fire('ratelimit'); throw new Error('429'); }
-        if (!res.ok) throw new Error('HTTP '+res.status);
-        return res.blob();
-      }).then(function (blob){
-        var obj = URL.createObjectURL(blob);
-        img.onload = function(){ URL.revokeObjectURL(obj); done(null, img); };
-        img.src = obj;
-      }).catch(function (err){ done(err, img); });
-      return img;
-    },
-    _abortTile: function (tile){ if (tile && tile._abort){ try { tile._abort.abort(); } catch(e){} } }
-  });
-  return ZN_FLEET._tl;
-}
 
 function znMakeProviderManager(map){
   var L = window.L;
-  var Cls = _znTileLayerClass();
   var failed = {};
   var layer = null;
   function mount(i){
     var p = ZN_TILE_PROVIDERS[i];
-    if (layer) { try { map.removeLayer(layer); } catch(e){} }
-    layer = new Cls(p.url, p.opts);
-    var hits = 0;
-    layer.on('ratelimit', function(){ hits++; if (hits>=3){ failed[p.id]=true; next(); } });
-    layer.on('tileerror', function(){ hits++; if (hits>=8){ failed[p.id]=true; next(); } });
+    if (layer){ try { map.removeLayer(layer); } catch(e){} }
+    layer = L.tileLayer(p.url, p.opts);           // standard img tiles — CORS-free
+    var errs = 0;
+    layer.on('tileerror', function(){             // 429 ή 401/403 ή network → failover
+      errs++; if (errs >= 4){ failed[p.id] = true; next(); }
+    });
     layer.addTo(map);
   }
   function next(){
     var avail = ZN_TILE_PROVIDERS.map(function(_,i){ return i; })
       .filter(function(i){ return !failed[ZN_TILE_PROVIDERS[i].id]; });
-    if (!avail.length){ failed = {}; avail = [0]; }
+    if (!avail.length){ failed = {}; avail = [0]; } // όλα έσκασαν → reset & retry CARTO
     mount(avail[0]);
   }
-  mount(Math.floor(Math.random()*ZN_TILE_PROVIDERS.length)); // 50/50 load-balance ανά session
+  // Ξεκινάμε από CARTO (index 0) που δουλεύει χωρίς key.
+  // Για 50/50 load-balance: whitelist το domain στο Stadia, μετά:
+  //   mount(Math.floor(Math.random()*ZN_TILE_PROVIDERS.length));
+  mount(0);
   return { current:function(){ return layer; } };
 }
 
@@ -258,6 +237,11 @@ async function renderFleetLive(){
   ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true;
   znMakeProviderManager(map);
 
+  // Leaflet συχνά αρχικοποιείται πριν το container πάρει τελικές διαστάσεις →
+  // χωρίς invalidateSize ο χάρτης μένει σε λάθος/μικρό μέγεθος. Κάνε refresh size 2 φορές.
+  setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 60);
+  setTimeout(function(){ try { map.invalidateSize(); _znFit(); } catch(e){} }, 350);
+
   map.on('dragstart', function(){ ZN_FLEET.follow = false; }); // χειροκίνητο pan → σταμάτα follow
 
   var backBtn = document.getElementById('znFlBack');
@@ -340,7 +324,7 @@ async function renderFleetLive(){
 (function(){
   var fns = [renderFleetLive, znEnsureLeaflet, znFleetLiveHTML, znRenderStops,
              znMakeProviderManager, ZNSmoothMarker, znCourierPin,
-             _znRoleKind, _znUserById, _znIsTracked, _znEsc, _znTileLayerClass];
+             _znRoleKind, _znUserById, _znIsTracked, _znEsc];
   var i;
   for (i=0;i<fns.length;i++){ if (typeof fns[i]==='function') window[fns[i].name] = fns[i]; }
   window.ZN_FLEET = ZN_FLEET;
