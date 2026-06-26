@@ -3524,6 +3524,15 @@ function _courierCover(fullName, vehicle){
 }
 window._courierCover = _courierCover;
 
+function _dnaToggleExternal(el){
+  const body = el.querySelector('div[style*="display:none"], div[style*="display: none"]') || el.querySelectorAll('div')[1];
+  const chev = el.querySelector('[data-lucide="chevron-down"]');
+  if(!body) return;
+  const isHidden = body.style.display === 'none' || body.style.display === '';
+  body.style.display = isHidden ? 'block' : 'none';
+  if(chev) chev.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+
 async function openCustomerDetail(id){
   const c=CUSTOMERS.find(x=>x.id===id);
   const custSales=SALES.filter(s=>s.customerId===id);
@@ -3590,12 +3599,18 @@ async function openCustomerDetail(id){
       </div>
     </div>`:''}
 
-    <div class="section-head mt-4">
-      <div class="section-title"><i data-lucide="dna" size="16" style="vertical-align:-2px;margin-right:6px"></i>Customer DNA</div>
-    </div>
-    <div class="card" style="padding:14px 16px">
-      <div class="flex gap-2" style="flex-wrap:wrap">
-        ${dnaTags.map(tag=>`<span class="chip" style="font-size:13px;padding:4px 10px">${tag}</span>`).join('')}
+    <div class="card mt-4" style="border:1px solid var(--accent);background:linear-gradient(135deg,rgba(139,92,246,0.08),transparent);cursor:pointer;overflow:hidden" onclick="_dnaToggleExternal(this)">
+      <div class="flex justify-between items-center" style="padding:14px 16px">
+        <div class="flex items-center gap-2">
+          <i data-lucide="dna" size="18" style="color:var(--accent)"></i>
+          <span class="fw-700">Customer DNA</span>
+        </div>
+        <i data-lucide="chevron-down" style="transition:transform .2s;color:var(--accent)"></i>
+      </div>
+      <div style="display:none;padding:0 16px 14px;border-top:1px solid var(--border)">
+        <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
+          ${dnaTags.length ? dnaTags.map(tag=>`<span class="chip" style="font-size:13px;padding:4px 10px">${tag}</span>`).join('') : '<span class="muted text-sm">Δεν υπάρχουν tags ακόμα</span>'}
+        </div>
       </div>
     </div>
 
