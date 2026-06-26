@@ -146,18 +146,18 @@ function znFleetLiveHTML(){
   +     '<div id="znFleetList" class="zn-fleet-list"></div>'
   +   '</div>'
   +   '<style>'
-  +     '#znFleetWrap{position:fixed;inset:0;z-index:1400}'
-  +     '#znMap{position:absolute;inset:0;z-index:1;background:#0b0e14}'
-  +     '.zn-fl-fab{position:absolute;z-index:1500;width:44px;height:44px;border-radius:14px;border:1px solid rgba(255,255,255,.12);'
-  +       'background:rgba(18,22,33,.6);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:#e8edf6;'
-  +       'display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4)}'
+  +     '#znFleetWrap{position:fixed;inset:0;z-index:2000}'
+  +     '#znMap{position:absolute;inset:0;width:100%;height:100%;z-index:1;background:#0b0e14}'
+  +     '.zn-fl-fab{position:absolute;z-index:2100;width:46px;height:46px;border-radius:14px;border:1px solid rgba(255,255,255,.14);'
+  +       'background:rgba(18,22,33,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:#e8edf6;'
+  +       'display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.45)}'
   +     '.zn-fl-fab:active{transform:scale(.94)}'
   +     '.zn-fl-back{top:calc(12px + env(safe-area-inset-top));left:12px}'
-  +     '.zn-fl-recenter{bottom:calc(50vh + 20px);right:12px}'
-  +     '.zn-fleet-panel{position:absolute;left:12px;right:12px;bottom:12px;z-index:1450;max-height:46vh;overflow:auto;'
-  +       'padding:16px;border-radius:22px;background:rgba(18,22,33,.55);'
+  +     '.zn-fl-recenter{top:calc(12px + env(safe-area-inset-top));right:12px}'
+  +     '.zn-fleet-panel{position:absolute;left:12px;right:12px;bottom:12px;z-index:2050;max-height:46vh;overflow:auto;'
+  +       'padding:16px;border-radius:22px;background:rgba(18,22,33,.62);'
   +       '-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);'
-  +       'border:1px solid rgba(255,255,255,.10);box-shadow:0 12px 40px rgba(0,0,0,.45);'
+  +       'border:1px solid rgba(255,255,255,.10);box-shadow:0 12px 40px rgba(0,0,0,.5);'
   +       'padding-bottom:calc(16px + env(safe-area-inset-bottom))}'
   +     '.zn-fleet-head{font-weight:800;font-size:15px;color:#fff;margin-bottom:10px}'
   +     '.zn-fleet-empty{color:rgba(232,237,246,.6);font-size:13px;padding:10px 0}'
@@ -172,6 +172,7 @@ function znFleetLiveHTML(){
   +     '.zn-stop-go{color:rgba(232,237,246,.4);font-size:20px}'
   +     '.zn-courier-icon{filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}'
   +     '.zn-courier-rot{font-size:30px;line-height:42px;text-align:center;transition:transform .3s ease-out}'
+  +     '.leaflet-control-attribution{font-size:9px;background:rgba(11,14,20,.6)!important;color:rgba(232,237,246,.5)!important}'
   +     '@keyframes znPulse{70%{box-shadow:0 0 0 12px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}'
   +   '</style>'
   + '</div>';
@@ -229,18 +230,31 @@ async function renderFleetLive(){
 
   var content = document.getElementById('content');
   if (!content) return;
-  content.innerHTML = znFleetLiveHTML();
+  // sentinel μέσα στο #content: όταν ο router αλλάξει σελίδα, το #content καθαρίζει →
+  // το interval το ανιχνεύει και κάνει cleanup του body-level overlay.
+  content.innerHTML = '<div id="znFleetSentinel" style="display:none"></div>';
+
+  // ΚΡΙΣΙΜΟ: το full-screen overlay μπαίνει ΚΑΤΕΥΘΕΙΑΝ στο body — όχι μέσα στο #content/.main —
+  // ώστε να μην το «κλειδώνει» κανένα containing block (transform/overflow/stacking).
+  var prev = document.getElementById('znFleetWrap');
+  if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+  var tmp = document.createElement('div');
+  tmp.innerHTML = znFleetLiveHTML();
+  var wrap = tmp.firstElementChild;
+  document.body.appendChild(wrap);
   if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
 
   var map = L.map('znMap', { zoomControl:false, attributionControl:true }).setView([39.6390, 22.4191], 14); // Λάρισα default
-  L.control.zoom({ position:'topright' }).addTo(map);
   ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true;
   znMakeProviderManager(map);
 
   // Leaflet συχνά αρχικοποιείται πριν το container πάρει τελικές διαστάσεις →
-  // χωρίς invalidateSize ο χάρτης μένει σε λάθος/μικρό μέγεθος. Κάνε refresh size 2 φορές.
-  setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 60);
-  setTimeout(function(){ try { map.invalidateSize(); _znFit(); } catch(e){} }, 350);
+  // χωρίς invalidateSize ο χάρτης μένει σε λάθος/μικρό μέγεθος. Refresh size πολλαπλά.
+  requestAnimationFrame(function(){ try { map.invalidateSize(); } catch(e){} });
+  setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 150);
+  setTimeout(function(){ try { map.invalidateSize(); _znFit(); } catch(e){} }, 450);
+  ZN_FLEET._onResize = function(){ if (ZN_FLEET.map){ try { ZN_FLEET.map.invalidateSize(); } catch(e){} } };
+  window.addEventListener('resize', ZN_FLEET._onResize);
 
   map.on('dragstart', function(){ ZN_FLEET.follow = false; }); // χειροκίνητο pan → σταμάτα follow
 
@@ -294,9 +308,9 @@ async function renderFleetLive(){
   }
   ZN_FLEET.ch = subscribe();
 
-  // stale-detection + αυτο-καθαρισμός όταν ο χρήστης φύγει από τη σελίδα
+  // stale-detection + αυτο-καθαρισμός όταν ο χρήστης φύγει από τη σελίδα (router καθάρισε το sentinel)
   ZN_FLEET.timer = setInterval(function(){
-    if (!document.getElementById('znMap')){ if (typeof window.ZN_FLEET_CLEANUP === 'function') window.ZN_FLEET_CLEANUP(); return; }
+    if (!document.getElementById('znFleetSentinel')){ if (typeof window.ZN_FLEET_CLEANUP === 'function') window.ZN_FLEET_CLEANUP(); return; }
     var now = Date.now();
     Object.keys(ZN_FLEET.couriers).forEach(function(k){
       var c = ZN_FLEET.couriers[k];
@@ -312,9 +326,11 @@ async function renderFleetLive(){
   window.ZN_FLEET_CLEANUP = function(){
     try { if (ZN_FLEET.ch) window.sb.removeChannel(ZN_FLEET.ch); } catch(e){}
     if (ZN_FLEET.timer){ clearInterval(ZN_FLEET.timer); ZN_FLEET.timer = null; }
+    if (ZN_FLEET._onResize){ try { window.removeEventListener('resize', ZN_FLEET._onResize); } catch(e){} ZN_FLEET._onResize = null; }
     try { Object.keys(ZN_FLEET.couriers).forEach(function(k){ ZN_FLEET.couriers[k].sm.destroy(); }); } catch(e){}
     ZN_FLEET.couriers = {};
     try { if (ZN_FLEET.map){ ZN_FLEET.map.remove(); ZN_FLEET.map = null; } } catch(e){}
+    var w = document.getElementById('znFleetWrap'); if (w && w.parentNode) w.parentNode.removeChild(w);
     ZN_FLEET.ch = null;
   };
   window.addEventListener('beforeunload', function(){ if (typeof window.ZN_FLEET_CLEANUP === 'function') window.ZN_FLEET_CLEANUP(); });
