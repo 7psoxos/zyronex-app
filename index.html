@@ -2823,6 +2823,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="nav-item" data-page="agents"><i data-lucide="bot" size="18"></i> 🤖 Εξειδικευμένοι Βοηθοί</div>
   <div class="nav-item" data-page="salesactivity"><i data-lucide="activity" size="18"></i> 📊 Δραστηριότητα Πωλητών</div>
   <div class="nav-item" data-page="users"><i data-lucide="user-cog" size="18"></i> Χρήστες / Δικαιώματα</div>
+  <div class="nav-item" data-page="fleetlive"><i data-lucide="map-pin" size="18"></i> Live Διανομές</div>
   <div class="nav-item" data-page="data-cleanup"><i data-lucide="sparkles" size="18"></i> Data Cleanup <span class="badge-alert" id="cleanupBadge" style="display:none">0</span></div>
   <div class="nav-item" data-page="shop-changelog"><i data-lucide="history" size="18"></i> Ιστορικό Αλλαγών</div>
   <div class="nav-item" data-page="age-log"><i data-lucide="shield-check" size="18"></i> 🔞 Μητρώο Ηλικίας</div>
@@ -2998,7 +2999,7 @@ window.onerror = function(msg, src, line, col, err) {
    να μην πετάει ReferenceError αν αξιολογηθεί πριν φορτωθεί το module.
    Τα σώματα τρέχουν μόνο όταν πατηθεί η σελίδα, οπότε ZN_MODULE_LOADER
    είναι ήδη διαθέσιμος. */
-var __ZN_LAZY = { renderCustomerIntel:'customer-intel', renderCampaigns:'campaigns', renderSiteBuilder:'sitebuilder', renderPulse:'pulse' };
+var __ZN_LAZY = { renderCustomerIntel:'customer-intel', renderCampaigns:'campaigns', renderSiteBuilder:'sitebuilder', renderPulse:'pulse', renderFleetLive:'fleetlive' };
 Object.keys(__ZN_LAZY).forEach(function(n){
   if (typeof window[n] !== 'function') {
     window[n] = function(){ return ZN_MODULE_LOADER.loadAndRender(__ZN_LAZY[n]); };
@@ -16346,6 +16347,7 @@ function _initSidebarCollapse(){
     {page:'pulse',           label:'ZyroNex Pulse Νέα',                  icon:'✨'},
     {page:'alerts',          label:'Ειδοποιήσεις Alerts',                icon:'🔔'},
     {page:'users',           label:'Χρήστες Δικαιώματα Ρόλοι',           icon:'👤'},
+    {page:'fleetlive',       label:'Live Διανομές Tracking Χάρτης Πωλητές', icon:'🛵'},
     {page:'data-cleanup',    label:'Data Cleanup Καθαρισμός Δεδομένων',  icon:'🧹'},
     {page:'shop-changelog',  label:'Ιστορικό Αλλαγών Changelog',         icon:'📜'},
     {page:'age-log',         label:'Μητρώο Ηλικίας Ηλικιακός Έλεγχος',  icon:'🔞'},
@@ -18290,7 +18292,7 @@ function _showPageInternal(p){
     'energy-tracker':renderEnergyTracker,compliance:renderCompliance,'online-orders':function(){var fn=window.renderOnlineOrders||function(){var c=document.getElementById('content');if(c)c.innerHTML='<div class="card" style="padding:40px;text-align:center"><h2>📱 Online Orders</h2><p style="color:var(--danger)">⚠️ Module δεν φορτώθηκε. Κάνε refresh.</p></div>';};return fn();},audit:function(){if(typeof window.renderAuditVault==='function')return window.renderAuditVault();var c=document.getElementById('content');if(c)c.innerHTML='<div class=\"card\" style=\"padding:40px;text-align:center\"><h2>&#128737; Audit Mode</h2><p>Module &phi;&omicron;&rho;&tau;&omega;&nu;&epsilon;&iota;... &Delta;&omicron;&kappa;&iota;&mu;&alpha;&sigma;&epsilon; refresh.</p></div>';},pricewar:renderPriceWar,'inspector-competitors':renderInspectorCompetitors,support:renderSupportTickets,helpdesk:renderHelpDesk,aicost:renderAICost,taxagent:renderTaxAgent,
     blindaudit:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_AUDIT==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_AUDIT.render(); },
     promos:function(){ if(!can('*')){ toast('Μόνο admin','danger'); return renderDashboard(); } if(typeof ZN_PROMOS==='undefined'){ toast('Module δεν φορτώθηκε','danger'); return; } ZN_PROMOS.render(); },
-    balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,
+    balance:renderBalance,ai:renderAI,campaigns:renderCampaigns,alerts:renderAlerts,pulse:renderPulse,fleetlive:renderFleetLive,
     mixology:renderMixology,
     loyalty:renderLoyalty,
     'customer-intel':renderCustomerIntel,

@@ -25,7 +25,8 @@ var ZN_MODULE_LOADER = (function () {
     'customer-intel': { url: '/js/modules/customer-intel.js', global: 'renderCustomerIntel' },
     campaigns:     { url: '/js/modules/campaigns.js',      global: 'renderCampaigns' },
     sitebuilder:   { url: '/js/modules/site-builder.js',   global: 'renderSiteBuilder' },
-    pulse:         { url: '/js/modules/pulse.js',          global: 'renderPulse' }
+    pulse:         { url: '/js/modules/pulse.js',          global: 'renderPulse' },
+    fleetlive:     { url: '/js/modules/fleet-live.js',    global: 'renderFleetLive' }
   };
 
   // Cache από promises ανά key → εγγυάται single-flight (dedupe).
