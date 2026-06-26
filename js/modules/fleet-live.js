@@ -69,27 +69,26 @@ var ZN_TILE_PROVIDERS = [
 
 function znMakeProviderManager(map){
   var L = window.L;
-  var failed = {};
+  var tried = {};
   var layer = null;
+  function firstUntried(){
+    for (var i=0;i<ZN_TILE_PROVIDERS.length;i++){ if (!tried[ZN_TILE_PROVIDERS[i].id]) return i; }
+    return -1; // όλα δοκιμάστηκαν → μείνε στο τρέχον (ΚΑΜΙΑ ατέρμονη εναλλαγή)
+  }
   function mount(i){
     var p = ZN_TILE_PROVIDERS[i];
+    tried[p.id] = true;
     if (layer){ try { map.removeLayer(layer); } catch(e){} }
     layer = L.tileLayer(p.url, p.opts);           // standard img tiles — CORS-free
     var errs = 0;
-    layer.on('tileerror', function(){             // 429 ή 401/403 ή network → failover
-      errs++; if (errs >= 4){ failed[p.id] = true; next(); }
+    layer.on('tileerror', function(){
+      // υψηλό threshold: edge-tiles που 404άρουν δεν πρέπει να πυροδοτούν failover.
+      errs++;
+      if (errs >= 24){ errs = 0; var n = firstUntried(); if (n >= 0) mount(n); }
     });
     layer.addTo(map);
   }
-  function next(){
-    var avail = ZN_TILE_PROVIDERS.map(function(_,i){ return i; })
-      .filter(function(i){ return !failed[ZN_TILE_PROVIDERS[i].id]; });
-    if (!avail.length){ failed = {}; avail = [0]; } // όλα έσκασαν → reset & retry CARTO
-    mount(avail[0]);
-  }
-  // Ξεκινάμε από CARTO (index 0) που δουλεύει χωρίς key.
-  // Για 50/50 load-balance: whitelist το domain στο Stadia, μετά:
-  //   mount(Math.floor(Math.random()*ZN_TILE_PROVIDERS.length));
+  // CARTO (index 0, keyless) primary. Failover στο Stadia ΜΟΝΟ αν το CARTO σκάσει μαζικά — μία φορά.
   mount(0);
   return { current:function(){ return layer; } };
 }
@@ -173,6 +172,8 @@ function znFleetLiveHTML(){
   +     '.zn-courier-icon{filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}'
   +     '.zn-courier-rot{font-size:30px;line-height:42px;text-align:center;transition:transform .3s ease-out}'
   +     '.leaflet-control-attribution{font-size:9px;background:rgba(11,14,20,.6)!important;color:rgba(232,237,246,.5)!important}'
+  +     '#znFleetWrap .leaflet-pane,#znFleetWrap .leaflet-tile,#znFleetWrap .leaflet-tile-container,#znFleetWrap .leaflet-map-pane,#znFleetWrap .leaflet-layer,#znFleetWrap .leaflet-overlay-pane,#znFleetWrap .leaflet-marker-pane{box-sizing:content-box!important;transition:none!important}'
+  +     '#znFleetWrap img.leaflet-tile{max-width:none!important;max-height:none!important;width:256px;height:256px;padding:0;border:0}'
   +     '@keyframes znPulse{70%{box-shadow:0 0 0 12px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}'
   +   '</style>'
   + '</div>';
