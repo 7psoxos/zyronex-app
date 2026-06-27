@@ -8,7 +8,7 @@
 var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true, _lastDark:null };
 
 // MapTiler key (public repo → ΠΡΟΣΘΕΣΕ Allowed-origins restriction στο MapTiler dashboard).
-var ZN_MAPTILER_KEY = 'JwdY0lrUuQLv3ewAt64i';
+var ZN_MAPTILER_KEY = 'AorUxVk7o6wXBswkZCgD';
 var ZN_LARISA = { lat:39.6390, lng:22.4191 };
 
 /* ============================ MapLibre lazy loader ============================ */
