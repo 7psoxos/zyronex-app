@@ -157,6 +157,7 @@ function znFleetLiveHTML(){
   +   '<button id="znFlTheme" class="zn-fl-fab zn-fl-theme" type="button" aria-label="Θέμα χάρτη">'
   +     '<span id="znFlThemeIcon">🌓</span><span id="znFlThemeLbl">Auto</span></button>'
   +   '<div id="znFlErr"></div>'
+  +   '<div id="znFlDbg"></div>'
   +   '<div class="zn-fleet-panel" id="znFleetPanel">'
   +     '<div class="zn-fleet-head">🛵 Live Διανομές & Πωλητές</div>'
   +     '<div id="znFleetList" class="zn-fleet-list"></div>'
@@ -179,6 +180,8 @@ function znFleetLiveHTML(){
   +     '#znFlErr{display:none;position:absolute;left:12px;right:12px;top:calc(126px + env(safe-area-inset-top));z-index:2200;'
   +       'background:rgba(120,22,22,.94);color:#fff;font-size:12px;line-height:1.45;padding:10px 12px;border-radius:12px;'
   +       'border:1px solid rgba(255,255,255,.18);word-break:break-word}'
+  +     '#znFlDbg{position:absolute;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:2300;'
+  +       'background:rgba(0,0,0,.7);color:#39ff14;font:11px ui-monospace,monospace;padding:4px 8px;border-radius:8px;pointer-events:none}'
   +     '.zn-fleet-panel{position:absolute;left:12px;right:12px;bottom:12px;z-index:2050;max-height:46vh;overflow:auto;'
   +       'padding:16px;border-radius:22px;background:rgba(18,22,33,.62);'
   +       '-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);'
@@ -265,7 +268,7 @@ async function renderFleetLive(){
   document.body.appendChild(wrap);
   if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
 
-  // ΡΗΤΕΣ px διαστάσεις από το viewport (iOS-safe) → Leaflet διαβάζει σωστό μέγεθος.
+  // Ρητές px διαστάσεις από το viewport (iOS-safe) → Leaflet διαβάζει σωστό μέγεθος.
   function _setDims(){
     var w = window.innerWidth, h = window.innerHeight;
     var wEl = document.getElementById('znFleetWrap');
@@ -293,20 +296,25 @@ async function renderFleetLive(){
   ZN_FLEET.tile.on('tileerror', function(){ _znTileErrs++; if (_znTileErrs >= 12) _znErr('Πρόβλημα φόρτωσης χάρτη (δίκτυο).'); });
   ZN_FLEET.tile.on('load', function(){ var b=document.getElementById('znFlErr'); if(b){ b.style.display='none'; } });
 
-  // Sizing: invalidateSize (όχι επαναλαμβανόμενο setView → απΟφυγή stale tiles στο iOS).
+  // Sizing + ζωντανό readout των πραγματικών διαστάσεων iOS (για να δούμε τι μετράει το WebKit).
   function _fixSize(){
     if (!ZN_FLEET.map) return;
-    try { _setDims(); ZN_FLEET.map.invalidateSize(false); } catch(e){}
+    try {
+      _setDims();
+      ZN_FLEET.map.invalidateSize(false);
+      var s = ZN_FLEET.map.getSize();
+      var dbg = document.getElementById('znFlDbg');
+      if (dbg) dbg.textContent = 'win ' + window.innerWidth + '×' + window.innerHeight + ' · map ' + s.x + '×' + s.y;
+    } catch(e){}
   }
   requestAnimationFrame(_fixSize);
-  setTimeout(_fixSize, 200);
-  setTimeout(_fixSize, 600);
-  setTimeout(_fixSize, 1100);
-  setTimeout(function(){ if (ZN_FLEET.map){ try { _setDims(); ZN_FLEET.map.invalidateSize(false); ZN_FLEET.map.setView(ZN_FLEET.map.getCenter(), ZN_FLEET.map.getZoom(), { animate:false }); } catch(e){} } }, 1400);
+  setTimeout(_fixSize, 300);
+  setTimeout(_fixSize, 900);
+  var _roT = null;
   ZN_FLEET._onResize = function(){ _fixSize(); };
   window.addEventListener('resize', ZN_FLEET._onResize);
   if (window.ResizeObserver){
-    ZN_FLEET._ro = new ResizeObserver(function(){ _fixSize(); });
+    ZN_FLEET._ro = new ResizeObserver(function(){ if (_roT) return; _roT = setTimeout(function(){ _roT = null; _fixSize(); }, 120); });
     try { ZN_FLEET._ro.observe(document.getElementById('znMap')); } catch(e){}
   }
 
