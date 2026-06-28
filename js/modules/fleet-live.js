@@ -160,6 +160,7 @@ function znFleetLiveHTML(){
   +   '<button id="znFlRecenter" class="zn-fl-fab zn-fl-recenter" type="button" aria-label="Κεντράρισμα"><i data-lucide="locate-fixed"></i></button>'
   +   '<button id="znFlTheme" class="zn-fl-fab zn-fl-theme" type="button" aria-label="Θέμα χάρτη">'
   +     '<span id="znFlThemeIcon">🌓</span><span id="znFlThemeLbl">Auto</span></button>'
+  +   '<div id="znFlErr"></div>'
   +   '<div class="zn-fleet-panel" id="znFleetPanel">'
   +     '<div class="zn-fleet-head">🛵 Live Διανομές & Πωλητές</div>'
   +     '<div id="znFleetList" class="zn-fleet-list"></div>'
@@ -176,6 +177,9 @@ function znFleetLiveHTML(){
   +     '.zn-fl-recenter{top:calc(12px + env(safe-area-inset-top));right:12px;width:46px;padding:0}'
   +     '.zn-fl-theme{top:calc(70px + env(safe-area-inset-top));right:12px}'
   +     '.zn-fl-theme #znFlThemeIcon{font-size:18px;line-height:1}'
+  +     '#znFlErr{display:none;position:absolute;left:12px;right:12px;top:calc(126px + env(safe-area-inset-top));z-index:2200;'
+  +       'background:rgba(120,22,22,.94);color:#fff;font-size:12px;line-height:1.45;padding:10px 12px;border-radius:12px;'
+  +       'border:1px solid rgba(255,255,255,.18);word-break:break-word}'
   +     '.zn-fleet-panel{position:absolute;left:12px;right:12px;bottom:12px;z-index:2050;max-height:46vh;overflow:auto;'
   +       'padding:16px;border-radius:22px;background:rgba(18,22,33,.62);'
   +       '-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);'
@@ -284,6 +288,33 @@ async function renderFleetLive(){
     pitchWithRotate: false
   });
   ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true; ZN_FLEET._lastDark = _znEffectiveDark();
+
+  // Διάγνωση: αν το style δεν φορτώσει (403 key/origin ή 404 slug), δείξε το ΑΚΡΙΒΕΣ σφάλμα
+  // και κάνε μία φορά fallback στο σίγουρο streets-v2 (baseline) ώστε να επιβεβαιωθεί ότι το key δουλεύει.
+  function _znErr(msg){ var b = document.getElementById('znFlErr'); if (b){ b.style.display='block'; b.textContent = msg; } }
+  function _znErrClear(){ var b = document.getElementById('znFlErr'); if (b){ b.style.display='none'; b.textContent=''; } }
+  var _znFellBack = false;
+  map.on('error', function(e){
+    var err = e && e.error ? e.error : e;
+    var msg = (err && (err.message || err.status)) ? (err.message || ('HTTP '+err.status)) : 'unknown';
+    var styleNotReady = false;
+    try { styleNotReady = !ZN_FLEET.map.isStyleLoaded(); } catch(_){ styleNotReady = true; }
+    if (styleNotReady && !_znFellBack){
+      _znFellBack = true;
+      _znErr('Το dark/light style δεν φόρτωσε ('+msg+'). Δοκιμάζω baseline streets-v2…');
+      try { map.setStyle('https://api.maptiler.com/maps/streets-v2/style.json?key=' + ZN_MAPTILER_KEY); } catch(_){}
+    } else if (styleNotReady){
+      _znErr('Σφάλμα χάρτη (key/origin;): ' + msg);
+    }
+  });
+  map.on('styledata', function(){ if (ZN_FLEET.map && ZN_FLEET.map.isStyleLoaded()) _znErrClear(); });
+  setTimeout(function(){
+    try { if (ZN_FLEET.map && !ZN_FLEET.map.isStyleLoaded() && !_znFellBack){
+      _znFellBack = true;
+      _znErr('Το style δεν φόρτωσε σε 6s — δοκιμάζω baseline streets-v2…');
+      map.setStyle('https://api.maptiler.com/maps/streets-v2/style.json?key=' + ZN_MAPTILER_KEY);
+    } } catch(_){}
+  }, 6000);
 
   function _resize(){ if (ZN_FLEET.map){ try { _setDims(); ZN_FLEET.map.resize(); } catch(e){} } }
   map.on('load', _resize);
