@@ -1,6 +1,6 @@
 // fleet-live.js — ZyroNex · Live Fleet Tracking (Leaflet + CARTO raster, keyless)
 // Tiles load as <img> (no CORS needed) → proven to load on the device. Sizing verified full-screen
-// in a real mobile Chromium emulator (explicit px + invalidateSize + setView + ResizeObserver).
+// Sizing verified full-screen in mobile Chromium emulator. iOS scatter fix: L.Browser.any3d=false.
 // Scope: ONLY roles resolving to 'courier' (Διανομέας) or 'sales' (Εξωτερικός Πωλητής).
 // Theme: DARK/LIGHT auto by Larisa sunrise/sunset (default) + manual override (persisted).
 // Deps (globals): sb, SHOP_ID, USERS, lucide, showPage.  iOS: var at top-level only.
@@ -275,8 +275,12 @@ async function renderFleetLive(){
   }
   _setDims();
 
+  // iOS Safari/WebKit: η Leaflet τοποθετεί tiles με translate3d → GPU compositing bug = scatter.
+  // any3d=false → θέση tiles με top/left (iOS-safe). + animations off για καθαρό paint.
+  try { L.Browser.any3d = false; } catch(e){}
+
   var dark0 = _znEffectiveDark();
-  var map = L.map('znMap', { zoomControl:false, attributionControl:true }).setView([ZN_LARISA.lat, ZN_LARISA.lng], 13);
+  var map = L.map('znMap', { zoomControl:false, attributionControl:true, fadeAnimation:false, zoomAnimation:false, markerZoomAnimation:false }).setView([ZN_LARISA.lat, ZN_LARISA.lng], 13);
   ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true; ZN_FLEET._lastDark = dark0;
 
   ZN_FLEET.tile = L.tileLayer(_znTileUrl(dark0), {
@@ -289,15 +293,16 @@ async function renderFleetLive(){
   ZN_FLEET.tile.on('tileerror', function(){ _znTileErrs++; if (_znTileErrs >= 12) _znErr('Πρόβλημα φόρτωσης χάρτη (δίκτυο).'); });
   ZN_FLEET.tile.on('load', function(){ var b=document.getElementById('znFlErr'); if(b){ b.style.display='none'; } });
 
-  // Sizing: invalidateSize + setView (recenter) μέσω rAF/timeouts/ResizeObserver — ΕΠΑΛΗΘΕΥΜΕΝΟ full-screen.
+  // Sizing: invalidateSize (όχι επαναλαμβανόμενο setView → απΟφυγή stale tiles στο iOS).
   function _fixSize(){
     if (!ZN_FLEET.map) return;
-    try { _setDims(); ZN_FLEET.map.invalidateSize(false); ZN_FLEET.map.setView(ZN_FLEET.map.getCenter(), ZN_FLEET.map.getZoom(), { animate:false }); } catch(e){}
+    try { _setDims(); ZN_FLEET.map.invalidateSize(false); } catch(e){}
   }
   requestAnimationFrame(_fixSize);
   setTimeout(_fixSize, 200);
   setTimeout(_fixSize, 600);
   setTimeout(_fixSize, 1100);
+  setTimeout(function(){ if (ZN_FLEET.map){ try { _setDims(); ZN_FLEET.map.invalidateSize(false); ZN_FLEET.map.setView(ZN_FLEET.map.getCenter(), ZN_FLEET.map.getZoom(), { animate:false }); } catch(e){} } }, 1400);
   ZN_FLEET._onResize = function(){ _fixSize(); };
   window.addEventListener('resize', ZN_FLEET._onResize);
   if (window.ResizeObserver){
