@@ -1,4 +1,4 @@
-// fleet-live.js — ZyroNex · Live Fleet Tracking (MapLibre GL JS + CARTO raster, keyless)
+// fleet-live.js — ZyroNex · Live Fleet Tracking (MapLibre GL JS + OpenFreeMap, keyless)
 // Scope: ONLY users whose role resolves to 'courier' (Διανομέας) or 'sales' (Εξωτερικός Πωλητής).
 // Theme: DARK/LIGHT auto by Larisa sunrise/sunset (default), with manual user override (persisted).
 // Deps (globals from zn-leaves/index.html): sb, SHOP_ID, USERS, toast, lucide, showPage
@@ -7,9 +7,15 @@
 
 var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true, _lastDark:null };
 
-// Basemap: CARTO raster tiles (keyless, ΧΩΡΙΣ κάρτα/key) — αποδεδειγμένα φορτώνουν στη συσκευή.
-// window.ZN_TILE_TEMPLATE (προαιρετικό override για tests/emulator). '{theme}' → dark_all|light_all.
-var ZN_TILE_TEMPLATE = null;
+// Basemap: OpenFreeMap vector styles (keyless, CORS-enabled, αξιόπιστα — όχι κάρτα/key).
+// dark → /styles/dark · light(μέρα) → /styles/positron. Overrides μόνο για emulator/tests.
+var ZN_STYLE_DARK  = 'https://tiles.openfreemap.org/styles/dark';
+var ZN_STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
+function _znStyleUrl(dark){
+  if (dark  && window.ZN_STYLE_DARK_OVERRIDE)  return window.ZN_STYLE_DARK_OVERRIDE;
+  if (!dark && window.ZN_STYLE_LIGHT_OVERRIDE) return window.ZN_STYLE_LIGHT_OVERRIDE;
+  return dark ? ZN_STYLE_DARK : ZN_STYLE_LIGHT;
+}
 var ZN_LARISA = { lat:39.6390, lng:22.4191 };
 
 /* ============================ MapLibre lazy loader ============================ */
@@ -39,25 +45,6 @@ function znEnsureMapLibre(){
 }
 
 /* ============================ Theme: auto (sunrise/sunset) + manual override ============================ */
-function _znStyleSpec(dark){
-  var base = dark ? 'dark_all' : 'light_all';
-  var tiles;
-  if (window.ZN_TILE_TEMPLATE){
-    tiles = [ String(window.ZN_TILE_TEMPLATE).replace('{theme}', base) ];
-  } else {
-    tiles = ['a','b','c','d'].map(function(s){
-      return 'https://' + s + '.basemaps.cartocdn.com/' + base + '/{z}/{x}/{y}@2x.png';
-    });
-  }
-  return {
-    version: 8,
-    sources: { znbase: { type:'raster', tiles: tiles, tileSize: 256, attribution: '© CARTO © OpenStreetMap' } },
-    layers: [
-      { id:'znbg', type:'background', paint:{ 'background-color': dark ? '#0b0e14' : '#e8eaed' } },
-      { id:'znbase', type:'raster', source:'znbase', paint:{ 'raster-fade-duration': 200 } }
-    ]
-  };
-}
 // Standard Sunrise/Sunset algorithm (Almanac). Returns UTC Date objects (absolute time → tz-safe compare).
 function _znSunTimes(date, lat, lng){
   var rad = Math.PI/180, deg = 180/Math.PI;
@@ -296,7 +283,7 @@ async function renderFleetLive(){
 
   var map = new maplibregl.Map({
     container: 'znMap',
-    style: _znStyleSpec(_znEffectiveDark()),
+    style: _znStyleUrl(_znEffectiveDark()),
     center: [ZN_LARISA.lng, ZN_LARISA.lat], // [lng,lat]
     zoom: 13,
     attributionControl: true,
@@ -347,7 +334,7 @@ async function renderFleetLive(){
   function _applyThemeStyle(){
     var dark = _znEffectiveDark();
     ZN_FLEET._lastDark = dark;
-    if (ZN_FLEET.map){ try { ZN_FLEET.map.setStyle(_znStyleSpec(dark)); } catch(e){} }
+    if (ZN_FLEET.map){ try { ZN_FLEET.map.setStyle(_znStyleUrl(dark)); } catch(e){} }
   }
   _applyThemeUI();
   var themeBtn = document.getElementById('znFlTheme');
@@ -403,7 +390,7 @@ async function renderFleetLive(){
     // auto theme: άλλαξε dark/light στη δύση/ανατολή όσο ο χρήστης είναι σε Auto
     if (_znGetTheme()==='auto'){
       var d = _znEffectiveDark();
-      if (d !== ZN_FLEET._lastDark){ ZN_FLEET._lastDark = d; try { map.setStyle(_znStyleSpec(d)); } catch(e){} }
+      if (d !== ZN_FLEET._lastDark){ ZN_FLEET._lastDark = d; try { map.setStyle(_znStyleUrl(d)); } catch(e){} }
     }
     var now = Date.now();
     Object.keys(ZN_FLEET.couriers).forEach(function(k){
@@ -432,7 +419,7 @@ async function renderFleetLive(){
 /* ============================ Exports ============================ */
 (function(){
   var fns = [renderFleetLive, znEnsureMapLibre, znFleetLiveHTML, znRenderStops,
-             ZNSmoothMarker, znCourierPin, _znStyleSpec, _znSunTimes, _znIsDay,
+             ZNSmoothMarker, znCourierPin, _znStyleUrl, _znSunTimes, _znIsDay,
              _znEffectiveDark, _znRoleKind, _znUserById, _znIsTracked, _znEsc];
   var i;
   for (i=0;i<fns.length;i++){ if (typeof fns[i]==='function') window[fns[i].name] = fns[i]; }
