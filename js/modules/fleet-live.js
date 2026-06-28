@@ -1,51 +1,49 @@
-// fleet-live.js — ZyroNex · Live Fleet Tracking (MapLibre GL JS + OpenFreeMap, keyless)
-// Scope: ONLY users whose role resolves to 'courier' (Διανομέας) or 'sales' (Εξωτερικός Πωλητής).
-// Theme: DARK/LIGHT auto by Larisa sunrise/sunset (default), with manual user override (persisted).
-// Deps (globals from zn-leaves/index.html): sb, SHOP_ID, USERS, toast, lucide, showPage
-// ZyroNex rules: var at top-level (iOS Safari TDZ-safe); const/let only inside functions;
-//                no inline onclick (addEventListener only); globals via window.* for safety.
+// fleet-live.js — ZyroNex · Live Fleet Tracking (Leaflet + CARTO raster, keyless)
+// Tiles load as <img> (no CORS needed) → proven to load on the device. Sizing verified full-screen
+// in a real mobile Chromium emulator (explicit px + invalidateSize + setView + ResizeObserver).
+// Scope: ONLY roles resolving to 'courier' (Διανομέας) or 'sales' (Εξωτερικός Πωλητής).
+// Theme: DARK/LIGHT auto by Larisa sunrise/sunset (default) + manual override (persisted).
+// Deps (globals): sb, SHOP_ID, USERS, lucide, showPage.  iOS: var at top-level only.
 
-var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true, _lastDark:null };
-
-// Basemap: OpenFreeMap vector styles (keyless, CORS-enabled, αξιόπιστα — όχι κάρτα/key).
-// dark → /styles/dark · light(μέρα) → /styles/positron. Overrides μόνο για emulator/tests.
-var ZN_STYLE_DARK  = 'https://tiles.openfreemap.org/styles/dark';
-var ZN_STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
-function _znStyleUrl(dark){
-  if (dark  && window.ZN_STYLE_DARK_OVERRIDE)  return window.ZN_STYLE_DARK_OVERRIDE;
-  if (!dark && window.ZN_STYLE_LIGHT_OVERRIDE) return window.ZN_STYLE_LIGHT_OVERRIDE;
-  return dark ? ZN_STYLE_DARK : ZN_STYLE_LIGHT;
-}
+var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true, _lastDark:null, tile:null };
 var ZN_LARISA = { lat:39.6390, lng:22.4191 };
 
-/* ============================ MapLibre lazy loader ============================ */
-function znEnsureMapLibre(){
+/* ============================ Leaflet lazy loader ============================ */
+function znEnsureLeaflet(){
   return new Promise(function(resolve, reject){
-    if (window.maplibregl && window.maplibregl.Map) { resolve(window.maplibregl); return; }
-    if (!document.getElementById('zn-maplibre-css')){
+    if (window.L && window.L.map) { resolve(window.L); return; }
+    if (!document.getElementById('zn-leaflet-css')){
       var link = document.createElement('link');
-      link.id = 'zn-maplibre-css'; link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+      link.id = 'zn-leaflet-css'; link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    var existing = document.getElementById('zn-maplibre-js');
+    var existing = document.getElementById('zn-leaflet-js');
     if (existing){
-      existing.addEventListener('load', function(){ resolve(window.maplibregl); });
-      existing.addEventListener('error', function(){ reject(new Error('MapLibre load failed')); });
-      if (window.maplibregl && window.maplibregl.Map) resolve(window.maplibregl);
+      existing.addEventListener('load', function(){ resolve(window.L); });
+      existing.addEventListener('error', function(){ reject(new Error('Leaflet load failed')); });
+      if (window.L && window.L.map) resolve(window.L);
       return;
     }
     var s = document.createElement('script');
-    s.id = 'zn-maplibre-js';
-    s.src = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
-    s.onload = function(){ resolve(window.maplibregl); };
-    s.onerror = function(){ reject(new Error('MapLibre load failed')); };
+    s.id = 'zn-leaflet-js';
+    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s.onload = function(){ resolve(window.L); };
+    s.onerror = function(){ reject(new Error('Leaflet load failed')); };
     document.head.appendChild(s);
   });
 }
 
+/* ============================ Basemap (CARTO raster, img-based) ============================ */
+// window.ZN_TILE_OVERRIDE (emulator/tests) — '{theme}' → dark_all|light_all.
+function _znTileUrl(dark){
+  var theme = dark ? 'dark_all' : 'light_all';
+  if (window.ZN_TILE_OVERRIDE) return String(window.ZN_TILE_OVERRIDE).replace('{theme}', theme);
+  return 'https://{s}.basemaps.cartocdn.com/' + theme + '/{z}/{x}/{y}.png';
+}
+
 /* ============================ Theme: auto (sunrise/sunset) + manual override ============================ */
-// Standard Sunrise/Sunset algorithm (Almanac). Returns UTC Date objects (absolute time → tz-safe compare).
+// Standard Sunrise/Sunset algorithm (Almanac). Returns UTC Date objects (absolute → tz-safe compare).
 function _znSunTimes(date, lat, lng){
   var rad = Math.PI/180, deg = 180/Math.PI;
   var yStart = Date.UTC(date.getUTCFullYear(), 0, 0);
@@ -60,7 +58,7 @@ function _znSunTimes(date, lat, lng){
     var Lq = Math.floor(L/90)*90, RAq = Math.floor(RA/90)*90; RA = (RA + (Lq - RAq)) / 15;
     var sinDec = 0.39782*Math.sin(L*rad), cosDec = Math.cos(Math.asin(sinDec));
     var cosH = (Math.cos(zenith*rad) - (sinDec*Math.sin(lat*rad))) / (cosDec*Math.cos(lat*rad));
-    if (cosH > 1 || cosH < -1) return null; // πολικός day/night
+    if (cosH > 1 || cosH < -1) return null;
     var H = isSunrise ? 360 - deg*Math.acos(cosH) : deg*Math.acos(cosH); H = H/15;
     var T = H + RA - (0.06571*t) - 6.622;
     var UT = (((T - lngHour) % 24) + 24) % 24;
@@ -72,7 +70,7 @@ function _znSunTimes(date, lat, lng){
 function _znIsDay(){
   var now = new Date();
   var s = _znSunTimes(now, ZN_LARISA.lat, ZN_LARISA.lng);
-  if (!s.sunrise || !s.sunset) return true; // fallback: μέρα
+  if (!s.sunrise || !s.sunset) return true;
   return now >= s.sunrise && now < s.sunset;
 }
 function _znGetTheme(){ try { return localStorage.getItem('zn_fleet_theme') || 'auto'; } catch(e){ return 'auto'; } }
@@ -81,12 +79,12 @@ function _znEffectiveDark(){
   var p = _znGetTheme();
   if (p === 'dark') return true;
   if (p === 'light') return false;
-  return !_znIsDay(); // auto: σκούρο τη νύχτα, φωτεινό τη μέρα
+  return !_znIsDay();
 }
 function _znThemeIcon(){ var p=_znGetTheme(); return p==='dark'?'🌙':(p==='light'?'☀️':'🌓'); }
 function _znThemeLabel(){ var p=_znGetTheme(); return p==='dark'?'Σκούρο':(p==='light'?'Φωτεινό':'Auto'); }
 
-/* ============================ Role scoping helpers ============================ */
+/* ============================ Role scoping ============================ */
 function _znRoleKind(role){
   var r = (role||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   if (r.indexOf('εξωτερικ')>-1 || r.indexOf('πωλ')>-1 || r.indexOf('sales')>-1) return 'sales';
@@ -109,52 +107,47 @@ function _znEsc(s){
 }
 
 /* ============================ Smooth marker (rAF lerp + bearing) ============================ */
-// MapLibre: setLngLat([lng,lat]). HTML markers ΕΠΙΖΟΥΝ του setStyle (δεν χρειάζονται re-add στο theme swap).
-function ZNSmoothMarker(map, lng, lat, el){
-  var maplibregl = window.maplibregl;
-  var marker = new maplibregl.Marker({ element: el, anchor:'center' }).setLngLat([lng, lat]).addTo(map);
-  var fLng=lng, fLat=lat, tLng=lng, tLat=lat, t0=0, dur=0, raf=null, bearing=0;
-  function frame(now){
-    var k = dur ? Math.min((now - t0)/dur, 1) : 1;
-    var clng = fLng + (tLng - fLng)*k;
-    var clat = fLat + (tLat - fLat)*k;
-    marker.setLngLat([clng, clat]);
-    var rot = el.querySelector('.zn-courier-rot');
-    if (rot) rot.style.transform = 'rotate('+bearing+'deg)';
-    if (ZN_FLEET.follow && ZN_FLEET.map && Object.keys(ZN_FLEET.couriers).length===1){
-      ZN_FLEET.map.easeTo({ center:[clng, clat], duration:300 });
-    }
-    if (k < 1) raf = requestAnimationFrame(frame);
-  }
-  return {
-    marker: marker, el: el,
-    getLngLat: function(){ var ll = marker.getLngLat(); return [ll.lng, ll.lat]; },
-    moveTo: function (nlng, nlat, headingDeg, ms){
-      var cur = marker.getLngLat(); fLng=cur.lng; fLat=cur.lat; tLng=nlng; tLat=nlat;
-      if (typeof headingDeg === 'number'){ bearing = headingDeg; }
-      else { var dy=tLat-fLat, dx=tLng-fLng; if (dx||dy) bearing = (Math.atan2(dx, dy)*180/Math.PI + 360) % 360; }
-      dur = ms || 1000; t0 = performance.now();
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(frame);
-    },
-    destroy: function (){ if (raf) cancelAnimationFrame(raf); try { marker.remove(); } catch(e){} }
-  };
-}
-
-/* ============================ UI (full-screen map + glass panel) ============================ */
 function znCourierPin(row){
   var u = _znUserById(row.courier_id);
   var kind = u ? _znRoleKind(u.role) : 'courier';
   var glyph = kind==='sales' ? '💼' : '🛵';
   return '<div class="zn-courier-rot">'+glyph+'</div>';
 }
-function _znMakeMarkerEl(row){
-  var d = document.createElement('div');
-  d.className = 'zn-courier-icon';
-  d.innerHTML = znCourierPin(row);
-  return d;
+function ZNSmoothMarker(map, lat, lng, html){
+  var L = window.L;
+  var icon = L.divIcon({ html: html, className:'zn-courier-divicon', iconSize:[42,42], iconAnchor:[21,21] });
+  var marker = L.marker([lat,lng], { icon: icon, interactive:false, keyboard:false }).addTo(map);
+  var fLat=lat, fLng=lng, tLat=lat, tLng=lng, t0=0, dur=0, raf=null, bearing=0;
+  function frame(now){
+    var k = dur ? Math.min((now - t0)/dur, 1) : 1;
+    var clat = fLat + (tLat - fLat)*k;
+    var clng = fLng + (tLng - fLng)*k;
+    marker.setLatLng([clat, clng]);
+    var elr = marker.getElement();
+    var rot = elr ? elr.querySelector('.zn-courier-rot') : null;
+    if (rot) rot.style.transform = 'rotate('+bearing+'deg)';
+    if (ZN_FLEET.follow && ZN_FLEET.map && Object.keys(ZN_FLEET.couriers).length===1){
+      ZN_FLEET.map.panTo([clat, clng], { animate:true, duration:0.3 });
+    }
+    if (k < 1) raf = requestAnimationFrame(frame);
+  }
+  return {
+    marker: marker,
+    getLatLng: function(){ var ll = marker.getLatLng(); return [ll.lat, ll.lng]; },
+    el: function(){ return marker.getElement(); },
+    moveTo: function (nlat, nlng, headingDeg, ms){
+      var cur = marker.getLatLng(); fLat=cur.lat; fLng=cur.lng; tLat=nlat; tLng=nlng;
+      if (typeof headingDeg === 'number'){ bearing = headingDeg; }
+      else { var dy=tLat-fLat, dx=tLng-fLng; if (dx||dy) bearing = (Math.atan2(dx, dy)*180/Math.PI + 360) % 360; }
+      dur = ms || 1000; t0 = performance.now();
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(frame);
+    },
+    destroy: function (){ if (raf) cancelAnimationFrame(raf); try { map.removeLayer(marker); } catch(e){} }
+  };
 }
 
+/* ============================ UI ============================ */
 function znFleetLiveHTML(){
   return ''
   + '<div id="znFleetWrap">'
@@ -171,6 +164,9 @@ function znFleetLiveHTML(){
   +   '<style>'
   +     '#znFleetWrap{position:fixed;inset:0;z-index:2000}'
   +     '#znMap{position:absolute;inset:0;width:100%;height:100%;z-index:1;background:#0b0e14}'
+  +     '#znMap.leaflet-container{background:#0b0e14}'
+  +     '#znFleetWrap .leaflet-tile,#znFleetWrap .leaflet-pane,#znFleetWrap .leaflet-tile-container,#znFleetWrap .leaflet-map-pane,#znFleetWrap .leaflet-layer{box-sizing:content-box!important}'
+  +     '#znFleetWrap img.leaflet-tile{max-width:none!important;max-height:none!important}'
   +     '.zn-fl-fab{position:absolute;z-index:2100;height:46px;min-width:46px;border-radius:14px;border:1px solid rgba(255,255,255,.14);'
   +       'background:rgba(18,22,33,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:#e8edf6;'
   +       'display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.45);'
@@ -193,17 +189,17 @@ function znFleetLiveHTML(){
   +     '.zn-stop{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer}'
   +     '.zn-stop:last-child{border-bottom:none}'
   +     '.zn-stop-dot{width:12px;height:12px;border-radius:50%;flex:none;background:#3b82f6}'
-  +     '.zn-stop-active .zn-stop-dot{box-shadow:0 0 0 0 rgba(59,130,246,.6);animation:znPulse 1.6s infinite}'
+  +     '.zn-stop-active .zn-stop-dot{animation:znPulse 1.6s infinite}'
   +     '.zn-stale .zn-stop-dot{background:#6b7280;animation:none}'
   +     '.zn-stop-main{flex:1;min-width:0}'
   +     '.zn-stop-name{font-weight:700;color:#fff;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
   +     '.zn-stop-sub{font-size:11px;color:rgba(232,237,246,.6)}'
   +     '.zn-stop-go{color:rgba(232,237,246,.4);font-size:20px}'
-  +     '.zn-courier-icon{filter:drop-shadow(0 4px 8px rgba(0,0,0,.5));will-change:transform}'
-  +     '.zn-courier-rot{font-size:30px;line-height:42px;width:42px;text-align:center;transition:transform .3s ease-out}'
-  +     '.maplibregl-ctrl-attrib{font-size:9px;background:rgba(11,14,20,.55)!important}'
-  +     '.maplibregl-ctrl-attrib a{color:rgba(232,237,246,.6)!important}'
-  +     '@keyframes znPulse{70%{box-shadow:0 0 0 12px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}'
+  +     '.zn-courier-divicon{background:transparent;border:none}'
+  +     '.zn-courier-rot{font-size:30px;line-height:42px;width:42px;text-align:center;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5));transition:transform .3s ease-out}'
+  +     '.leaflet-control-attribution{font-size:9px;background:rgba(11,14,20,.6)!important;color:rgba(232,237,246,.5)!important}'
+  +     '.leaflet-control-attribution a{color:rgba(232,237,246,.6)!important}'
+  +     '@keyframes znPulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.6)}70%{box-shadow:0 0 0 12px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}'
   +   '</style>'
   + '</div>';
 }
@@ -240,7 +236,7 @@ function znRenderStops(){
     nodes[i].addEventListener('click', function(){
       var k = this.getAttribute('data-cid');
       var c = ZN_FLEET.couriers[k];
-      if (c && c.sm && ZN_FLEET.map){ ZN_FLEET.follow = true; ZN_FLEET.map.easeTo({ center:c.sm.getLngLat(), zoom:16, duration:500 }); }
+      if (c && c.sm && ZN_FLEET.map){ ZN_FLEET.follow = true; ZN_FLEET.map.setView(c.sm.getLatLng(), 16, { animate:true }); }
     });
   }
 }
@@ -249,8 +245,8 @@ function znRenderStops(){
 async function renderFleetLive(){
   if (typeof window.ZN_FLEET_CLEANUP === 'function'){ try { window.ZN_FLEET_CLEANUP(); } catch(e){} }
 
-  var maplibregl;
-  try { maplibregl = await znEnsureMapLibre(); }
+  var L;
+  try { L = await znEnsureLeaflet(); }
   catch(e){
     var c0 = document.getElementById('content');
     if (c0) c0.innerHTML = '<div class="card" style="padding:40px;text-align:center"><h2>🗺️ Live Διανομές</h2><p style="color:var(--danger)">Ο χάρτης δεν φόρτωσε (δίκτυο). Δοκίμασε refresh.</p></div>';
@@ -259,10 +255,8 @@ async function renderFleetLive(){
 
   var content = document.getElementById('content');
   if (!content) return;
-  // sentinel μέσα στο #content: όταν ο router αλλάξει σελίδα → cleanup του body-level overlay.
   content.innerHTML = '<div id="znFleetSentinel" style="display:none"></div>';
 
-  // full-screen overlay ΚΑΤΕΥΘΕΙΑΝ στο body (έξω από containing blocks του app).
   var prev = document.getElementById('znFleetWrap');
   if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
   var tmp = document.createElement('div');
@@ -271,7 +265,7 @@ async function renderFleetLive(){
   document.body.appendChild(wrap);
   if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
 
-  // ρητές px διαστάσεις πριν το init (iOS-safe), μετά map.resize().
+  // ΡΗΤΕΣ px διαστάσεις από το viewport (iOS-safe) → Leaflet διαβάζει σωστό μέγεθος.
   function _setDims(){
     var w = window.innerWidth, h = window.innerHeight;
     var wEl = document.getElementById('znFleetWrap');
@@ -281,38 +275,33 @@ async function renderFleetLive(){
   }
   _setDims();
 
-  var map = new maplibregl.Map({
-    container: 'znMap',
-    style: _znStyleUrl(_znEffectiveDark()),
-    center: [ZN_LARISA.lng, ZN_LARISA.lat], // [lng,lat]
-    zoom: 13,
-    attributionControl: true,
-    dragRotate: false,
-    pitchWithRotate: false
-  });
-  ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true; ZN_FLEET._lastDark = _znEffectiveDark();
+  var dark0 = _znEffectiveDark();
+  var map = L.map('znMap', { zoomControl:false, attributionControl:true }).setView([ZN_LARISA.lat, ZN_LARISA.lng], 13);
+  ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true; ZN_FLEET._lastDark = dark0;
 
-  // Tile errors banner (CARTO keyless → σπάνιο· κρατάμε για ορατότητα δικτυακών αστοχιών).
-  function _znErr(msg){ var b = document.getElementById('znFlErr'); if (b){ b.style.display='block'; b.textContent = msg; } }
-  function _znErrClear(){ var b = document.getElementById('znFlErr'); if (b){ b.style.display='none'; b.textContent=''; } }
+  ZN_FLEET.tile = L.tileLayer(_znTileUrl(dark0), {
+    subdomains:'abcd', maxZoom:20, tileSize:256, attribution:'© CARTO © OpenStreetMap'
+  }).addTo(map);
+
+  // Tile error banner (CARTO img → σπάνιο· ορατότητα δικτυακών αστοχιών).
+  function _znErr(msg){ var b=document.getElementById('znFlErr'); if(b){ b.style.display='block'; b.textContent=msg; } }
   var _znTileErrs = 0;
-  map.on('error', function(e){
-    var err = e && e.error ? e.error : e;
-    var msg = (err && (err.message || err.status)) ? (err.message || ('HTTP '+err.status)) : 'σφάλμα δικτύου';
-    _znTileErrs++;
-    if (_znTileErrs >= 8) _znErr('Πρόβλημα φόρτωσης χάρτη: ' + msg);
-  });
-  map.on('idle', function(){ if (ZN_FLEET.map && ZN_FLEET.map.loaded()) _znErrClear(); });
+  ZN_FLEET.tile.on('tileerror', function(){ _znTileErrs++; if (_znTileErrs >= 12) _znErr('Πρόβλημα φόρτωσης χάρτη (δίκτυο).'); });
+  ZN_FLEET.tile.on('load', function(){ var b=document.getElementById('znFlErr'); if(b){ b.style.display='none'; } });
 
-  function _resize(){ if (ZN_FLEET.map){ try { _setDims(); ZN_FLEET.map.resize(); } catch(e){} } }
-  map.on('load', _resize);
-  requestAnimationFrame(_resize);
-  setTimeout(_resize, 200);
-  setTimeout(_resize, 600);
-  ZN_FLEET._onResize = function(){ _resize(); };
+  // Sizing: invalidateSize + setView (recenter) μέσω rAF/timeouts/ResizeObserver — ΕΠΑΛΗΘΕΥΜΕΝΟ full-screen.
+  function _fixSize(){
+    if (!ZN_FLEET.map) return;
+    try { _setDims(); ZN_FLEET.map.invalidateSize(false); ZN_FLEET.map.setView(ZN_FLEET.map.getCenter(), ZN_FLEET.map.getZoom(), { animate:false }); } catch(e){}
+  }
+  requestAnimationFrame(_fixSize);
+  setTimeout(_fixSize, 200);
+  setTimeout(_fixSize, 600);
+  setTimeout(_fixSize, 1100);
+  ZN_FLEET._onResize = function(){ _fixSize(); };
   window.addEventListener('resize', ZN_FLEET._onResize);
   if (window.ResizeObserver){
-    ZN_FLEET._ro = new ResizeObserver(function(){ _resize(); });
+    ZN_FLEET._ro = new ResizeObserver(function(){ _fixSize(); });
     try { ZN_FLEET._ro.observe(document.getElementById('znMap')); } catch(e){}
   }
 
@@ -326,42 +315,40 @@ async function renderFleetLive(){
   var rc = document.getElementById('znFlRecenter');
   if (rc) rc.addEventListener('click', function(){ ZN_FLEET.follow = true; _znFit(); });
 
-  // theme toggle: Auto → Σκούρο → Φωτεινό → Auto (persist + live setStyle)
   function _applyThemeUI(){
     var ic = document.getElementById('znFlThemeIcon'); if (ic) ic.textContent = _znThemeIcon();
     var lb = document.getElementById('znFlThemeLbl'); if (lb) lb.textContent = _znThemeLabel();
   }
-  function _applyThemeStyle(){
+  function _applyThemeTiles(){
     var dark = _znEffectiveDark();
     ZN_FLEET._lastDark = dark;
-    if (ZN_FLEET.map){ try { ZN_FLEET.map.setStyle(_znStyleUrl(dark)); } catch(e){} }
+    if (ZN_FLEET.tile){ try { ZN_FLEET.tile.setUrl(_znTileUrl(dark)); } catch(e){} }
   }
   _applyThemeUI();
   var themeBtn = document.getElementById('znFlTheme');
   if (themeBtn) themeBtn.addEventListener('click', function(){
     var cur = _znGetTheme();
     var next = cur==='auto' ? 'dark' : (cur==='dark' ? 'light' : 'auto');
-    _znSetTheme(next); _applyThemeUI(); _applyThemeStyle();
+    _znSetTheme(next); _applyThemeUI(); _applyThemeTiles();
   });
 
   function _znFit(){
     var ks = Object.keys(ZN_FLEET.couriers);
     if (!ks.length) return;
-    if (ks.length === 1){ map.easeTo({ center: ZN_FLEET.couriers[ks[0]].sm.getLngLat(), zoom:15, duration:500 }); return; }
-    var b = new maplibregl.LngLatBounds();
-    ks.forEach(function(k){ b.extend(ZN_FLEET.couriers[k].sm.getLngLat()); });
-    try { map.fitBounds(b, { padding:60, maxZoom:16, duration:500 }); } catch(e){}
+    if (ks.length === 1){ map.setView(ZN_FLEET.couriers[ks[0]].sm.getLatLng(), 15, { animate:true }); return; }
+    var pts = ks.map(function(k){ return ZN_FLEET.couriers[k].sm.getLatLng(); });
+    try { map.fitBounds(pts, { padding:[60,60], maxZoom:16 }); } catch(e){}
   }
 
   function upsert(row){
     if (!row || row.lat==null || row.lng==null) return;
-    if (!_znIsTracked(row.courier_id)) return;           // ΜΟΝΟ couriers + sales
+    if (!_znIsTracked(row.courier_id)) return;
     var k = row.shift_id || row.courier_id;
     if (!ZN_FLEET.couriers[k]){
-      ZN_FLEET.couriers[k] = { sm: ZNSmoothMarker(map, row.lng, row.lat, _znMakeMarkerEl(row)) };
+      ZN_FLEET.couriers[k] = { sm: ZNSmoothMarker(map, row.lat, row.lng, znCourierPin(row)) };
     }
     var hd = (typeof row.heading === 'number') ? row.heading : undefined;
-    ZN_FLEET.couriers[k].sm.moveTo(row.lng, row.lat, hd, 1200);
+    ZN_FLEET.couriers[k].sm.moveTo(row.lat, row.lng, hd, 1200);
     ZN_FLEET.couriers[k].data = row;
     znRenderStops();
   }
@@ -379,25 +366,23 @@ async function renderFleetLive(){
       .on('postgres_changes', { event:'*', schema:'public', table:'courier_locations' }, function(p){
         if (p && p.new) upsert(p.new);
       })
-      .subscribe(function(status){
-        if (status === 'SUBSCRIBED') loadInitial(); // reconnect-gap → re-fetch
-      });
+      .subscribe(function(status){ if (status === 'SUBSCRIBED') loadInitial(); });
   }
   ZN_FLEET.ch = subscribe();
 
   ZN_FLEET.timer = setInterval(function(){
     if (!document.getElementById('znFleetSentinel')){ if (typeof window.ZN_FLEET_CLEANUP === 'function') window.ZN_FLEET_CLEANUP(); return; }
-    // auto theme: άλλαξε dark/light στη δύση/ανατολή όσο ο χρήστης είναι σε Auto
     if (_znGetTheme()==='auto'){
       var d = _znEffectiveDark();
-      if (d !== ZN_FLEET._lastDark){ ZN_FLEET._lastDark = d; try { map.setStyle(_znStyleUrl(d)); } catch(e){} }
+      if (d !== ZN_FLEET._lastDark){ ZN_FLEET._lastDark = d; if (ZN_FLEET.tile){ try { ZN_FLEET.tile.setUrl(_znTileUrl(d)); } catch(e){} } }
     }
     var now = Date.now();
     Object.keys(ZN_FLEET.couriers).forEach(function(k){
       var c = ZN_FLEET.couriers[k];
       if (!c.data) return;
       var stale = (now - new Date(c.data.updated_at).getTime())/1000 > 30;
-      if (c.sm && c.sm.el) c.sm.el.style.opacity = stale ? '0.45' : '1';
+      var el = c.sm && c.sm.el ? c.sm.el() : null;
+      if (el) el.style.opacity = stale ? '0.45' : '1';
     });
     znRenderStops();
   }, 5000);
@@ -410,16 +395,16 @@ async function renderFleetLive(){
     try { Object.keys(ZN_FLEET.couriers).forEach(function(k){ ZN_FLEET.couriers[k].sm.destroy(); }); } catch(e){}
     ZN_FLEET.couriers = {};
     try { if (ZN_FLEET.map){ ZN_FLEET.map.remove(); ZN_FLEET.map = null; } } catch(e){}
+    ZN_FLEET.tile = null; ZN_FLEET.ch = null;
     var w = document.getElementById('znFleetWrap'); if (w && w.parentNode) w.parentNode.removeChild(w);
-    ZN_FLEET.ch = null;
   };
   window.addEventListener('beforeunload', function(){ if (typeof window.ZN_FLEET_CLEANUP === 'function') window.ZN_FLEET_CLEANUP(); });
 }
 
 /* ============================ Exports ============================ */
 (function(){
-  var fns = [renderFleetLive, znEnsureMapLibre, znFleetLiveHTML, znRenderStops,
-             ZNSmoothMarker, znCourierPin, _znStyleUrl, _znSunTimes, _znIsDay,
+  var fns = [renderFleetLive, znEnsureLeaflet, znFleetLiveHTML, znRenderStops,
+             ZNSmoothMarker, znCourierPin, _znTileUrl, _znSunTimes, _znIsDay,
              _znEffectiveDark, _znRoleKind, _znUserById, _znIsTracked, _znEsc];
   var i;
   for (i=0;i<fns.length;i++){ if (typeof fns[i]==='function') window[fns[i].name] = fns[i]; }
