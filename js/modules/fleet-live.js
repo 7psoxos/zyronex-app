@@ -1,4 +1,4 @@
-// fleet-live.js — ZyroNex · Live Fleet Tracking (MapLibre GL JS + MapTiler)
+// fleet-live.js — ZyroNex · Live Fleet Tracking (MapLibre GL JS + CARTO raster, keyless)
 // Scope: ONLY users whose role resolves to 'courier' (Διανομέας) or 'sales' (Εξωτερικός Πωλητής).
 // Theme: DARK/LIGHT auto by Larisa sunrise/sunset (default), with manual user override (persisted).
 // Deps (globals from zn-leaves/index.html): sb, SHOP_ID, USERS, toast, lucide, showPage
@@ -7,8 +7,9 @@
 
 var ZN_FLEET = { map:null, couriers:{}, ch:null, timer:null, follow:true, _lastDark:null };
 
-// MapTiler key (public repo → ΠΡΟΣΘΕΣΕ Allowed-origins restriction στο MapTiler dashboard).
-var ZN_MAPTILER_KEY = 'AorUxVk7o6wXBswkZCgD';
+// Basemap: CARTO raster tiles (keyless, ΧΩΡΙΣ κάρτα/key) — αποδεδειγμένα φορτώνουν στη συσκευή.
+// window.ZN_TILE_TEMPLATE (προαιρετικό override για tests/emulator). '{theme}' → dark_all|light_all.
+var ZN_TILE_TEMPLATE = null;
 var ZN_LARISA = { lat:39.6390, lng:22.4191 };
 
 /* ============================ MapLibre lazy loader ============================ */
@@ -38,9 +39,24 @@ function znEnsureMapLibre(){
 }
 
 /* ============================ Theme: auto (sunrise/sunset) + manual override ============================ */
-function _znStyleUrl(dark){
-  var slug = dark ? 'streets-v2-dark' : 'streets-v2-light';
-  return 'https://api.maptiler.com/maps/' + slug + '/style.json?key=' + ZN_MAPTILER_KEY;
+function _znStyleSpec(dark){
+  var base = dark ? 'dark_all' : 'light_all';
+  var tiles;
+  if (window.ZN_TILE_TEMPLATE){
+    tiles = [ String(window.ZN_TILE_TEMPLATE).replace('{theme}', base) ];
+  } else {
+    tiles = ['a','b','c','d'].map(function(s){
+      return 'https://' + s + '.basemaps.cartocdn.com/' + base + '/{z}/{x}/{y}@2x.png';
+    });
+  }
+  return {
+    version: 8,
+    sources: { znbase: { type:'raster', tiles: tiles, tileSize: 256, attribution: '© CARTO © OpenStreetMap' } },
+    layers: [
+      { id:'znbg', type:'background', paint:{ 'background-color': dark ? '#0b0e14' : '#e8eaed' } },
+      { id:'znbase', type:'raster', source:'znbase', paint:{ 'raster-fade-duration': 200 } }
+    ]
+  };
 }
 // Standard Sunrise/Sunset algorithm (Almanac). Returns UTC Date objects (absolute time → tz-safe compare).
 function _znSunTimes(date, lat, lng){
@@ -280,7 +296,7 @@ async function renderFleetLive(){
 
   var map = new maplibregl.Map({
     container: 'znMap',
-    style: _znStyleUrl(_znEffectiveDark()),
+    style: _znStyleSpec(_znEffectiveDark()),
     center: [ZN_LARISA.lng, ZN_LARISA.lat], // [lng,lat]
     zoom: 13,
     attributionControl: true,
@@ -289,32 +305,17 @@ async function renderFleetLive(){
   });
   ZN_FLEET.map = map; ZN_FLEET.couriers = {}; ZN_FLEET.follow = true; ZN_FLEET._lastDark = _znEffectiveDark();
 
-  // Διάγνωση: αν το style δεν φορτώσει (403 key/origin ή 404 slug), δείξε το ΑΚΡΙΒΕΣ σφάλμα
-  // και κάνε μία φορά fallback στο σίγουρο streets-v2 (baseline) ώστε να επιβεβαιωθεί ότι το key δουλεύει.
+  // Tile errors banner (CARTO keyless → σπάνιο· κρατάμε για ορατότητα δικτυακών αστοχιών).
   function _znErr(msg){ var b = document.getElementById('znFlErr'); if (b){ b.style.display='block'; b.textContent = msg; } }
   function _znErrClear(){ var b = document.getElementById('znFlErr'); if (b){ b.style.display='none'; b.textContent=''; } }
-  var _znFellBack = false;
+  var _znTileErrs = 0;
   map.on('error', function(e){
     var err = e && e.error ? e.error : e;
-    var msg = (err && (err.message || err.status)) ? (err.message || ('HTTP '+err.status)) : 'unknown';
-    var styleNotReady = false;
-    try { styleNotReady = !ZN_FLEET.map.isStyleLoaded(); } catch(_){ styleNotReady = true; }
-    if (styleNotReady && !_znFellBack){
-      _znFellBack = true;
-      _znErr('Το dark/light style δεν φόρτωσε ('+msg+'). Δοκιμάζω baseline streets-v2…');
-      try { map.setStyle('https://api.maptiler.com/maps/streets-v2/style.json?key=' + ZN_MAPTILER_KEY); } catch(_){}
-    } else if (styleNotReady){
-      _znErr('Σφάλμα χάρτη (key/origin;): ' + msg);
-    }
+    var msg = (err && (err.message || err.status)) ? (err.message || ('HTTP '+err.status)) : 'σφάλμα δικτύου';
+    _znTileErrs++;
+    if (_znTileErrs >= 8) _znErr('Πρόβλημα φόρτωσης χάρτη: ' + msg);
   });
-  map.on('styledata', function(){ if (ZN_FLEET.map && ZN_FLEET.map.isStyleLoaded()) _znErrClear(); });
-  setTimeout(function(){
-    try { if (ZN_FLEET.map && !ZN_FLEET.map.isStyleLoaded() && !_znFellBack){
-      _znFellBack = true;
-      _znErr('Το style δεν φόρτωσε σε 6s — δοκιμάζω baseline streets-v2…');
-      map.setStyle('https://api.maptiler.com/maps/streets-v2/style.json?key=' + ZN_MAPTILER_KEY);
-    } } catch(_){}
-  }, 6000);
+  map.on('idle', function(){ if (ZN_FLEET.map && ZN_FLEET.map.loaded()) _znErrClear(); });
 
   function _resize(){ if (ZN_FLEET.map){ try { _setDims(); ZN_FLEET.map.resize(); } catch(e){} } }
   map.on('load', _resize);
@@ -346,7 +347,7 @@ async function renderFleetLive(){
   function _applyThemeStyle(){
     var dark = _znEffectiveDark();
     ZN_FLEET._lastDark = dark;
-    if (ZN_FLEET.map){ try { ZN_FLEET.map.setStyle(_znStyleUrl(dark)); } catch(e){} }
+    if (ZN_FLEET.map){ try { ZN_FLEET.map.setStyle(_znStyleSpec(dark)); } catch(e){} }
   }
   _applyThemeUI();
   var themeBtn = document.getElementById('znFlTheme');
@@ -402,7 +403,7 @@ async function renderFleetLive(){
     // auto theme: άλλαξε dark/light στη δύση/ανατολή όσο ο χρήστης είναι σε Auto
     if (_znGetTheme()==='auto'){
       var d = _znEffectiveDark();
-      if (d !== ZN_FLEET._lastDark){ ZN_FLEET._lastDark = d; try { map.setStyle(_znStyleUrl(d)); } catch(e){} }
+      if (d !== ZN_FLEET._lastDark){ ZN_FLEET._lastDark = d; try { map.setStyle(_znStyleSpec(d)); } catch(e){} }
     }
     var now = Date.now();
     Object.keys(ZN_FLEET.couriers).forEach(function(k){
@@ -431,7 +432,7 @@ async function renderFleetLive(){
 /* ============================ Exports ============================ */
 (function(){
   var fns = [renderFleetLive, znEnsureMapLibre, znFleetLiveHTML, znRenderStops,
-             ZNSmoothMarker, znCourierPin, _znStyleUrl, _znSunTimes, _znIsDay,
+             ZNSmoothMarker, znCourierPin, _znStyleSpec, _znSunTimes, _znIsDay,
              _znEffectiveDark, _znRoleKind, _znUserById, _znIsTracked, _znEsc];
   var i;
   for (i=0;i<fns.length;i++){ if (typeof fns[i]==='function') window[fns[i].name] = fns[i]; }
